@@ -28,22 +28,41 @@ export default function Home() {
   const [catFilter, setCatFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
-  const [selectedDate, setSelectedDate] = useState('2026-03-21')
-const [currentView, setCurrentView] = useState('day')
+  const [currentView, setCurrentView] = useState('today')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   useEffect(() => {
     async function loadEvents() {
       const data = await getEvents()
-      console.log('Events from Supabase:', data)
-setEvents(data)
       setEvents(data)
       setLoading(false)
     }
     loadEvents()
   }, [])
 
+  const getDateStrings = () => {
+    const today = new Date()
+    today.setHours(0,0,0,0)
+    const todayStr = today.toISOString().split('T')[0]
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate()+1)
+    const tomorrowStr = tomorrow.toISOString().split('T')[0]
+    const day = today.getDay()
+    const satOffset = (6-day+7)%7||7
+    const sat = new Date(today); sat.setDate(today.getDate()+satOffset)
+    const sun = new Date(today); sun.setDate(today.getDate()+satOffset+1)
+    const satStr = sat.toISOString().split('T')[0]
+    const sunStr = sun.toISOString().split('T')[0]
+    return { todayStr, tomorrowStr, satStr, sunStr }
+  }
+
   const filtered = events.filter(ev => {
-    if (currentView === 'day' && ev.date !== selectedDate) return false
+    const { todayStr, tomorrowStr, satStr, sunStr } = getDateStrings()
+    if (currentView==='today' && ev.date !== todayStr) return false
+    if (currentView==='tomorrow' && ev.date !== tomorrowStr) return false
+    if (currentView==='weekend' && ev.date !== satStr && ev.date !== sunStr) return false
+    if (currentView==='pick' && fromDate && toDate && (ev.date < fromDate || ev.date > toDate)) return false
     if (catFilter !== 'all' && ev.category !== catFilter) return false
     if (search && !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
         !ev.location?.toLowerCase().includes(search.toLowerCase())) return false
@@ -62,13 +81,14 @@ setEvents(data)
         style={{background:'#2d6a4f',color:'white',border:'none',padding:'8px 18px',borderRadius:'999px',cursor:'pointer',marginBottom:'20px',fontSize:'13px',fontWeight:700}}>
         ← Back to Calendar
       </button>
-      <div style={{background:CATS[selectedEvent.category]?'#d1fae5':'#f3f4f6',display:'inline-block',padding:'4px 12px',borderRadius:'999px',fontSize:'11px',fontWeight:700,color:'#065f46',marginBottom:'10px'}}>
+      <div style={{background:'#d1fae5',display:'inline-block',padding:'4px 12px',borderRadius:'999px',fontSize:'11px',fontWeight:700,color:'#065f46',marginBottom:'10px'}}>
         {CATS[selectedEvent.category]?.icon} {CATS[selectedEvent.category]?.label}
       </div>
       <h1 style={{fontFamily:'Georgia,serif',fontSize:'28px',fontWeight:900,color:'#1f2937',marginBottom:'6px'}}>{selectedEvent.title}</h1>
       <p style={{color:'#9ca3af',marginBottom:'24px',fontSize:'14px'}}>Presented by {selectedEvent.organization}</p>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',background:'white',borderRadius:'12px',padding:'20px',marginBottom:'16px',boxShadow:'0 1px 4px rgba(0,0,0,0.07)'}}>
-        <div><div style={{fontSize:'10px',color:'#9ca3af',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'3px'}}>Date</div><div style={{fontWeight:700}}>{selectedEvent.date}</div></div>
+        <div><div style={{fontSize:'10px',color:'#9ca3af',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'3px'}}>Date</div>
+          <div style={{fontWeight:700}}>{new Date(selectedEvent.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div></div>
         <div><div style={{fontSize:'10px',color:'#9ca3af',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'3px'}}>Time</div><div style={{fontWeight:700}}>{selectedEvent.time}</div></div>
         <div><div style={{fontSize:'10px',color:'#9ca3af',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'3px'}}>Location</div><div style={{fontWeight:700}}>{selectedEvent.location}</div><div style={{fontSize:'12px',color:'#9ca3af'}}>{selectedEvent.address}</div></div>
         <div><div style={{fontSize:'10px',color:'#9ca3af',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:'3px'}}>Cost</div><div style={{fontWeight:700}}>{selectedEvent.cost||'See organizer'}</div></div>
@@ -111,41 +131,49 @@ setEvents(data)
         </h1>
         <p style={{color:'rgba(255,255,255,0.7)',marginBottom:'20px',fontSize:'14px'}}>Your community — all in one place</p>
         <div style={{display:'flex',maxWidth:'540px',margin:'0 auto',background:'white',borderRadius:'999px',overflow:'hidden',boxShadow:'0 8px 32px rgba(0,0,0,0.2)'}}>
-          <input
-            type="text"
-            placeholder="Search events, venues, organizers…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{flex:1,border:'none',padding:'12px 20px',fontSize:'14px',outline:'none',background:'transparent'}}
-          />
+          <input type="text" placeholder="Search events, venues, organizers…"
+            value={search} onChange={e => setSearch(e.target.value)}
+            style={{flex:1,border:'none',padding:'12px 20px',fontSize:'14px',outline:'none',background:'transparent'}}/>
           <button style={{background:'#e05d2b',color:'white',border:'none',padding:'10px 22px',margin:'4px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
             Search
           </button>
         </div>
       </div>
 
-      {/* Category filters */}
-      {/* Day strip */}
-      <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'12px 40px',overflowX:'auto',WebkitOverflowScrolling:'touch' as any}}>
-        <div style={{display:'flex',gap:'6px',minWidth:'max-content'}}>
-          {Array.from({length:31},(_,i)=>{
-            const day=i+1
-            const date=`2026-03-${String(day).padStart(2,'0')}`
-            const days=['Su','Mo','Tu','We','Th','Fr','Sa']
-            const dayName=days[new Date(date+'T12:00:00').getDay()]
-            const isSelected=selectedDate===date
-            const hasEvents=events.some(e=>e.date===date)
-            return(
-              <div key={date} onClick={()=>setSelectedDate(date)}
-                style={{width:'48px',textAlign:'center',padding:'8px 4px',borderRadius:'8px',cursor:'pointer',border:`1.5px solid ${isSelected?'#1a3d2b':'transparent'}`,background:isSelected?'#1a3d2b':'white',flexShrink:0,transition:'all 0.18s'}}>
-                <div style={{fontSize:'9px',textTransform:'uppercase',letterSpacing:'0.8px',color:isSelected?'rgba(255,255,255,0.7)':'#9ca3af',fontWeight:700}}>{dayName}</div>
-                <div style={{fontSize:'17px',fontWeight:hasEvents?800:400,color:isSelected?'white':hasEvents?'#1a3d2b':'#6b7280'}}>{day}</div>
-                <div style={{width:'5px',height:'5px',borderRadius:'50%',background:'#e6a020',margin:'3px auto 0',visibility:hasEvents?'visible':'hidden'}}></div>
-              </div>
-            )
-          })}
-        </div>
+      {/* Date shortcuts */}
+      <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'10px 40px',display:'flex',gap:'8px',flexWrap:'wrap',justifyContent:'center'}}>
+        {[
+          {label:'Today',value:'today'},
+          {label:'Tomorrow',value:'tomorrow'},
+          {label:'This Weekend',value:'weekend'},
+          {label:'All Dates',value:'all'},
+          {label:'📆 Pick a Date',value:'pick'},
+        ].map(({label,value})=>(
+          <button key={value} onClick={()=>setCurrentView(value)}
+            style={{padding:'8px 18px',borderRadius:'999px',border:`1.5px solid ${currentView===value?'#1a3d2b':'#e5e7eb'}`,background:currentView===value?'#1a3d2b':'white',color:currentView===value?'white':'#6b7280',fontWeight:600,fontSize:'13px',cursor:'pointer',transition:'all 0.18s'}}>
+            {label}
+          </button>
+        ))}
       </div>
+
+      {/* Date range picker */}
+      {currentView==='pick' && (
+        <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'10px 40px',display:'flex',alignItems:'center',gap:'12px',flexWrap:'wrap',justifyContent:'center'}}>
+          <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
+            <label style={{fontSize:'10px',textTransform:'uppercase',letterSpacing:'1px',color:'#9ca3af',fontWeight:700}}>From</label>
+            <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}
+              style={{border:'1.5px solid #e5e7eb',borderRadius:'8px',padding:'7px 12px',fontSize:'13px',outline:'none'}}/>
+          </div>
+          <div style={{fontSize:'18px',color:'#e5e7eb',marginTop:'16px'}}>→</div>
+          <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
+            <label style={{fontSize:'10px',textTransform:'uppercase',letterSpacing:'1px',color:'#9ca3af',fontWeight:700}}>To</label>
+            <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)}
+              style={{border:'1.5px solid #e5e7eb',borderRadius:'8px',padding:'7px 12px',fontSize:'13px',outline:'none'}}/>
+          </div>
+        </div>
+      )}
+
+      {/* Category filters */}
       <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'10px 40px',display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center'}}>
         <button onClick={() => setCatFilter('all')}
           style={{padding:'7px 14px',borderRadius:'999px',border:'1.5px solid',borderColor:catFilter==='all'?'#1a3d2b':'#e5e7eb',background:catFilter==='all'?'#1a3d2b':'white',color:catFilter==='all'?'white':'#6b7280',fontWeight:600,fontSize:'12px',cursor:'pointer'}}>
@@ -169,19 +197,18 @@ setEvents(data)
         ) : (
           filtered.map(ev => (
             <div key={ev.id} onClick={() => setSelectedEvent(ev)}
-              style={{background:'white',borderRadius:'12px',padding:'16px 18px',marginBottom:'10px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',cursor:'pointer',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'14px',borderLeft:`4px solid #2d6a4f`,transition:'all 0.2s'}}
+              style={{background:'white',borderRadius:'12px',padding:'16px 18px',marginBottom:'10px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',cursor:'pointer',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'14px',borderLeft:'4px solid #2d6a4f',transition:'all 0.2s'}}
               onMouseOver={e => (e.currentTarget.style.transform='translateY(-2px)')}
               onMouseOut={e => (e.currentTarget.style.transform='translateY(0)')}>
               <div style={{flex:1}}>
                 <div style={{display:'flex',alignItems:'baseline',gap:'8px',marginBottom:'4px',flexWrap:'wrap'}}>
                   <h3 style={{fontSize:'14px',fontWeight:700,color:'#1f2937',margin:0}}>{ev.title}</h3>
-                  <span style={{fontSize:'12px',color:'#9ca3af'}}>🕐 {ev.time}</span>
                 </div>
                 <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'6px'}}>
-  📅 {new Date(ev.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric'})} &nbsp;·&nbsp; 🕐 {ev.time} &nbsp;·&nbsp; 📍 {ev.location}
-  <br/>
-  👥 {ev.organization}{ev.cost && <>&nbsp;·&nbsp; 💰 {ev.cost}</>}
-</div>
+                  📅 {new Date(ev.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric'})} &nbsp;·&nbsp; 🕐 {ev.time} &nbsp;·&nbsp; 📍 {ev.location}
+                  <br/>
+                  👥 {ev.organization}{ev.cost && <>&nbsp;·&nbsp; 💰 {ev.cost}</>}
+                </div>
                 {ev.tags && ev.tags.split(',').map((tag: string) => {
                   const t = tag.trim()
                   const meta = TAG_META[t]
