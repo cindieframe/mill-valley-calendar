@@ -28,6 +28,8 @@ export default function Home() {
   const [catFilter, setCatFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
+  const [selectedDate, setSelectedDate] = useState('2026-03-21')
+const [currentView, setCurrentView] = useState('day')
 
   useEffect(() => {
     async function loadEvents() {
@@ -41,6 +43,7 @@ setEvents(data)
   }, [])
 
   const filtered = events.filter(ev => {
+    if (currentView === 'day' && ev.date !== selectedDate) return false
     if (catFilter !== 'all' && ev.category !== catFilter) return false
     if (search && !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
         !ev.location?.toLowerCase().includes(search.toLowerCase())) return false
@@ -122,6 +125,27 @@ setEvents(data)
       </div>
 
       {/* Category filters */}
+      {/* Day strip */}
+      <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'12px 40px',overflowX:'auto',WebkitOverflowScrolling:'touch' as any}}>
+        <div style={{display:'flex',gap:'6px',minWidth:'max-content'}}>
+          {Array.from({length:31},(_,i)=>{
+            const day=i+1
+            const date=`2026-03-${String(day).padStart(2,'0')}`
+            const days=['Su','Mo','Tu','We','Th','Fr','Sa']
+            const dayName=days[new Date(date+'T12:00:00').getDay()]
+            const isSelected=selectedDate===date
+            const hasEvents=events.some(e=>e.date===date)
+            return(
+              <div key={date} onClick={()=>setSelectedDate(date)}
+                style={{width:'48px',textAlign:'center',padding:'8px 4px',borderRadius:'8px',cursor:'pointer',border:`1.5px solid ${isSelected?'#1a3d2b':'transparent'}`,background:isSelected?'#1a3d2b':'white',flexShrink:0,transition:'all 0.18s'}}>
+                <div style={{fontSize:'9px',textTransform:'uppercase',letterSpacing:'0.8px',color:isSelected?'rgba(255,255,255,0.7)':'#9ca3af',fontWeight:700}}>{dayName}</div>
+                <div style={{fontSize:'17px',fontWeight:hasEvents?800:400,color:isSelected?'white':hasEvents?'#1a3d2b':'#6b7280'}}>{day}</div>
+                <div style={{width:'5px',height:'5px',borderRadius:'50%',background:'#e6a020',margin:'3px auto 0',visibility:hasEvents?'visible':'hidden'}}></div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
       <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'10px 40px',display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center'}}>
         <button onClick={() => setCatFilter('all')}
           style={{padding:'7px 14px',borderRadius:'999px',border:'1.5px solid',borderColor:catFilter==='all'?'#1a3d2b':'#e5e7eb',background:catFilter==='all'?'#1a3d2b':'white',color:catFilter==='all'?'white':'#6b7280',fontWeight:600,fontSize:'12px',cursor:'pointer'}}>
@@ -153,10 +177,11 @@ setEvents(data)
                   <h3 style={{fontSize:'14px',fontWeight:700,color:'#1f2937',margin:0}}>{ev.title}</h3>
                   <span style={{fontSize:'12px',color:'#9ca3af'}}>🕐 {ev.time}</span>
                 </div>
-                <div style={{fontSize:'12px',color:'#9ca3af',marginBottom:'6px'}}>
-                  📍 {ev.location} &nbsp;·&nbsp; 👥 {ev.organization}
-                  {ev.cost && <>&nbsp;·&nbsp; 💰 {ev.cost}</>}
-                </div>
+                <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'6px'}}>
+  📅 {new Date(ev.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric'})} &nbsp;·&nbsp; 🕐 {ev.time} &nbsp;·&nbsp; 📍 {ev.location}
+  <br/>
+  👥 {ev.organization}{ev.cost && <>&nbsp;·&nbsp; 💰 {ev.cost}</>}
+</div>
                 {ev.tags && ev.tags.split(',').map((tag: string) => {
                   const t = tag.trim()
                   const meta = TAG_META[t]
