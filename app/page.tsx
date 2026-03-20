@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { getEvents } from './events'
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
 
 const CATS: Record<string, {label: string, icon: string}> = {
   outdoors:  { label: 'Outdoors, Sports & Movement', icon: '🥾' },
@@ -22,6 +24,27 @@ const TAG_META: Record<string, {label: string, bg: string, color: string}> = {
   reg:       { label: '🎟️ Reg. Required',    bg: '#fff7ed', color: '#9a3412' },
 }
 
+function getDateStrings() {
+  const today = new Date()
+  today.setHours(0,0,0,0)
+  const todayStr = today.toISOString().split('T')[0]
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate()+1)
+  const tomorrowStr = tomorrow.toISOString().split('T')[0]
+  const day = today.getDay()
+  const satOffset = (6-day+7)%7||7
+  const sat = new Date(today); sat.setDate(today.getDate()+satOffset)
+  const sun = new Date(today); sun.setDate(today.getDate()+satOffset+1)
+  const satStr = sat.toISOString().split('T')[0]
+  const sunStr = sun.toISOString().split('T')[0]
+  const fmt = (d: Date) => d.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+  return { todayStr, tomorrowStr, satStr, sunStr,
+    todayLabel: fmt(today),
+    tomorrowLabel: fmt(tomorrow),
+    weekendLabel: `${fmt(sat)}–${fmt(sun)}`
+  }
+}
+
 export default function Home() {
   const [events, setEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -29,8 +52,8 @@ export default function Home() {
   const [search, setSearch] = useState('')
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [currentView, setCurrentView] = useState('today')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
+  const [fromDate, setFromDate] = useState<Date|null>(null)
+  const [toDate, setToDate] = useState<Date|null>(null)
 
   useEffect(() => {
     async function loadEvents() {
@@ -41,28 +64,16 @@ export default function Home() {
     loadEvents()
   }, [])
 
-  const getDateStrings = () => {
-    const today = new Date()
-    today.setHours(0,0,0,0)
-    const todayStr = today.toISOString().split('T')[0]
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate()+1)
-    const tomorrowStr = tomorrow.toISOString().split('T')[0]
-    const day = today.getDay()
-    const satOffset = (6-day+7)%7||7
-    const sat = new Date(today); sat.setDate(today.getDate()+satOffset)
-    const sun = new Date(today); sun.setDate(today.getDate()+satOffset+1)
-    const satStr = sat.toISOString().split('T')[0]
-    const sunStr = sun.toISOString().split('T')[0]
-    return { todayStr, tomorrowStr, satStr, sunStr }
-  }
+  const { todayStr, tomorrowStr, satStr, sunStr, todayLabel, tomorrowLabel, weekendLabel } = getDateStrings()
 
   const filtered = events.filter(ev => {
-    const { todayStr, tomorrowStr, satStr, sunStr } = getDateStrings()
     if (currentView==='today' && ev.date !== todayStr) return false
     if (currentView==='tomorrow' && ev.date !== tomorrowStr) return false
     if (currentView==='weekend' && ev.date !== satStr && ev.date !== sunStr) return false
-    if (currentView==='pick' && fromDate && toDate && (ev.date < fromDate || ev.date > toDate)) return false
+    if (currentView==='pick' && fromDate && toDate) {
+      const evDate = new Date(ev.date+'T12:00:00')
+      if (evDate < fromDate || evDate > toDate) return false
+    }
     if (catFilter !== 'all' && ev.category !== catFilter) return false
     if (search && !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
         !ev.location?.toLowerCase().includes(search.toLowerCase())) return false
@@ -110,6 +121,14 @@ export default function Home() {
     </div>
   )
 
+  const shortcuts = [
+    { label: `Today  ${todayLabel}`,         value: 'today' },
+    { label: `Tomorrow  ${tomorrowLabel}`,   value: 'tomorrow' },
+    { label: `This Weekend  ${weekendLabel}`,value: 'weekend' },
+    { label: 'All Dates',                    value: 'all' },
+    { label: '📆 Pick a Date',               value: 'pick' },
+  ]
+
   return (
     <div style={{fontFamily:'sans-serif',minHeight:'100vh',background:'#fafaf8'}}>
       {/* Header */}
@@ -125,7 +144,7 @@ export default function Home() {
       </header>
 
       {/* Hero */}
-      <div style={{background:'linear-gradient(160deg,#1a3d2b 0%,#2d6a4f 60%,#1a4a30 100%)',padding:'40px',textAlign:'center',position:'relative',overflow:'hidden'}}>
+      <div style={{background:'linear-gradient(160deg,#1a3d2b 0%,#2d6a4f 60%,#1a4a30 100%)',padding:'40px',textAlign:'center'}}>
         <h1 style={{fontFamily:'Georgia,serif',fontSize:'clamp(24px,4vw,44px)',color:'white',fontWeight:800,marginBottom:'8px',letterSpacing:'-0.5px'}}>
           What&apos;s happening in <em style={{color:'#e6a020'}}>Mill Valley</em>
         </h1>
@@ -142,34 +161,30 @@ export default function Home() {
 
       {/* Date shortcuts */}
       <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'10px 40px',display:'flex',gap:'8px',flexWrap:'wrap',justifyContent:'center'}}>
-        {[
-          {label:'Today',value:'today'},
-          {label:'Tomorrow',value:'tomorrow'},
-          {label:'This Weekend',value:'weekend'},
-          {label:'All Dates',value:'all'},
-          {label:'📆 Pick a Date',value:'pick'},
-        ].map(({label,value})=>(
-          <button key={value} onClick={()=>setCurrentView(value)}
-            style={{padding:'8px 18px',borderRadius:'999px',border:`1.5px solid ${currentView===value?'#1a3d2b':'#e5e7eb'}`,background:currentView===value?'#1a3d2b':'white',color:currentView===value?'white':'#6b7280',fontWeight:600,fontSize:'13px',cursor:'pointer',transition:'all 0.18s'}}>
+        {shortcuts.map(({label,value}) => (
+          <button key={value} onClick={() => setCurrentView(value)}
+            style={{padding:'8px 18px',borderRadius:'999px',border:`1.5px solid ${currentView===value?'#1a3d2b':'#e5e7eb'}`,background:currentView===value?'#1a3d2b':'white',color:currentView===value?'white':'#6b7280',fontWeight:600,fontSize:'13px',cursor:'pointer',transition:'all 0.18s',whiteSpace:'nowrap'}}>
             {label}
           </button>
         ))}
       </div>
 
       {/* Date range picker */}
-      {currentView==='pick' && (
-        <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'10px 40px',display:'flex',alignItems:'center',gap:'12px',flexWrap:'wrap',justifyContent:'center'}}>
-          <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
-            <label style={{fontSize:'10px',textTransform:'uppercase',letterSpacing:'1px',color:'#9ca3af',fontWeight:700}}>From</label>
-            <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}
-              style={{border:'1.5px solid #e5e7eb',borderRadius:'8px',padding:'7px 12px',fontSize:'13px',outline:'none'}}/>
-          </div>
-          <div style={{fontSize:'18px',color:'#e5e7eb',marginTop:'16px'}}>→</div>
-          <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
-            <label style={{fontSize:'10px',textTransform:'uppercase',letterSpacing:'1px',color:'#9ca3af',fontWeight:700}}>To</label>
-            <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)}
-              style={{border:'1.5px solid #e5e7eb',borderRadius:'8px',padding:'7px 12px',fontSize:'13px',outline:'none'}}/>
-          </div>
+   {currentView==='pick' && (
+        <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'12px 40px',display:'flex',justifyContent:'center'}}>
+          <DatePicker
+            selected={fromDate}
+            onChange={(dates) => {
+              const [start, end] = dates as [Date|null, Date|null]
+              setFromDate(start)
+              setToDate(end)
+            }}
+            startDate={fromDate}
+            endDate={toDate}
+            selectsRange
+            inline
+            className="date-picker-input"
+          />
         </div>
       )}
 
@@ -201,9 +216,7 @@ export default function Home() {
               onMouseOver={e => (e.currentTarget.style.transform='translateY(-2px)')}
               onMouseOut={e => (e.currentTarget.style.transform='translateY(0)')}>
               <div style={{flex:1}}>
-                <div style={{display:'flex',alignItems:'baseline',gap:'8px',marginBottom:'4px',flexWrap:'wrap'}}>
-                  <h3 style={{fontSize:'14px',fontWeight:700,color:'#1f2937',margin:0}}>{ev.title}</h3>
-                </div>
+                <h3 style={{fontSize:'14px',fontWeight:700,color:'#1f2937',margin:'0 0 4px 0'}}>{ev.title}</h3>
                 <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'6px'}}>
                   📅 {new Date(ev.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric'})} &nbsp;·&nbsp; 🕐 {ev.time} &nbsp;·&nbsp; 📍 {ev.location}
                   <br/>
