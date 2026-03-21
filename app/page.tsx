@@ -52,6 +52,7 @@ export default function Home() {
   const [search, setSearch] = useState('')
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [currentView, setCurrentView] = useState('today')
+   const [tagFilter, setTagFilter] = useState('')
   const [fromDate, setFromDate] = useState<Date|null>(null)
   const [toDate, setToDate] = useState<Date|null>(null)
 
@@ -75,6 +76,7 @@ export default function Home() {
       if (evDate < fromDate || evDate > toDate) return false
     }
     if (catFilter !== 'all' && ev.category !== catFilter) return false
+    if (tagFilter && !ev.tags?.split(',').map((t:string)=>t.trim()).includes(tagFilter)) return false
     if (search && !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
         !ev.location?.toLowerCase().includes(search.toLowerCase())) return false
     return true
@@ -187,9 +189,10 @@ export default function Home() {
           />
         </div>
       )}
-
+  
       {/* Category filters */}
-      <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'10px 40px',display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center'}}>
+      <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'10px 40px',display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center',alignItems:'center'}}>
+        <span style={{fontSize:'10px',fontWeight:700,color:'#374151',textTransform:'uppercase',letterSpacing:'1px',marginRight:'4px'}}>Category</span>
         <button onClick={() => setCatFilter('all')}
           style={{padding:'7px 14px',borderRadius:'999px',border:'1.5px solid',borderColor:catFilter==='all'?'#1a3d2b':'#e5e7eb',background:catFilter==='all'?'#1a3d2b':'white',color:catFilter==='all'?'white':'#6b7280',fontWeight:600,fontSize:'12px',cursor:'pointer'}}>
           📅 All
@@ -201,7 +204,23 @@ export default function Home() {
           </button>
         ))}
       </div>
-
+{/* Tag filters */}
+      <div style={{background:'#f9fafb',borderBottom:'1px solid #f3f4f6',padding:'8px 40px',display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center',alignItems:'center'}}>
+        <span style={{fontSize:'10px',fontWeight:700,color:'#374151',textTransform:'uppercase',letterSpacing:'1px',marginRight:'4px'}}>Filter</span>
+        {[
+          {label:'🟢 Free',            value:'free'},
+          {label:'⭐ Family-Friendly',  value:'family'},
+          {label:'🌟 50+ Friendly',     value:'senior'},
+          {label:'🧘 Health & Wellness',value:'wellness'},
+          {label:'🙋 Volunteer Opp.',   value:'volunteer'},
+          {label:'🎟️ Reg. Required',   value:'reg'},
+        ].map(({label,value})=>(
+          <button key={value} onClick={()=>setTagFilter(value)}
+            style={{padding:'5px 12px',borderRadius:'999px',border:`1.5px solid ${tagFilter===value?'#1a3d2b':'#e5e7eb'}`,background:tagFilter===value?'#1a3d2b':'white',color:tagFilter===value?'white':'#6b7280',fontWeight:600,fontSize:'11px',cursor:'pointer',transition:'all 0.18s'}}>
+            {label}
+          </button>
+        ))}
+      </div>
       {/* Events list */}
       <div style={{maxWidth:'900px',margin:'0 auto',padding:'24px 40px'}}>
         {filtered.length === 0 ? (
