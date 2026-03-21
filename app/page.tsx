@@ -53,6 +53,7 @@ export default function Home() {
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [currentView, setCurrentView] = useState('today')
    const [tagFilter, setTagFilter] = useState('')
+   const [orgFilter, setOrgFilter] = useState('')
   const [fromDate, setFromDate] = useState<Date|null>(null)
   const [toDate, setToDate] = useState<Date|null>(null)
 
@@ -77,6 +78,7 @@ export default function Home() {
     }
     if (catFilter !== 'all' && ev.category !== catFilter) return false
     if (tagFilter && !ev.tags?.split(',').map((t:string)=>t.trim()).includes(tagFilter)) return false
+    if (orgFilter && ev.organization !== orgFilter) return false
     if (search && !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
         !ev.location?.toLowerCase().includes(search.toLowerCase())) return false
     return true
@@ -220,6 +222,21 @@ export default function Home() {
             {label}
           </button>
         ))}
+      </div>
+      {/* Organization filter */}
+      <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'8px 40px',display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center',alignItems:'center'}}>
+        <span style={{fontSize:'10px',fontWeight:700,color:'#374151',textTransform:'uppercase',letterSpacing:'1px',marginRight:'4px'}}>Organization</span>
+        <select
+          value={orgFilter}
+          onChange={e=>setOrgFilter(e.target.value)}
+          style={{border:'1.5px solid #e5e7eb',borderRadius:'999px',padding:'5px 14px',fontSize:'12px',fontWeight:600,color:'#6b7280',background:'white',cursor:'pointer',outline:'none'}}>
+          <option value=''>All Organizations</option>
+
+          <option>Chamber of Commerce</option>
+          <option>City of Mill Valley</option>
+          <option>MV Library</option>
+          <option>MV Little League</option>
+        </select>
       </div>
       {/* Events list */}
       <div style={{maxWidth:'900px',margin:'0 auto',padding:'24px 40px'}}>
