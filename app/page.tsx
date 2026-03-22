@@ -15,13 +15,23 @@ const CATS: Record<string, {label: string, icon: string}> = {
   gov:       { label: 'Local Government',            icon: '🏛️' },
 }
 
-const TAG_META: Record<string, {label: string, bg: string, color: string}> = {
-  free:      { label: '🟢 Free',             bg: '#dcfce7', color: '#166534' },
-  family:    { label: '⭐ Family-Friendly',   bg: '#fef9c3', color: '#854d0e' },
-  senior:    { label: '🌟 50+ Friendly',      bg: '#ede9fe', color: '#4c1d95' },
-  wellness:  { label: '🧘 Health & Wellness', bg: '#fce7f3', color: '#9d174d' },
-  volunteer: { label: '🙋 Volunteer Opp.',    bg: '#fef9c3', color: '#713f12' },
-  reg:       { label: '🎟️ Reg. Required',    bg: '#fff7ed', color: '#9a3412' },
+const CAT_COLORS: Record<string, {bg: string, border: string}> = {
+  outdoors:  { bg: '#16803c', border: '#16803c' },
+  arts:      { bg: '#7c22ce', border: '#7c22ce' },
+  food:      { bg: '#c2410c', border: '#c2410c' },
+  community: { bg: '#b45309', border: '#b45309' },
+  family:    { bg: '#0e7490', border: '#0e7490' },
+  classes:   { bg: '#4338ca', border: '#4338ca' },
+  gov:       { bg: '#4b5563', border: '#4b5563' },
+}
+
+const TAG_META: Record<string, {label: string, bg: string, color: string, activeBg: string}> = {
+  free:      { label: '🟢 Free',             bg: '#dcfce7', color: '#166534', activeBg: '#16a34a' },
+  family:    { label: '⭐ Family-Friendly',   bg: '#fef9c3', color: '#854d0e', activeBg: '#b45309' },
+  senior:    { label: '🌟 50+ Friendly',      bg: '#ede9fe', color: '#4c1d95', activeBg: '#6d28d9' },
+  wellness:  { label: '🧘 Health & Wellness', bg: '#fce7f3', color: '#9d174d', activeBg: '#9d174d' },
+  volunteer: { label: '🙋 Volunteer Opp.',    bg: '#fef9c3', color: '#713f12', activeBg: '#713f12' },
+  reg:       { label: '🎟️ Reg. Required',    bg: '#fff7ed', color: '#9a3412', activeBg: '#9a3412' },
 }
 
 function getDateStrings() {
@@ -48,12 +58,12 @@ function getDateStrings() {
 export default function Home() {
   const [events, setEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [catFilter, setCatFilter] = useState('all')
+  const [catFilters, setCatFilters] = useState<string[]>([])
+  const [tagFilters, setTagFilters] = useState<string[]>([])
+  const [orgFilter, setOrgFilter] = useState('')
   const [search, setSearch] = useState('')
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [currentView, setCurrentView] = useState('today')
-   const [tagFilter, setTagFilter] = useState('')
-   const [orgFilter, setOrgFilter] = useState('')
   const [fromDate, setFromDate] = useState<Date|null>(null)
   const [toDate, setToDate] = useState<Date|null>(null)
 
@@ -76,8 +86,8 @@ export default function Home() {
       const evDate = new Date(ev.date+'T12:00:00')
       if (evDate < fromDate || evDate > toDate) return false
     }
-    if (catFilter !== 'all' && ev.category !== catFilter) return false
-    if (tagFilter && !ev.tags?.split(',').map((t:string)=>t.trim()).includes(tagFilter)) return false
+    if (catFilters.length > 0 && !catFilters.includes(ev.category)) return false
+    if (tagFilters.length > 0 && !tagFilters.every(t => ev.tags?.split(',').map((x:string)=>x.trim()).includes(t))) return false
     if (orgFilter && ev.organization !== orgFilter) return false
     if (search && !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
         !ev.location?.toLowerCase().includes(search.toLowerCase())) return false
@@ -135,6 +145,7 @@ export default function Home() {
 
   return (
     <div style={{fontFamily:'sans-serif',minHeight:'100vh',background:'#fafaf8'}}>
+
       {/* Header */}
       <header style={{background:'#1a3d2b',padding:'14px 40px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:100}}>
         <div>
@@ -174,7 +185,7 @@ export default function Home() {
       </div>
 
       {/* Date range picker */}
-   {currentView==='pick' && (
+      {currentView==='pick' && (
         <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'12px 40px',display:'flex',justifyContent:'center'}}>
           <DatePicker
             selected={fromDate}
@@ -191,53 +202,59 @@ export default function Home() {
           />
         </div>
       )}
-  
+
       {/* Category filters */}
       <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'10px 40px',display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center',alignItems:'center'}}>
         <span style={{fontSize:'10px',fontWeight:700,color:'#374151',textTransform:'uppercase',letterSpacing:'1px',marginRight:'4px'}}>Category</span>
-        <button onClick={() => setCatFilter('all')}
-          style={{padding:'7px 14px',borderRadius:'999px',border:'1.5px solid',borderColor:catFilter==='all'?'#1a3d2b':'#e5e7eb',background:catFilter==='all'?'#1a3d2b':'white',color:catFilter==='all'?'white':'#6b7280',fontWeight:600,fontSize:'12px',cursor:'pointer'}}>
+        <button onClick={() => setCatFilters([])}
+          style={{padding:'7px 14px',borderRadius:'999px',border:'1.5px solid',borderColor:catFilters.length===0?'#1a3d2b':'#e5e7eb',background:catFilters.length===0?'#1a3d2b':'white',color:catFilters.length===0?'white':'#6b7280',fontWeight:600,fontSize:'12px',cursor:'pointer'}}>
           📅 All
         </button>
-        {Object.entries(CATS).map(([key, cat]) => (
-          <button key={key} onClick={() => setCatFilter(key)}
-            style={{padding:'7px 14px',borderRadius:'999px',border:'1.5px solid',borderColor:catFilter===key?'#1a3d2b':'#e5e7eb',background:catFilter===key?'#1a3d2b':'white',color:catFilter===key?'white':'#6b7280',fontWeight:600,fontSize:'12px',cursor:'pointer'}}>
-            {cat.icon} {cat.label}
-          </button>
-        ))}
+        {Object.entries(CATS).map(([key, cat]) => {
+          const isActive = catFilters.includes(key)
+          const c = CAT_COLORS[key]
+          return (
+            <button key={key}
+              onClick={() => setCatFilters(prev =>
+                prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+              )}
+              style={{padding:'7px 14px',borderRadius:'999px',border:`1.5px solid ${isActive?c.border:'#e5e7eb'}`,background:isActive?c.bg:'white',color:isActive?'white':'#6b7280',fontWeight:600,fontSize:'12px',cursor:'pointer',transition:'all 0.18s'}}>
+              {cat.icon} {cat.label}
+            </button>
+          )
+        })}
       </div>
-{/* Tag filters */}
+
+      {/* Tag filters */}
       <div style={{background:'#f9fafb',borderBottom:'1px solid #f3f4f6',padding:'8px 40px',display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center',alignItems:'center'}}>
-        <span style={{fontSize:'10px',fontWeight:700,color:'#374151',textTransform:'uppercase',letterSpacing:'1px',marginRight:'4px'}}>Filter</span>
-        {[
-          {label:'🟢 Free',            value:'free'},
-          {label:'⭐ Family-Friendly',  value:'family'},
-          {label:'🌟 50+ Friendly',     value:'senior'},
-          {label:'🧘 Health & Wellness',value:'wellness'},
-          {label:'🙋 Volunteer Opp.',   value:'volunteer'},
-          {label:'🎟️ Reg. Required',   value:'reg'},
-        ].map(({label,value})=>(
-          <button key={value} onClick={()=>setTagFilter(value)}
-            style={{padding:'5px 12px',borderRadius:'999px',border:`1.5px solid ${tagFilter===value?'#1a3d2b':'#e5e7eb'}`,background:tagFilter===value?'#1a3d2b':'white',color:tagFilter===value?'white':'#6b7280',fontWeight:600,fontSize:'11px',cursor:'pointer',transition:'all 0.18s'}}>
-            {label}
-          </button>
-        ))}
+        <span style={{fontSize:'10px',fontWeight:700,color:'#374151',textTransform:'uppercase',letterSpacing:'1px',marginRight:'4px'}}>Tags</span>
+        {Object.entries(TAG_META).map(([value, meta]) => {
+          const isActive = tagFilters.includes(value)
+          return (
+            <button key={value}
+              onClick={() => setTagFilters(prev =>
+                prev.includes(value) ? prev.filter(t => t !== value) : [...prev, value]
+              )}
+              style={{padding:'5px 12px',borderRadius:'999px',border:`1.5px solid ${isActive?meta.activeBg:'#e5e7eb'}`,background:isActive?meta.activeBg:'white',color:isActive?'white':'#6b7280',fontWeight:600,fontSize:'11px',cursor:'pointer',transition:'all 0.18s'}}>
+              {meta.label}
+            </button>
+          )
+        })}
       </div>
+
       {/* Organization filter */}
       <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'8px 40px',display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center',alignItems:'center'}}>
         <span style={{fontSize:'10px',fontWeight:700,color:'#374151',textTransform:'uppercase',letterSpacing:'1px',marginRight:'4px'}}>Organization</span>
-        <select
-          value={orgFilter}
-          onChange={e=>setOrgFilter(e.target.value)}
+        <select value={orgFilter} onChange={e=>setOrgFilter(e.target.value)}
           style={{border:'1.5px solid #e5e7eb',borderRadius:'999px',padding:'5px 14px',fontSize:'12px',fontWeight:600,color:'#6b7280',background:'white',cursor:'pointer',outline:'none'}}>
           <option value=''>All Organizations</option>
-
           <option>Chamber of Commerce</option>
           <option>City of Mill Valley</option>
           <option>MV Library</option>
           <option>MV Little League</option>
         </select>
       </div>
+
       {/* Events list */}
       <div style={{maxWidth:'900px',margin:'0 auto',padding:'24px 40px'}}>
         {filtered.length === 0 ? (
@@ -248,7 +265,7 @@ export default function Home() {
         ) : (
           filtered.map(ev => (
             <div key={ev.id} onClick={() => setSelectedEvent(ev)}
-              style={{background:'white',borderRadius:'12px',padding:'16px 18px',marginBottom:'10px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',cursor:'pointer',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'14px',borderLeft:'4px solid #2d6a4f',transition:'all 0.2s'}}
+              style={{background:'white',borderRadius:'12px',padding:'16px 18px',marginBottom:'10px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',cursor:'pointer',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'14px',borderLeft:`4px solid ${CAT_COLORS[ev.category]?.bg||'#2d6a4f'}`,transition:'all 0.2s'}}
               onMouseOver={e => (e.currentTarget.style.transform='translateY(-2px)')}
               onMouseOut={e => (e.currentTarget.style.transform='translateY(0)')}>
               <div style={{flex:1}}>
@@ -269,7 +286,7 @@ export default function Home() {
                 })}
               </div>
               <div style={{flexShrink:0}}>
-                <span style={{display:'inline-block',padding:'4px 10px',borderRadius:'999px',fontSize:'10px',fontWeight:700,background:'#d1fae5',color:'#065f46',whiteSpace:'nowrap'}}>
+                <span style={{display:'inline-block',padding:'4px 10px',borderRadius:'999px',fontSize:'10px',fontWeight:700,background:CAT_COLORS[ev.category]?.bg||'#d1fae5',color:'white',whiteSpace:'nowrap'}}>
                   {CATS[ev.category]?.icon} {CATS[ev.category]?.label}
                 </span>
               </div>
