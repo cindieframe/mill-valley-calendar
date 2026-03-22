@@ -87,7 +87,7 @@ export default function Home() {
       const evDate = new Date(ev.date+'T12:00:00')
       if (evDate < fromDate || evDate > toDate) return false
     }
-    if (catFilters.length > 0 && !catFilters.includes(ev.category)) return false
+    if (catFilters.length > 0 && !catFilters.some(f => ev.category?.split(',').map((c:string)=>c.trim()).includes(f))) return false
     if (tagFilters.length > 0 && !tagFilters.every(t => ev.tags?.split(',').map((x:string)=>x.trim()).includes(t))) return false
     if (orgFilter && ev.organization !== orgFilter) return false
     if (search && !ev.title?.toLowerCase().includes(search.toLowerCase()) &&

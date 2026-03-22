@@ -64,7 +64,7 @@ export default function PostEvent() {
       location: form.location,
       address: form.address,
       organization: form.organization,
-      category: form.category[0],
+      category: form.category.join(','),
       tags: form.tags.join(','),
       cost: form.cost,
       age: form.age,
@@ -202,7 +202,7 @@ export default function PostEvent() {
           <div>
             <label style={labelStyle}>End Time</label>
             <select style={selectStyle} value={form.end_time} onChange={e=>update('end_time',e.target.value)}>
-              <option value=''>Select time…</option>
+              <option value=''>No end time…</option>
               {timeSlots.map(slot => {
                 const [value, label] = slot.split('|')
                 return <option key={value} value={value}>{label}</option>
