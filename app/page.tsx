@@ -54,9 +54,10 @@ function getDateStrings() {
     weekendLabel: `${fmt(sat)}–${fmt(sun)}`
   }
 }
-
+import { useRouter } from 'next/navigation'
 export default function Home() {
   const [events, setEvents] = useState<any[]>([])
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [catFilters, setCatFilters] = useState<string[]>([])
   const [tagFilters, setTagFilters] = useState<string[]>([])
@@ -153,9 +154,10 @@ export default function Home() {
           <span style={{fontWeight:800,fontSize:'22px',color:'#e6a020',letterSpacing:'-1px',textTransform:'uppercase'}}>STIR</span>
           <div style={{fontSize:'9px',color:'rgba(255,255,255,0.5)',letterSpacing:'2.5px',textTransform:'uppercase',marginTop:'2px'}}>🌲 Mill Valley, CA</div>
         </div>
-        <button style={{background:'#e6a020',color:'white',border:'none',padding:'8px 18px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
-          + Post Event
-        </button>
+        <button onClick={() => router.push('/post-event')}
+  style={{background:'#e6a020',color:'white',border:'none',padding:'8px 18px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
+  + Post Event
+</button>
       </header>
 
       {/* Hero */}
