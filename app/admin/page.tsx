@@ -273,7 +273,9 @@ export default function Home() {
             <p style={{fontSize:'15px'}}>No events found. Try a different filter or search.</p>
           </div>
         ) : (
-          filtered.map(ev => (
+          filtered.map(ev => {
+  console.log(ev.title, ev.category, ev.category?.split(','))
+  return (
             <div key={ev.id} onClick={() => setSelectedEvent(ev)}
               style={{background:'white',borderRadius:'12px',padding:'16px 18px',marginBottom:'10px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',cursor:'pointer',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'14px',borderLeft:`4px solid ${CAT_COLORS[ev.category?.split(',')[0]?.trim()]?.bg||'#2d6a4f'}`,transition:'all 0.2s'}}
               onMouseOver={e => (e.currentTarget.style.transform='translateY(-2px)')}
@@ -296,15 +298,14 @@ export default function Home() {
                 })}
               </div>
               <div style={{flexShrink:0,display:'flex',flexDirection:'column',gap:'3px',alignItems:'flex-end'}}>
-                {ev.category?.split(',').map((cat: string) => {
-                  const c = cat.trim()
-                  return CATS[c] ? (
-                    <span key={c} style={{display:'inline-block',padding:'4px 10px',borderRadius:'999px',fontSize:'10px',fontWeight:700,background:CAT_COLORS[c]?.bg||'#d1fae5',color:'white',whiteSpace:'nowrap'}}>
-                      {CATS[c].icon} {CATS[c].label}
-                    </span>
-                  ) : null
-                })}
-              </div>
+  {(() => {
+    const cats = ev.category?.split(',').map((c:string)=>c.trim()).filter((c:string)=>CATS[c]) || []
+    return <>
+      {cats[0] && <span style={{display:'inline-block',padding:'4px 10px',borderRadius:'999px',fontSize:'10px',fontWeight:700,background:CAT_COLORS[cats[0]]?.bg||'#d1fae5',color:'white',whiteSpace:'nowrap'}}>{CATS[cats[0]].icon} {CATS[cats[0]].label}</span>}
+      {cats.length > 1 && <span style={{display:'inline-block',padding:'4px 10px',borderRadius:'999px',fontSize:'10px',fontWeight:700,background:'#e5e7eb',color:'#6b7280',whiteSpace:'nowrap'}}>+{cats.length-1} more</span>}
+    </>
+  })()}
+</div>
             </div>
           ))
         )}
