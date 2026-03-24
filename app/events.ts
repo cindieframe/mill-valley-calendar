@@ -12,7 +12,11 @@ export async function getEvents() {
     return []
   }
 
-  return data
+  // Parse category string into array so components always get a clean array
+  return data.map((ev: any) => ({
+    ...ev,
+    cats: ev.category ? ev.category.split(',').map((c: string) => c.trim()) : [],
+  }))
 }
 
 export async function submitEvent(event: any) {

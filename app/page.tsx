@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { getEvents } from './events'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
@@ -54,10 +55,10 @@ function getDateStrings() {
     weekendLabel: `${fmt(sat)}–${fmt(sun)}`
   }
 }
-import { useRouter } from 'next/navigation'
+
 export default function Home() {
-  const [events, setEvents] = useState<any[]>([])
   const router = useRouter()
+  const [events, setEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [catFilters, setCatFilters] = useState<string[]>([])
   const [tagFilters, setTagFilters] = useState<string[]>([])
@@ -87,7 +88,7 @@ export default function Home() {
       const evDate = new Date(ev.date+'T12:00:00')
       if (evDate < fromDate || evDate > toDate) return false
     }
-    if (catFilters.length > 0 && !catFilters.some(f => ev.category?.split(',').map((c:string)=>c.trim()).includes(f))) return false
+    if (catFilters.length > 0 && !catFilters.some(f => (ev.cats||[]).includes(f))) return false
     if (tagFilters.length > 0 && !tagFilters.every(t => ev.tags?.split(',').map((x:string)=>x.trim()).includes(t))) return false
     if (orgFilter && ev.organization !== orgFilter) return false
     if (search && !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
@@ -107,8 +108,14 @@ export default function Home() {
         style={{background:'#2d6a4f',color:'white',border:'none',padding:'8px 18px',borderRadius:'999px',cursor:'pointer',marginBottom:'20px',fontSize:'13px',fontWeight:700}}>
         ← Back to Calendar
       </button>
-      <div style={{background:'#d1fae5',display:'inline-block',padding:'4px 12px',borderRadius:'999px',fontSize:'11px',fontWeight:700,color:'#065f46',marginBottom:'10px'}}>
-        {CATS[selectedEvent.category]?.icon} {CATS[selectedEvent.category]?.label}
+      <div style={{display:'flex',gap:'6px',flexWrap:'wrap',marginBottom:'10px'}}>
+        {(selectedEvent.cats||[]).map((c: string) => (
+          CATS[c] ? (
+            <span key={c} style={{display:'inline-block',padding:'4px 12px',borderRadius:'999px',fontSize:'11px',fontWeight:700,background:CAT_COLORS[c]?.bg||'#d1fae5',color:'white'}}>
+              {CATS[c].icon} {CATS[c].label}
+            </span>
+          ) : null
+        ))}
       </div>
       <h1 style={{fontFamily:'Georgia,serif',fontSize:'28px',fontWeight:900,color:'#1f2937',marginBottom:'6px'}}>{selectedEvent.title}</h1>
       <p style={{color:'#9ca3af',marginBottom:'24px',fontSize:'14px'}}>Presented by {selectedEvent.organization}</p>
@@ -155,9 +162,9 @@ export default function Home() {
           <div style={{fontSize:'9px',color:'rgba(255,255,255,0.5)',letterSpacing:'2.5px',textTransform:'uppercase',marginTop:'2px'}}>🌲 Mill Valley, CA</div>
         </div>
         <button onClick={() => router.push('/post-event')}
-  style={{background:'#e6a020',color:'white',border:'none',padding:'8px 18px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
-  + Post Event
-</button>
+          style={{background:'#e6a020',color:'white',border:'none',padding:'8px 18px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
+          + Post Event
+        </button>
       </header>
 
       {/* Hero */}
@@ -267,7 +274,7 @@ export default function Home() {
         ) : (
           filtered.map(ev => (
             <div key={ev.id} onClick={() => setSelectedEvent(ev)}
-              style={{background:'white',borderRadius:'12px',padding:'16px 18px',marginBottom:'10px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',cursor:'pointer',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'14px',borderLeft:`4px solid ${CAT_COLORS[ev.category]?.bg||'#2d6a4f'}`,transition:'all 0.2s'}}
+              style={{background:'white',borderRadius:'12px',padding:'16px 18px',marginBottom:'10px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',cursor:'pointer',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'14px',borderLeft:`4px solid ${CAT_COLORS[ev.cats?.[0]]?.bg||'#2d6a4f'}`,transition:'all 0.2s'}}
               onMouseOver={e => (e.currentTarget.style.transform='translateY(-2px)')}
               onMouseOut={e => (e.currentTarget.style.transform='translateY(0)')}>
               <div style={{flex:1}}>
@@ -287,10 +294,14 @@ export default function Home() {
                   ) : null
                 })}
               </div>
-              <div style={{flexShrink:0}}>
-                <span style={{display:'inline-block',padding:'4px 10px',borderRadius:'999px',fontSize:'10px',fontWeight:700,background:CAT_COLORS[ev.category]?.bg||'#d1fae5',color:'white',whiteSpace:'nowrap'}}>
-                  {CATS[ev.category]?.icon} {CATS[ev.category]?.label}
-                </span>
+              <div style={{flexShrink:0,display:'flex',flexDirection:'column',gap:'4px',alignItems:'flex-end'}}>
+                {(ev.cats||[]).map((c: string) => (
+                  CATS[c] ? (
+                    <span key={c} style={{display:'inline-block',padding:'4px 10px',borderRadius:'999px',fontSize:'10px',fontWeight:700,background:CAT_COLORS[c]?.bg||'#d1fae5',color:'white',whiteSpace:'nowrap'}}>
+                      {CATS[c].icon} {CATS[c].label}
+                    </span>
+                  ) : null
+                ))}
               </div>
             </div>
           ))

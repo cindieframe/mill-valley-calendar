@@ -298,13 +298,13 @@ export default function Home() {
                 })}
               </div>
               <div style={{flexShrink:0,display:'flex',flexDirection:'column',gap:'3px',alignItems:'flex-end'}}>
-  {(() => {
-    const cats = ev.category?.split(',').map((c:string)=>c.trim()).filter((c:string)=>CATS[c]) || []
-    return <>
-      {cats[0] && <span style={{display:'inline-block',padding:'4px 10px',borderRadius:'999px',fontSize:'10px',fontWeight:700,background:CAT_COLORS[cats[0]]?.bg||'#d1fae5',color:'white',whiteSpace:'nowrap'}}>{CATS[cats[0]].icon} {CATS[cats[0]].label}</span>}
-      {cats.length > 1 && <span style={{display:'inline-block',padding:'4px 10px',borderRadius:'999px',fontSize:'10px',fontWeight:700,background:'#e5e7eb',color:'#6b7280',whiteSpace:'nowrap'}}>+{cats.length-1} more</span>}
-    </>
-  })()}
+  {(ev.cats||[]).map((c: string) => (
+    CATS[c] ? (
+      <span key={c} style={{display:'inline-block',padding:'4px 10px',borderRadius:'999px',fontSize:'10px',fontWeight:700,background:CAT_COLORS[c]?.bg||'#d1fae5',color:'white',whiteSpace:'nowrap'}}>
+        {CATS[c].icon} {CATS[c].label}
+      </span>
+    ) : null
+  ))}
 </div>
             </div>
           ))
