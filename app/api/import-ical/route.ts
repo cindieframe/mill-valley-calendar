@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
     let skipped = 0
     const results = []
     
-    for (const ev of events.slice(0, 20)) { // limit to 20 per import for now
+    for (const ev of events) {
       try {
         // Auto-categorize with Claude
         const { categories, tags } = await categorizeEvent(ev.summary, ev.description)
