@@ -11,9 +11,12 @@ export default function Admin() {
   const [filter, setFilter] = useState('pending')
   const [editingEvent, setEditingEvent] = useState<any>(null)
   const [saving, setSaving] = useState(false)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [bulkWorking, setBulkWorking] = useState(false)
 
   useEffect(() => {
     loadEvents()
+    setSelected(new Set())
   }, [filter])
 
   async function loadEvents() {
@@ -23,7 +26,7 @@ export default function Admin() {
       .select('*')
       .eq('status', filter)
       .order('date', { ascending: true })
-.order('time', { ascending: true })
+      .order('time', { ascending: true })
     if (!error) setEvents(data || [])
     setLoading(false)
   }
@@ -43,6 +46,54 @@ export default function Admin() {
       .delete()
       .eq('id', id)
     if (!error) setEvents(prev => prev.filter(ev => ev.id !== id))
+  }
+
+  function toggleSelect(id: number) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === events.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(events.map(ev => ev.id)))
+    }
+  }
+
+  async function bulkApprove() {
+    if (selected.size === 0) return
+    if (!confirm(`Approve ${selected.size} events?`)) return
+    setBulkWorking(true)
+    const ids = Array.from(selected)
+    const { error } = await supabase
+      .from('events')
+      .update({ status: 'approved' })
+      .in('id', ids)
+    if (!error) {
+      setEvents(prev => prev.filter(ev => !selected.has(ev.id)))
+      setSelected(new Set())
+    }
+    setBulkWorking(false)
+  }
+
+  async function bulkReject() {
+    if (selected.size === 0) return
+    if (!confirm(`Reject ${selected.size} events?`)) return
+    setBulkWorking(true)
+    const ids = Array.from(selected)
+    const { error } = await supabase
+      .from('events')
+      .update({ status: 'rejected' })
+      .in('id', ids)
+    if (!error) {
+      setEvents(prev => prev.filter(ev => !selected.has(ev.id)))
+      setSelected(new Set())
+    }
+    setBulkWorking(false)
   }
 
   async function saveEdit() {
@@ -78,7 +129,6 @@ export default function Admin() {
     color:'#1f2937', outline:'none', background:'white', marginBottom:'8px'
   }
 
-  // Edit modal
   if (editingEvent) return (
     <div style={{minHeight:'100vh',background:'#fafaf8',fontFamily:'sans-serif'}}>
       <header style={{background:'#1a3d2b',padding:'14px 40px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -224,6 +274,32 @@ export default function Admin() {
           ))}
         </div>
 
+        {!loading && events.length > 0 && filter === 'pending' && (
+          <div style={{background:'white',border:'1.5px solid #e5e7eb',borderRadius:'12px',padding:'12px 20px',marginBottom:'16px',display:'flex',alignItems:'center',gap:'16px',flexWrap:'wrap'}}>
+            <label style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'13px',fontWeight:600,color:'#374151'}}>
+              <input
+                type="checkbox"
+                checked={selected.size === events.length && events.length > 0}
+                onChange={toggleSelectAll}
+                style={{width:'16px',height:'16px',cursor:'pointer'}}
+              />
+              {selected.size === 0 ? 'Select all' : `${selected.size} of ${events.length} selected`}
+            </label>
+            {selected.size > 0 && (
+              <div style={{display:'flex',gap:'8px',marginLeft:'auto'}}>
+                <button onClick={bulkApprove} disabled={bulkWorking}
+                  style={{background:'#16803c',color:'white',border:'none',padding:'8px 20px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:bulkWorking?'not-allowed':'pointer',opacity:bulkWorking?0.7:1}}>
+                  {bulkWorking ? 'Working…' : `✓ Approve ${selected.size}`}
+                </button>
+                <button onClick={bulkReject} disabled={bulkWorking}
+                  style={{background:'white',color:'#dc2626',border:'1.5px solid #dc2626',padding:'8px 20px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:bulkWorking?'not-allowed':'pointer',opacity:bulkWorking?0.7:1}}>
+                  {bulkWorking ? 'Working…' : `✕ Reject ${selected.size}`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {loading ? (
           <div style={{textAlign:'center',padding:'40px',color:'#9ca3af'}}>Loading…</div>
         ) : events.length === 0 ? (
@@ -233,8 +309,16 @@ export default function Admin() {
           </div>
         ) : (
           events.map(ev => (
-            <div key={ev.id} style={{background:'white',borderRadius:'12px',padding:'20px',marginBottom:'12px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',borderLeft:'4px solid #e5e7eb'}}>
+            <div key={ev.id} style={{background:'white',borderRadius:'12px',padding:'20px',marginBottom:'12px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',borderLeft:`4px solid ${selected.has(ev.id) ? '#1a3d2b' : '#e5e7eb'}`}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'12px'}}>
+                {filter === 'pending' && (
+                  <input
+                    type="checkbox"
+                    checked={selected.has(ev.id)}
+                    onChange={() => toggleSelect(ev.id)}
+                    style={{width:'16px',height:'16px',cursor:'pointer',marginRight:'12px',marginTop:'3px',flexShrink:0}}
+                  />
+                )}
                 <div style={{flex:1}}>
                   <h3 style={{fontSize:'16px',fontWeight:700,color:'#1f2937',marginBottom:'4px'}}>{ev.title}</h3>
                   <div style={{fontSize:'13px',color:'#6b7280'}}>
@@ -258,7 +342,7 @@ export default function Admin() {
                 {ev.tags && <span>🏷️ {ev.tags}</span>}
               </div>
 
-                            <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+              <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
                 {filter === 'pending' && <>
                   <button onClick={() => updateStatus(ev.id, 'approved')}
                     style={{background:'#16803c',color:'white',border:'none',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>

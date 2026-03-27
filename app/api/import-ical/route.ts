@@ -26,31 +26,53 @@ function parseICal(text: string) {
     
     if (!summary || !dtstart) continue
     
-    // Parse date
-    const dateStr = dtstart.replace(/T.*/, '').replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')
-    
-    // Parse time
+    // Parse date - handle both UTC (with Z) and local time formats
+    let dateStr = ''
     let timeStr = '12:00 PM'
+
     if (dtstart.includes('T')) {
-      const timePart = dtstart.match(/T(\d{2})(\d{2})/)
-      if (timePart) {
-        const h = parseInt(timePart[1])
-        const m = timePart[2]
-        const ampm = h >= 12 ? 'PM' : 'AM'
-        const hour = h % 12 || 12
-        timeStr = `${hour}:${m} ${ampm}`
-      }
+      // Has a time component - convert to Pacific
+      const fullDate = dtstart
+        .replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6Z')
+      const date = new Date(fullDate)
+
+      // Get Pacific date (may differ from UTC date)
+      dateStr = date.toLocaleDateString('en-CA', {
+        timeZone: 'America/Los_Angeles'
+      }) // gives YYYY-MM-DD
+
+      // Get Pacific time
+      timeStr = date.toLocaleTimeString('en-US', {
+        timeZone: 'America/Los_Angeles',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      })
+    } else {
+      // All-day event, no time component
+      dateStr = dtstart.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')
+      timeStr = 'All day'
     }
-    
+
+    // Skip past events
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const eventDate = new Date(dateStr)
+    if (eventDate < today) continue
+
     events.push({ summary, description, location, dateStr, timeStr, url })
   }
   
+  // Sort by date ascending
+  events.sort((a, b) => new Date(a.dateStr).getTime() - new Date(b.dateStr).getTime())
+
   return events
 }
 
 // Ask Claude to categorize an event
 async function categorizeEvent(summary: string, description: string) {
-  const prompt = `You are categorizing a community event for a local calendar in Mill Valley, CA.
+  try {
+    const prompt = `You are categorizing a community event for a local calendar in Mill Valley, CA.
 
 Event title: ${summary}
 Description: ${description || 'No description provided'}
@@ -76,21 +98,25 @@ Respond in this exact format:
 CATEGORIES: category1,category2
 TAGS: tag1,tag2`
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 100,
-    messages: [{ role: 'user', content: prompt }]
-  })
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 100,
+      messages: [{ role: 'user', content: prompt }]
+    })
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  
-  const catMatch = text.match(/CATEGORIES:\s*([^\n]+)/)
-  const tagMatch = text.match(/TAGS:\s*([^\n]*)/)
-  
-  const categories = catMatch ? catMatch[1].trim() : 'community'
-  const tags = tagMatch ? tagMatch[1].trim() : ''
-  
-  return { categories, tags }
+    const text = response.content[0].type === 'text' ? response.content[0].text : ''
+    
+    const catMatch = text.match(/CATEGORIES:\s*([^\n]+)/)
+    const tagMatch = text.match(/TAGS:\s*([^\n]*)/)
+    
+    const categories = catMatch ? catMatch[1].trim() : 'community'
+    const tags = tagMatch ? tagMatch[1].trim() : ''
+    
+    return { categories, tags }
+  } catch (err) {
+    console.error('Categorization failed for:', summary, err)
+    return { categories: 'community', tags: '' }
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -111,7 +137,7 @@ export async function POST(request: NextRequest) {
     const events = parseICal(icalText)
     
     if (events.length === 0) {
-      return NextResponse.json({ error: 'No events found in feed' }, { status: 400 })
+      return NextResponse.json({ error: 'No upcoming events found in feed' }, { status: 400 })
     }
     
     // Process each event
@@ -121,10 +147,7 @@ export async function POST(request: NextRequest) {
     
     for (const ev of events) {
       try {
-        // Auto-categorize with Claude
-        const { categories, tags } = await categorizeEvent(ev.summary, ev.description)
-        
-        // Check if event already exists
+        // Check if event already exists BEFORE calling Claude
         const { data: existing } = await supabase
           .from('events')
           .select('id')
@@ -136,6 +159,9 @@ export async function POST(request: NextRequest) {
           skipped++
           continue
         }
+
+        // Auto-categorize with Claude (only for new events)
+        const { categories, tags } = await categorizeEvent(ev.summary, ev.description)
         
         // Insert into events table as pending
         const { error } = await supabase.from('events').insert([{
@@ -155,6 +181,8 @@ export async function POST(request: NextRequest) {
         if (!error) {
           imported++
           results.push({ title: ev.summary, date: ev.dateStr, categories, tags })
+        } else {
+          console.error('Insert error for:', ev.summary, error)
         }
       } catch (err) {
         console.error('Error processing event:', ev.summary, err)
