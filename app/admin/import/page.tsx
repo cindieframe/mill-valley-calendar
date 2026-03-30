@@ -1,4 +1,4 @@
-
+'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
@@ -168,4 +168,4 @@ export default function ImportPage() {
       </div>
     </div>
   )
-}'use client'
+}

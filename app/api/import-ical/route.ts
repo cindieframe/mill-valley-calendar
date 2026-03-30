@@ -20,7 +20,8 @@ function parseICal(text: string) {
     
     const dtstart = get('DTSTART')
     const summary = get('SUMMARY')
-    const description = get('DESCRIPTION').replace(/\\n/g, ' ').replace(/\\,/g, ',')
+       const description = get('DESCRIPTION').replace(/\\n/g, ' ').replace(/\\,/g, ',').replace(/https?:\/\/\S+/g, '').replace(/#\S+/g, '').replace(/@\S+/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)
+            // max 300 characters
     const location = get('LOCATION').replace(/\\,/g, ',')
     const url = get('URL')
     
@@ -31,9 +32,12 @@ function parseICal(text: string) {
     let timeStr = '12:00 PM'
 
     if (dtstart.includes('T')) {
-      // Has a time component - convert to Pacific
-      const fullDate = dtstart
-        .replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6Z')
+      // If TZID is specified, time is already local — parse without Z suffix
+      // If no TZID, assume UTC and convert to Pacific
+      const hasTZID = block.includes('DTSTART;TZID=')
+      const fullDate = hasTZID
+        ? dtstart.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6')
+        : dtstart.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6Z')
       const date = new Date(fullDate)
 
       // Get Pacific date (may differ from UTC date)
