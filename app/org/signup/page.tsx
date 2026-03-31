@@ -40,18 +40,22 @@ export default function OrgSignup() {
     setLoading(true)
     setError('')
     const { data: authData, error: authError } = await supabase.auth.signUp({
+     
       email: form.email,
       password: form.password,
     })
-    if (authError) {
-      setError(authError.message)
+     console.log('authData:', JSON.stringify(authData))
+    if (authError || !authData.user) {
+      setError(authError?.message || 'Account creation failed. Please try again.')
       setLoading(false)
       return
     }
-    const { error: orgError } = await supabase
-      .from('organizations')
-      .insert([{
-        user_id: authData.user?.id,
+    await new Promise(resolve => setTimeout(resolve, 500))
+
+const { error: orgError } = await supabase
+  .from('organizations')
+  .insert([{
+    user_id: authData.user?.id,
         name: form.name,
         email: form.email,
         description: form.description,
