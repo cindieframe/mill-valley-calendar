@@ -167,6 +167,13 @@ export default function Home() {
         </button>
       </header>
 
+      {/* For Organizations banner */}
+      <div style={{background:'#2d6a4f',padding:'8px',textAlign:'center'}}>
+        <a href="/org/signup" style={{color:'#e6a020',fontSize:'12px',fontWeight:700,textDecoration:'none'}}>
+          Are you a local organization? Add your events to Townstir →
+        </a>
+      </div>
+
       {/* Hero */}
       <div style={{background:'linear-gradient(160deg,#1a3d2b 0%,#2d6a4f 60%,#1a4a30 100%)',padding:'40px',textAlign:'center'}}>
         <h1 style={{fontFamily:'Georgia,serif',fontSize:'clamp(24px,4vw,44px)',color:'white',fontWeight:800,marginBottom:'8px',letterSpacing:'-0.5px'}}>
@@ -265,6 +272,8 @@ export default function Home() {
       </div>
 
       {/* Events list */}
+      
+
       <div style={{maxWidth:'900px',margin:'0 auto',padding:'24px 40px'}}>
         {filtered.length === 0 ? (
           <div style={{textAlign:'center',padding:'60px 20px',color:'#9ca3af'}}>
@@ -307,6 +316,7 @@ export default function Home() {
           ))
         )}
       </div>
-    </div>
+    {/* For Organizations */}
+      </div>
   )
 }
