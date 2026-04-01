@@ -52,13 +52,36 @@ export default function OrgDashboard() {
         ical_feed_url: org.ical_feed_url,
       })
       .eq('id', org.id)
-    setSaving(false)
     if (error) {
       setError(error.message)
+      setSaving(false)
+      return
+    }
+    // If iCal feed URL exists, trigger import
+    if (org.ical_feed_url) {
+      try {
+        const importRes = await fetch('/api/import-ical', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            feedUrl: org.ical_feed_url,
+            organization: org.name,
+          })
+        })
+        const importData = await importRes.json()
+        if (importData.error) {
+          setSuccess(`Profile saved! Note: Calendar sync had an issue — ${importData.error}`)
+        } else {
+          setSuccess(`Profile saved! ${importData.imported} new events imported, ${importData.skipped} already existed.`)
+        }
+      } catch (err) {
+        setSuccess('Profile saved! Calendar sync will retry shortly.')
+      }
     } else {
       setSuccess('Profile saved successfully!')
-      setTimeout(() => setSuccess(''), 3000)
     }
+    setSaving(false)
+    setTimeout(() => setSuccess(''), 5000)
   }
 
   async function handleLogout() {
