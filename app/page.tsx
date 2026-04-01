@@ -287,7 +287,14 @@ export default function Home() {
               onMouseOver={e => (e.currentTarget.style.transform='translateY(-2px)')}
               onMouseOut={e => (e.currentTarget.style.transform='translateY(0)')}>
               <div style={{flex:1}}>
-                <h3 style={{fontSize:'14px',fontWeight:700,color:'#1f2937',margin:'0 0 4px 0'}}>{ev.title}</h3>
+                <h3 style={{fontSize:'14px',fontWeight:700,color:'#1f2937',margin:'0 0 4px 0'}}>
+  {ev.title}
+  {ev.verified && (
+    <span style={{marginLeft:'6px',background:'#1a3d2b',color:'white',fontSize:'9px',fontWeight:700,padding:'2px 6px',borderRadius:'999px',verticalAlign:'middle'}}>
+      ✓ Verified
+    </span>
+  )}
+</h3>
                 <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'6px'}}>
                   📅 {new Date(ev.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric'})} &nbsp;·&nbsp; 🕐 {ev.time} &nbsp;·&nbsp; 📍 {ev.location}
                   <br/>

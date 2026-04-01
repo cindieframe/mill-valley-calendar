@@ -7,6 +7,7 @@ import { supabase } from '../supabase'
 export default function Admin() {
   const router = useRouter()
   const [events, setEvents] = useState<any[]>([])
+  const [orgs, setOrgs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('pending')
   const [editingEvent, setEditingEvent] = useState<any>(null)
@@ -15,8 +16,12 @@ export default function Admin() {
   const [bulkWorking, setBulkWorking] = useState(false)
 
   useEffect(() => {
-    loadEvents()
-    setSelected(new Set())
+    if (filter === 'organizations') {
+      loadOrgs()
+    } else {
+      loadEvents()
+      setSelected(new Set())
+    }
   }, [filter])
 
   async function loadEvents() {
@@ -29,6 +34,32 @@ export default function Admin() {
       .order('time', { ascending: true })
     if (!error) setEvents(data || [])
     setLoading(false)
+  }
+
+  async function loadOrgs() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('organizations')
+      .select('*')
+      .order('name', { ascending: true })
+    if (!error) setOrgs(data || [])
+    setLoading(false)
+  }
+
+  async function toggleVerify(org: any) {
+    const newVerified = !org.verified
+    const { error } = await supabase
+      .from('organizations')
+      .update({ verified: newVerified })
+      .eq('id', org.id)
+    if (!error) {
+      // Update all events from this org
+      await supabase
+        .from('events')
+        .update({ verified: newVerified })
+        .eq('organization', org.name)
+      setOrgs(prev => prev.map(o => o.id === org.id ? { ...o, verified: newVerified } : o))
+    }
   }
 
   async function updateStatus(id: number, status: string) {
@@ -142,16 +173,13 @@ export default function Admin() {
           ← Back
         </button>
       </header>
-
       <div style={{maxWidth:'640px',margin:'0 auto',padding:'32px 24px 80px'}}>
         <h1 style={{fontFamily:'Georgia,serif',fontSize:'24px',fontWeight:900,color:'#1f2937',marginBottom:'24px'}}>
           Edit Event
         </h1>
-
         <label style={{display:'block',fontSize:'11px',fontWeight:700,color:'#374151',marginBottom:'4px',textTransform:'uppercase',letterSpacing:'0.8px'}}>Title</label>
         <input style={inputStyle} value={editingEvent.title||''}
           onChange={e=>setEditingEvent({...editingEvent,title:e.target.value})}/>
-
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
           <div>
             <label style={{display:'block',fontSize:'11px',fontWeight:700,color:'#374151',marginBottom:'4px',textTransform:'uppercase',letterSpacing:'0.8px'}}>Date</label>
@@ -164,29 +192,23 @@ export default function Admin() {
               onChange={e=>setEditingEvent({...editingEvent,time:e.target.value})}/>
           </div>
         </div>
-
         <label style={{display:'block',fontSize:'11px',fontWeight:700,color:'#374151',marginBottom:'4px',textTransform:'uppercase',letterSpacing:'0.8px'}}>Location</label>
         <input style={inputStyle} value={editingEvent.location||''}
           onChange={e=>setEditingEvent({...editingEvent,location:e.target.value})}/>
-
         <label style={{display:'block',fontSize:'11px',fontWeight:700,color:'#374151',marginBottom:'4px',textTransform:'uppercase',letterSpacing:'0.8px'}}>Address</label>
         <input style={inputStyle} value={editingEvent.address||''}
           onChange={e=>setEditingEvent({...editingEvent,address:e.target.value})}/>
-
         <label style={{display:'block',fontSize:'11px',fontWeight:700,color:'#374151',marginBottom:'4px',textTransform:'uppercase',letterSpacing:'0.8px'}}>Organization</label>
         <input style={inputStyle} value={editingEvent.organization||''}
           onChange={e=>setEditingEvent({...editingEvent,organization:e.target.value})}/>
-
         <label style={{display:'block',fontSize:'11px',fontWeight:700,color:'#374151',marginBottom:'4px',textTransform:'uppercase',letterSpacing:'0.8px'}}>Category</label>
         <input style={inputStyle} value={editingEvent.category||''}
           placeholder="e.g. outdoors,classes"
           onChange={e=>setEditingEvent({...editingEvent,category:e.target.value})}/>
-
         <label style={{display:'block',fontSize:'11px',fontWeight:700,color:'#374151',marginBottom:'4px',textTransform:'uppercase',letterSpacing:'0.8px'}}>Tags</label>
         <input style={inputStyle} value={editingEvent.tags||''}
           placeholder="e.g. free,family,senior"
           onChange={e=>setEditingEvent({...editingEvent,tags:e.target.value})}/>
-
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
           <div>
             <label style={{display:'block',fontSize:'11px',fontWeight:700,color:'#374151',marginBottom:'4px',textTransform:'uppercase',letterSpacing:'0.8px'}}>Cost</label>
@@ -199,12 +221,10 @@ export default function Admin() {
               onChange={e=>setEditingEvent({...editingEvent,age:e.target.value})}/>
           </div>
         </div>
-
         <label style={{display:'block',fontSize:'11px',fontWeight:700,color:'#374151',marginBottom:'4px',textTransform:'uppercase',letterSpacing:'0.8px'}}>Description</label>
         <textarea style={{...inputStyle,minHeight:'100px',resize:'vertical'}}
           value={editingEvent.description||''}
           onChange={e=>setEditingEvent({...editingEvent,description:e.target.value})}/>
-
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
           <div>
             <label style={{display:'block',fontSize:'11px',fontWeight:700,color:'#374151',marginBottom:'4px',textTransform:'uppercase',letterSpacing:'0.8px'}}>Email</label>
@@ -217,7 +237,6 @@ export default function Admin() {
               onChange={e=>setEditingEvent({...editingEvent,website:e.target.value})}/>
           </div>
         </div>
-
         <div style={{display:'flex',gap:'10px',marginTop:'8px'}}>
           <button onClick={saveEdit} disabled={saving}
             style={{flex:1,background:'#1a3d2b',color:'white',border:'none',padding:'12px',borderRadius:'999px',fontSize:'14px',fontWeight:700,cursor:saving?'not-allowed':'pointer',opacity:saving?0.7:1}}>
@@ -254,14 +273,14 @@ export default function Admin() {
 
       <div style={{maxWidth:'900px',margin:'0 auto',padding:'32px 24px 80px'}}>
         <h1 style={{fontFamily:'Georgia,serif',fontSize:'28px',fontWeight:900,color:'#1f2937',marginBottom:'6px'}}>
-          Moderation Queue
+          Admin
         </h1>
         <p style={{color:'#9ca3af',fontSize:'14px',marginBottom:'24px'}}>
-          Review, edit, and approve submitted events before they go live.
+          Manage events and organizations.
         </p>
 
         <div style={{display:'flex',gap:'8px',marginBottom:'24px'}}>
-          {['pending','approved','rejected'].map(s => (
+          {['pending','approved','rejected','organizations'].map(s => (
             <button key={s} onClick={() => setFilter(s)}
               style={{padding:'8px 20px',borderRadius:'999px',border:'1.5px solid',
                 borderColor:filter===s?'#1a3d2b':'#e5e7eb',
@@ -274,112 +293,157 @@ export default function Admin() {
           ))}
         </div>
 
-        {!loading && events.length > 0 && filter === 'pending' && (
-          <div style={{background:'white',border:'1.5px solid #e5e7eb',borderRadius:'12px',padding:'12px 20px',marginBottom:'16px',display:'flex',alignItems:'center',gap:'16px',flexWrap:'wrap'}}>
-            <label style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'13px',fontWeight:600,color:'#374151'}}>
-              <input
-                type="checkbox"
-                checked={selected.size === events.length && events.length > 0}
-                onChange={toggleSelectAll}
-                style={{width:'16px',height:'16px',cursor:'pointer'}}
-              />
-              {selected.size === 0 ? 'Select all' : `${selected.size} of ${events.length} selected`}
-            </label>
-            {selected.size > 0 && (
-              <div style={{display:'flex',gap:'8px',marginLeft:'auto'}}>
-                <button onClick={bulkApprove} disabled={bulkWorking}
-                  style={{background:'#16803c',color:'white',border:'none',padding:'8px 20px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:bulkWorking?'not-allowed':'pointer',opacity:bulkWorking?0.7:1}}>
-                  {bulkWorking ? 'Working…' : `✓ Approve ${selected.size}`}
-                </button>
-                <button onClick={bulkReject} disabled={bulkWorking}
-                  style={{background:'white',color:'#dc2626',border:'1.5px solid #dc2626',padding:'8px 20px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:bulkWorking?'not-allowed':'pointer',opacity:bulkWorking?0.7:1}}>
-                  {bulkWorking ? 'Working…' : `✕ Reject ${selected.size}`}
-                </button>
+        {/* Organizations tab */}
+        {filter === 'organizations' && (
+          <>
+            {loading ? (
+              <div style={{textAlign:'center',padding:'40px',color:'#9ca3af'}}>Loading…</div>
+            ) : orgs.length === 0 ? (
+              <div style={{textAlign:'center',padding:'60px 20px',color:'#9ca3af'}}>
+                <div style={{fontSize:'40px',marginBottom:'12px'}}>🏢</div>
+                <p>No organizations have signed up yet.</p>
               </div>
-            )}
-          </div>
-        )}
-
-        {loading ? (
-          <div style={{textAlign:'center',padding:'40px',color:'#9ca3af'}}>Loading…</div>
-        ) : events.length === 0 ? (
-          <div style={{textAlign:'center',padding:'60px 20px',color:'#9ca3af'}}>
-            <div style={{fontSize:'40px',marginBottom:'12px'}}>📭</div>
-            <p>No {filter} events.</p>
-          </div>
-        ) : (
-          events.map(ev => (
-            <div key={ev.id} style={{background:'white',borderRadius:'12px',padding:'20px',marginBottom:'12px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',borderLeft:`4px solid ${selected.has(ev.id) ? '#1a3d2b' : '#e5e7eb'}`}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'12px'}}>
-                {filter === 'pending' && (
-                  <input
-                    type="checkbox"
-                    checked={selected.has(ev.id)}
-                    onChange={() => toggleSelect(ev.id)}
-                    style={{width:'16px',height:'16px',cursor:'pointer',marginRight:'12px',marginTop:'3px',flexShrink:0}}
-                  />
-                )}
-                <div style={{flex:1}}>
-                  <h3 style={{fontSize:'16px',fontWeight:700,color:'#1f2937',marginBottom:'4px'}}>{ev.title}</h3>
-                  <div style={{fontSize:'13px',color:'#6b7280'}}>
-                    📅 {ev.date} &nbsp;·&nbsp; 🕐 {ev.time} &nbsp;·&nbsp; 📍 {ev.location}
-                  </div>
-                  <div style={{fontSize:'13px',color:'#6b7280',marginTop:'2px'}}>
-                    👥 {ev.organization} &nbsp;·&nbsp; 🏷️ {ev.category}
-                    {ev.cost && <>&nbsp;·&nbsp; 💰 {ev.cost}</>}
+            ) : (
+              orgs.map(org => (
+                <div key={org.id} style={{background:'white',borderRadius:'12px',padding:'20px',marginBottom:'12px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',borderLeft:`4px solid ${org.verified ? '#16803c' : '#e5e7eb'}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div>
+                      <h3 style={{fontSize:'16px',fontWeight:700,color:'#1f2937',marginBottom:'4px'}}>
+                        {org.name}
+                        {org.verified && <span style={{marginLeft:'8px',background:'#16803c',color:'white',fontSize:'9px',fontWeight:700,padding:'2px 6px',borderRadius:'999px'}}>✓ Verified</span>}
+                      </h3>
+                      <div style={{fontSize:'13px',color:'#6b7280'}}>
+                        📧 {org.email}
+                        {org.website && <>&nbsp;·&nbsp; 🌐 {org.website}</>}
+                      </div>
+                      {org.ical_feed_url && (
+                        <div style={{fontSize:'11px',color:'#9ca3af',marginTop:'4px'}}>
+                          📅 iCal feed connected
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={() => toggleVerify(org)}
+                      style={{background: org.verified ? 'white' : '#16803c',
+                        color: org.verified ? '#dc2626' : 'white',
+                        border: org.verified ? '1.5px solid #dc2626' : 'none',
+                        padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
+                      {org.verified ? '✕ Unverify' : '✓ Verify'}
+                    </button>
                   </div>
                 </div>
-                <div style={{fontSize:'11px',color:'#9ca3af',flexShrink:0,marginLeft:'12px'}}>#{ev.id}</div>
-              </div>
+              ))
+            )}
+          </>
+        )}
 
-              <p style={{fontSize:'13px',color:'#4b5563',lineHeight:1.6,marginBottom:'16px',padding:'12px',background:'#f9fafb',borderRadius:'8px'}}>
-                {ev.description}
-              </p>
-
-              <div style={{fontSize:'12px',color:'#9ca3af',marginBottom:'16px'}}>
-                {ev.email && <span>📧 {ev.email}&nbsp;&nbsp;</span>}
-                {ev.website && <span>🌐 {ev.website}&nbsp;&nbsp;</span>}
-                {ev.tags && <span>🏷️ {ev.tags}</span>}
+        {/* Events tabs */}
+        {filter !== 'organizations' && (
+          <>
+            {!loading && events.length > 0 && filter === 'pending' && (
+              <div style={{background:'white',border:'1.5px solid #e5e7eb',borderRadius:'12px',padding:'12px 20px',marginBottom:'16px',display:'flex',alignItems:'center',gap:'16px',flexWrap:'wrap'}}>
+                <label style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',fontSize:'13px',fontWeight:600,color:'#374151'}}>
+                  <input
+                    type="checkbox"
+                    checked={selected.size === events.length && events.length > 0}
+                    onChange={toggleSelectAll}
+                    style={{width:'16px',height:'16px',cursor:'pointer'}}
+                  />
+                  {selected.size === 0 ? 'Select all' : `${selected.size} of ${events.length} selected`}
+                </label>
+                {selected.size > 0 && (
+                  <div style={{display:'flex',gap:'8px',marginLeft:'auto'}}>
+                    <button onClick={bulkApprove} disabled={bulkWorking}
+                      style={{background:'#16803c',color:'white',border:'none',padding:'8px 20px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:bulkWorking?'not-allowed':'pointer',opacity:bulkWorking?0.7:1}}>
+                      {bulkWorking ? 'Working…' : `✓ Approve ${selected.size}`}
+                    </button>
+                    <button onClick={bulkReject} disabled={bulkWorking}
+                      style={{background:'white',color:'#dc2626',border:'1.5px solid #dc2626',padding:'8px 20px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:bulkWorking?'not-allowed':'pointer',opacity:bulkWorking?0.7:1}}>
+                      {bulkWorking ? 'Working…' : `✕ Reject ${selected.size}`}
+                    </button>
+                  </div>
+                )}
               </div>
+            )}
 
-              <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
-                {filter === 'pending' && <>
-                  <button onClick={() => updateStatus(ev.id, 'approved')}
-                    style={{background:'#16803c',color:'white',border:'none',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
-                    ✓ Approve
-                  </button>
-                  <button onClick={() => updateStatus(ev.id, 'rejected')}
-                    style={{background:'white',color:'#dc2626',border:'1.5px solid #dc2626',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
-                    ✕ Reject
-                  </button>
-                </>}
-                {filter === 'rejected' && <>
-                  <button onClick={() => updateStatus(ev.id, 'approved')}
-                    style={{background:'#16803c',color:'white',border:'none',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
-                    ✓ Approve anyway
-                  </button>
-                  <button onClick={() => deleteEvent(ev.id)}
-                    style={{background:'white',color:'#dc2626',border:'1.5px solid #dc2626',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
-                    🗑 Delete permanently
-                  </button>
-                </>}
-                {filter === 'approved' && <>
-                  <button onClick={() => updateStatus(ev.id, 'rejected')}
-                    style={{background:'white',color:'#6b7280',border:'1.5px solid #e5e7eb',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
-                    ✕ Unpublish
-                  </button>
-                  <button onClick={() => deleteEvent(ev.id)}
-                    style={{background:'white',color:'#dc2626',border:'1.5px solid #dc2626',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
-                    🗑 Delete permanently
-                  </button>
-                </>}
-                <button onClick={() => setEditingEvent(ev)}
-                  style={{background:'white',color:'#1a3d2b',border:'1.5px solid #1a3d2b',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
-                  ✏️ Edit
-                </button>
+            {loading ? (
+              <div style={{textAlign:'center',padding:'40px',color:'#9ca3af'}}>Loading…</div>
+            ) : events.length === 0 ? (
+              <div style={{textAlign:'center',padding:'60px 20px',color:'#9ca3af'}}>
+                <div style={{fontSize:'40px',marginBottom:'12px'}}>📭</div>
+                <p>No {filter} events.</p>
               </div>
-            </div>
-          ))
+            ) : (
+              events.map(ev => (
+                <div key={ev.id} style={{background:'white',borderRadius:'12px',padding:'20px',marginBottom:'12px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',borderLeft:`4px solid ${selected.has(ev.id) ? '#1a3d2b' : '#e5e7eb'}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'12px'}}>
+                    {filter === 'pending' && (
+                      <input
+                        type="checkbox"
+                        checked={selected.has(ev.id)}
+                        onChange={() => toggleSelect(ev.id)}
+                        style={{width:'16px',height:'16px',cursor:'pointer',marginRight:'12px',marginTop:'3px',flexShrink:0}}
+                      />
+                    )}
+                    <div style={{flex:1}}>
+                      <h3 style={{fontSize:'16px',fontWeight:700,color:'#1f2937',marginBottom:'4px'}}>{ev.title}</h3>
+                      <div style={{fontSize:'13px',color:'#6b7280'}}>
+                        📅 {ev.date} &nbsp;·&nbsp; 🕐 {ev.time} &nbsp;·&nbsp; 📍 {ev.location}
+                      </div>
+                      <div style={{fontSize:'13px',color:'#6b7280',marginTop:'2px'}}>
+                        👥 {ev.organization} &nbsp;·&nbsp; 🏷️ {ev.category}
+                        {ev.cost && <>&nbsp;·&nbsp; 💰 {ev.cost}</>}
+                      </div>
+                    </div>
+                    <div style={{fontSize:'11px',color:'#9ca3af',flexShrink:0,marginLeft:'12px'}}>#{ev.id}</div>
+                  </div>
+                  <p style={{fontSize:'13px',color:'#4b5563',lineHeight:1.6,marginBottom:'16px',padding:'12px',background:'#f9fafb',borderRadius:'8px'}}>
+                    {ev.description}
+                  </p>
+                  <div style={{fontSize:'12px',color:'#9ca3af',marginBottom:'16px'}}>
+                    {ev.email && <span>📧 {ev.email}&nbsp;&nbsp;</span>}
+                    {ev.website && <span>🌐 {ev.website}&nbsp;&nbsp;</span>}
+                    {ev.tags && <span>🏷️ {ev.tags}</span>}
+                  </div>
+                  <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+                    {filter === 'pending' && <>
+                      <button onClick={() => updateStatus(ev.id, 'approved')}
+                        style={{background:'#16803c',color:'white',border:'none',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
+                        ✓ Approve
+                      </button>
+                      <button onClick={() => updateStatus(ev.id, 'rejected')}
+                        style={{background:'white',color:'#dc2626',border:'1.5px solid #dc2626',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
+                        ✕ Reject
+                      </button>
+                    </>}
+                    {filter === 'rejected' && <>
+                      <button onClick={() => updateStatus(ev.id, 'approved')}
+                        style={{background:'#16803c',color:'white',border:'none',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
+                        ✓ Approve anyway
+                      </button>
+                      <button onClick={() => deleteEvent(ev.id)}
+                        style={{background:'white',color:'#dc2626',border:'1.5px solid #dc2626',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
+                        🗑 Delete permanently
+                      </button>
+                    </>}
+                    {filter === 'approved' && <>
+                      <button onClick={() => updateStatus(ev.id, 'rejected')}
+                        style={{background:'white',color:'#6b7280',border:'1.5px solid #e5e7eb',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
+                        ✕ Unpublish
+                      </button>
+                      <button onClick={() => deleteEvent(ev.id)}
+                        style={{background:'white',color:'#dc2626',border:'1.5px solid #dc2626',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
+                        🗑 Delete permanently
+                      </button>
+                    </>}
+                    <button onClick={() => setEditingEvent(ev)}
+                      style={{background:'white',color:'#1a3d2b',border:'1.5px solid #1a3d2b',padding:'9px 22px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
+                      ✏️ Edit
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </>
         )}
       </div>
     </div>
