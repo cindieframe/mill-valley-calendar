@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getEvents } from './events'
+import { supabase } from './supabase'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 
@@ -63,6 +64,8 @@ export default function Home() {
   const [catFilters, setCatFilters] = useState<string[]>([])
   const [tagFilters, setTagFilters] = useState<string[]>([])
   const [orgFilter, setOrgFilter] = useState('')
+  const [orgList, setOrgList] = useState<string[]>([])
+
   const [search, setSearch] = useState('')
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [currentView, setCurrentView] = useState('today')
@@ -76,6 +79,17 @@ export default function Home() {
       setLoading(false)
     }
     loadEvents()
+    async function loadOrgList() {
+      const { data } = await supabase
+        .from('events')
+        .select('organization')
+        .eq('status', 'approved')
+      if (data) {
+        const unique = [...new Set(data.map((e: any) => e.organization).filter(Boolean))].sort() as string[]
+        setOrgList(unique)
+      }
+    }
+    loadOrgList()
   }, [])
 
   const { todayStr, tomorrowStr, satStr, sunStr, todayLabel, tomorrowLabel, weekendLabel } = getDateStrings()
@@ -264,10 +278,9 @@ export default function Home() {
         <select value={orgFilter} onChange={e=>setOrgFilter(e.target.value)}
           style={{border:'1.5px solid #e5e7eb',borderRadius:'999px',padding:'5px 14px',fontSize:'12px',fontWeight:600,color:'#6b7280',background:'white',cursor:'pointer',outline:'none'}}>
           <option value=''>All Organizations</option>
-          <option>Chamber of Commerce</option>
-          <option>City of Mill Valley</option>
-          <option>MV Library</option>
-          <option>MV Little League</option>
+{orgList.map(org => (
+  <option key={org} value={org}>{org}</option>
+))}
         </select>
       </div>
 
