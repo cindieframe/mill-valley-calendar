@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '../../supabase'
+import { supabase } from '../supabase'
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
-  const querySecret = request.nextUrl.searchParams.get('secret')
+  const querySecret = request.import { supabase } from '../supabase'nextUrl.searchParams.get('secret')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}` && querySecret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
