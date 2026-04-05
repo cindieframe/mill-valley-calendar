@@ -311,7 +311,13 @@ export default function Home() {
                 <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'6px'}}>
                   📅 {new Date(ev.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric'})} &nbsp;·&nbsp; 🕐 {ev.time} &nbsp;·&nbsp; 📍 {ev.location}
                   <br/>
-                  👥 {ev.organization}{ev.cost && <>&nbsp;·&nbsp; 💰 {ev.cost}</>}
+                  <a href={`/org/${encodeURIComponent(ev.organization.toLowerCase().replace(/ /g, '-'))}`}
+  style={{ color: '#1a3d2b', fontWeight: 700, textDecoration: 'none' }}
+  onClick={e => e.stopPropagation()}>
+  👥 {ev.organization}
+</a>
+{ev.cost && <>&nbsp;·&nbsp; 💰 {ev.cost}</>}
+```
                 </div>
                 {ev.tags && ev.tags.split(',').map((tag: string) => {
                   const t = tag.trim()

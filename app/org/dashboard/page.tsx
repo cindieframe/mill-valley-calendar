@@ -8,6 +8,7 @@ export default function OrgDashboard() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [org, setOrg] = useState<any>(null)
@@ -35,6 +36,43 @@ export default function OrgDashboard() {
     setLoading(false)
   }
 
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Logo must be under 2MB')
+      return
+    }
+    setUploadingLogo(true)
+    setError('')
+    const ext = file.name.split('.').pop()
+    const fileName = `${org.id}.${ext}`
+    const { error: uploadError } = await supabase.storage
+      .from('org-logos')
+      .upload(fileName, file, { upsert: true })
+    if (uploadError) {
+      setError('Logo upload failed: ' + uploadError.message)
+      setUploadingLogo(false)
+      return
+    }
+    const { data: { publicUrl } } = supabase.storage
+      .from('org-logos')
+      .getPublicUrl(fileName)
+    const { error: updateError } = await supabase
+      .from('organizations')
+      .update({ logo_url: publicUrl })
+      .eq('id', org.id)
+    if (updateError) {
+      setError('Failed to save logo URL')
+      setUploadingLogo(false)
+      return
+    }
+    setOrg({ ...org, logo_url: publicUrl })
+    setUploadingLogo(false)
+    setSuccess('Logo uploaded successfully!')
+    setTimeout(() => setSuccess(''), 3000)
+  }
+
   async function handleSave() {
     setSaving(true)
     setError('')
@@ -57,7 +95,6 @@ export default function OrgDashboard() {
       setSaving(false)
       return
     }
-    // If iCal feed URL exists, trigger import
     if (org.ical_feed_url) {
       try {
         const importRes = await fetch('/api/import-ical', {
@@ -143,6 +180,35 @@ export default function OrgDashboard() {
             ✅ {success}
           </div>
         )}
+
+        {/* Logo Upload Section */}
+        <div style={{ background: 'white', borderRadius: '12px', padding: '24px', marginBottom: '24px', border: '1.5px solid #e5e7eb' }}>
+          <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>
+            Organization Logo
+          </h2>
+          <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
+            Upload a logo to appear on your events and profile. PNG or JPG, under 2MB.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#f3f4f6', border: '2px solid #e5e7eb', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {org.logo_url ? (
+                <img src={org.logo_url} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }} />
+              ) : (
+                <span style={{ fontSize: '28px' }}>🏢</span>
+              )}
+            </div>
+            <div>
+              <label style={{ display: 'inline-block', background: '#1a3d2b', color: 'white', padding: '8px 18px', borderRadius: '999px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                {uploadingLogo ? 'Uploading…' : 'Choose Logo'}
+                <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={uploadingLogo} />
+              </label>
+              {org.logo_url && (
+                <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '6px' }}>Logo uploaded ✓</p>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div style={{ background: 'white', borderRadius: '12px', padding: '24px', marginBottom: '24px', border: '2px solid #1a3d2b' }}>
           <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1a3d2b', marginBottom: '4px' }}>
             📅 Connect Your Calendar
@@ -158,6 +224,7 @@ export default function OrgDashboard() {
             Google Calendar: Settings → your calendar → Integrate calendar → copy iCal link
           </div>
         </div>
+
         <div style={{ background: 'white', borderRadius: '12px', padding: '24px', marginBottom: '24px', border: '1.5px solid #e5e7eb' }}>
           <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '16px' }}>
             Organization Profile
@@ -198,6 +265,7 @@ export default function OrgDashboard() {
             </div>
           </div>
         </div>
+
         <button onClick={handleSave} disabled={saving}
           style={{ width: '100%', background: '#1a3d2b', color: 'white', border: 'none', padding: '14px', borderRadius: '999px', fontSize: '15px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
           {saving ? 'Saving…' : '✓ Save Profile'}
