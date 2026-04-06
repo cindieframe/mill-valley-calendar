@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'Townstir Mill Valley <onboarding@resend.dev>',
+      from: 'Townstir Mill Valley <noreply@send.townstir.com>',
       to,
       subject,
       html,

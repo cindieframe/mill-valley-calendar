@@ -17,6 +17,7 @@ export default function Admin() {
 const [authed, setAuthed] = useState(false)
 const [passwordInput, setPasswordInput] = useState('')
 const [passwordError, setPasswordError] = useState(false)
+const [showPassword, setShowPassword] = useState(false)
 
   useEffect(() => {
     if (filter === 'organizations') {
@@ -262,22 +263,29 @@ const [passwordError, setPasswordError] = useState(false)
         <span style={{ fontWeight: 800, fontSize: '24px', color: '#e6a020', textTransform: 'uppercase' }}>STIR</span>
         <p style={{ color: '#6b7280', fontSize: '14px', marginTop: '8px' }}>Admin Access</p>
       </div>
-      <input
-        type="password"
-        placeholder="Enter admin password"
-        value={passwordInput}
-        onChange={e => setPasswordInput(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') {
-            if (passwordInput === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
-              setAuthed(true)
-            } else {
-              setPasswordError(true)
-            }
-          }
-        }}
-        style={{ width: '100%', border: `1.5px solid ${passwordError ? '#dc2626' : '#e5e7eb'}`, borderRadius: '8px', padding: '10px 14px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', marginBottom: '8px' }}
-      />
+      <div style={{ position: 'relative', marginBottom: '8px' }}>
+  <input
+    type={showPassword ? 'text' : 'password'}
+    placeholder="Enter admin password"
+    value={passwordInput}
+    onChange={e => setPasswordInput(e.target.value)}
+    onKeyDown={e => {
+      if (e.key === 'Enter') {
+        if (passwordInput === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
+          setAuthed(true)
+        } else {
+          setPasswordError(true)
+        }
+      }
+    }}
+    style={{ width: '100%', border: `1.5px solid ${passwordError ? '#dc2626' : '#e5e7eb'}`, borderRadius: '8px', padding: '10px 40px 10px 14px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' as const }}
+  />
+  <button
+    onClick={() => setShowPassword(!showPassword)}
+    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '16px' }}>
+    {showPassword ? '🙈' : '👁️'}
+  </button>
+</div>
       {passwordError && <p style={{ color: '#dc2626', fontSize: '12px', marginBottom: '8px' }}>Incorrect password</p>}
       <button
         onClick={() => {
