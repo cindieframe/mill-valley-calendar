@@ -30,7 +30,7 @@ export default function OrgProfilePage() {
       }
 
       setOrg(orgData)
-
+document.title = `${orgData.name} | Townstir Mill Valley`
       const { data: eventsData } = await supabase
         .from('events')
         .select('*')
