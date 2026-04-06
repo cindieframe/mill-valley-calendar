@@ -14,6 +14,9 @@ export default function Admin() {
   const [saving, setSaving] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)
+const [authed, setAuthed] = useState(false)
+const [passwordInput, setPasswordInput] = useState('')
+const [passwordError, setPasswordError] = useState(false)
 
   useEffect(() => {
     if (filter === 'organizations') {
@@ -251,6 +254,45 @@ export default function Admin() {
     </div>
   )
 
+  if (!authed) return (
+  <div style={{ minHeight: '100vh', background: '#fafaf8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
+    <div style={{ background: 'white', borderRadius: '12px', padding: '40px', width: '320px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+      <div style={{ marginBottom: '24px', textAlign: 'center' }}>
+        <span style={{ fontWeight: 800, fontSize: '24px', color: '#1a3d2b' }}>town</span>
+        <span style={{ fontWeight: 800, fontSize: '24px', color: '#e6a020', textTransform: 'uppercase' }}>STIR</span>
+        <p style={{ color: '#6b7280', fontSize: '14px', marginTop: '8px' }}>Admin Access</p>
+      </div>
+      <input
+        type="password"
+        placeholder="Enter admin password"
+        value={passwordInput}
+        onChange={e => setPasswordInput(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            if (passwordInput === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
+              setAuthed(true)
+            } else {
+              setPasswordError(true)
+            }
+          }
+        }}
+        style={{ width: '100%', border: `1.5px solid ${passwordError ? '#dc2626' : '#e5e7eb'}`, borderRadius: '8px', padding: '10px 14px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', marginBottom: '8px' }}
+      />
+      {passwordError && <p style={{ color: '#dc2626', fontSize: '12px', marginBottom: '8px' }}>Incorrect password</p>}
+      <button
+        onClick={() => {
+          if (passwordInput === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
+            setAuthed(true)
+          } else {
+            setPasswordError(true)
+          }
+        }}
+        style={{ width: '100%', background: '#1a3d2b', color: 'white', border: 'none', padding: '12px', borderRadius: '999px', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>
+        Enter
+      </button>
+    </div>
+  </div>
+)
   return (
     <div style={{minHeight:'100vh',background:'#fafaf8',fontFamily:'sans-serif'}}>
       <header style={{background:'#1a3d2b',padding:'14px 40px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
