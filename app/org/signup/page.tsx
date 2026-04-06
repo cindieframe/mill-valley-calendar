@@ -64,11 +64,43 @@ const { error: orgError } = await supabase
         instagram: form.instagram,
         facebook: form.facebook,
       }])
-    if (orgError) {
+        if (orgError) {
       setError(orgError.message)
       setLoading(false)
       return
     }
+    // Send welcome email
+    await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: form.email,
+        subject: 'Welcome to Townstir — you\'re almost set up! 🌲',
+        html: `
+          <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 24px;">
+            <div style="margin-bottom: 24px;">
+              <span style="font-weight: 800; font-size: 24px; color: #1a3d2b;">town</span><span style="font-weight: 800; font-size: 24px; color: #e6a020; text-transform: uppercase;">STIR</span>
+            </div>
+            <h1 style="font-size: 22px; color: #1f2937; margin-bottom: 8px;">Welcome to Townstir, ${form.name}!</h1>
+            <p style="color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
+              Thanks for joining Townstir, Mill Valley's community events calendar. We're excited to have your organization on board!
+            </p>
+            <p style="color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 32px;">
+              Your account is being reviewed. Once approved, your events will appear on the Townstir calendar. In the meantime, log in to your dashboard to connect your calendar feed.
+            </p>
+            <a href="https://mill-valley-calendar-cindieframes-projects.vercel.app/org/dashboard" 
+               style="display: inline-block; background: #1a3d2b; color: white; padding: 14px 32px; border-radius: 999px; font-weight: 700; font-size: 15px; text-decoration: none; margin-bottom: 32px;">
+              Go to Dashboard →
+            </a>
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
+            <p style="color: #9ca3af; font-size: 12px;">
+              Questions? Reply to this email and we'll help you get set up.<br>
+              <strong style="color: #1a3d2b;">The Townstir Team</strong> · Mill Valley, CA
+            </p>
+          </div>
+        `
+      })
+    })
     setLoading(false)
     router.push('/org/dashboard')
   }
