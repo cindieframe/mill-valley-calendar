@@ -295,7 +295,7 @@ export default function Home() {
           </div>
         ) : (
           filtered.map(ev => (
-            <div key={ev.id} onClick={() => setSelectedEvent(ev)}
+            <div key={ev.id} onClick={() => router.push(`/event/${ev.id}`)}
               style={{background:'white',borderRadius:'12px',padding:'16px 18px',marginBottom:'10px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)',cursor:'pointer',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'14px',borderLeft:`4px solid ${CAT_COLORS[ev.cats?.[0]]?.bg||'#2d6a4f'}`,transition:'all 0.2s'}}
               onMouseOver={e => (e.currentTarget.style.transform='translateY(-2px)')}
               onMouseOut={e => (e.currentTarget.style.transform='translateY(0)')}>
