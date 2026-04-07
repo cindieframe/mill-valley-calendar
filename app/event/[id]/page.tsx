@@ -36,11 +36,12 @@ const TAG_META: Record<string, {label: string, bg: string, color: string}> = {
   reg:       { label: '🎟️ Reg. Required',    bg: '#fff7ed', color: '#9a3412' },
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }) {
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const { data: ev } = await supabase
     .from('events')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   if (!ev) return { title: 'Event Not Found' }
@@ -68,11 +69,12 @@ export async function generateMetadata({ params }: { params: { id: string } }) {
   }
 }
 
-export default async function EventPage({ params }: { params: { id: string } }) {
+export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const { data: ev } = await supabase
     .from('events')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   if (!ev) notFound()
