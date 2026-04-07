@@ -8,16 +8,11 @@ export default function OrgSignup() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [form, setForm] = useState({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    description: '',
-    website: '',
-    phone: '',
-    instagram: '',
-    facebook: '',
+    name: '', email: '', password: '', confirmPassword: '',
+    description: '', website: '', phone: '', instagram: '', facebook: '',
   })
 
   function set(field: string, value: string) {
@@ -40,36 +35,29 @@ export default function OrgSignup() {
     setLoading(true)
     setError('')
     const { data: authData, error: authError } = await supabase.auth.signUp({
-     
       email: form.email,
       password: form.password,
     })
-     console.log('authData:', JSON.stringify(authData))
+    console.log('authData:', JSON.stringify(authData))
     if (authError || !authData.user) {
       setError(authError?.message || 'Account creation failed. Please try again.')
       setLoading(false)
       return
     }
     await new Promise(resolve => setTimeout(resolve, 500))
-
-const { error: orgError } = await supabase
-  .from('organizations')
-  .insert([{
-    user_id: authData.user?.id,
-        name: form.name,
-        email: form.email,
-        description: form.description,
-        website: form.website,
-        phone: form.phone,
-        instagram: form.instagram,
-        facebook: form.facebook,
+    const { error: orgError } = await supabase
+      .from('organizations')
+      .insert([{
+        user_id: authData.user?.id,
+        name: form.name, email: form.email, description: form.description,
+        website: form.website, phone: form.phone,
+        instagram: form.instagram, facebook: form.facebook,
       }])
-        if (orgError) {
+    if (orgError) {
       setError(orgError.message)
       setLoading(false)
       return
     }
-    // Send welcome email
     await fetch('/api/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -88,7 +76,7 @@ const { error: orgError } = await supabase
             <p style="color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 32px;">
               Your account is being reviewed. Once approved, your events will appear on the Townstir calendar. In the meantime, log in to your dashboard to connect your calendar feed.
             </p>
-            <a href="https://mill-valley-calendar-cindieframes-projects.vercel.app/org/dashboard" 
+            <a href="https://mill-valley-calendar-cindieframes-projects.vercel.app/org/dashboard"
                style="display: inline-block; background: #1a3d2b; color: white; padding: 14px 32px; border-radius: 999px; font-weight: 700; font-size: 15px; text-decoration: none; margin-bottom: 32px;">
               Go to Dashboard →
             </a>
@@ -111,7 +99,6 @@ const { error: orgError } = await supabase
     color: '#1f2937', outline: 'none', background: 'white', marginBottom: '8px',
     boxSizing: 'border-box' as const
   }
-
   const labelStyle = {
     display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151',
     marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px'
@@ -151,13 +138,31 @@ const { error: orgError } = await supabase
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
             <label style={labelStyle}>Password *</label>
-            <input style={inputStyle} type="password" placeholder="Min 8 characters"
-              value={form.password} onChange={e => set('password', e.target.value)} />
+            <div style={{ position: 'relative', marginBottom: '8px' }}>
+              <input style={{ ...inputStyle, marginBottom: 0, paddingRight: '44px' }}
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Min 8 characters"
+                value={form.password}
+                onChange={e => set('password', e.target.value)} />
+              <button onClick={() => setShowPassword(!showPassword)}
+                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#9ca3af', padding: '0' }}>
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
           <div>
             <label style={labelStyle}>Confirm Password *</label>
-            <input style={inputStyle} type="password" placeholder="Repeat password"
-              value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} />
+            <div style={{ position: 'relative', marginBottom: '8px' }}>
+              <input style={{ ...inputStyle, marginBottom: 0, paddingRight: '44px' }}
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="Repeat password"
+                value={form.confirmPassword}
+                onChange={e => set('confirmPassword', e.target.value)} />
+              <button onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#9ca3af', padding: '0' }}>
+                {showConfirmPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
         </div>
         <label style={labelStyle}>Description</label>

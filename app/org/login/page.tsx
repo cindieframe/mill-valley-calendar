@@ -10,6 +10,7 @@ export default function OrgLogin() {
   const [error, setError] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   async function handleLogin() {
     if (!email || !password) {
@@ -18,10 +19,7 @@ export default function OrgLogin() {
     }
     setLoading(true)
     setError('')
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
     if (authError) {
       setError(authError.message)
       setLoading(false)
@@ -37,7 +35,6 @@ export default function OrgLogin() {
     color: '#1f2937', outline: 'none', background: 'white', marginBottom: '8px',
     boxSizing: 'border-box' as const
   }
-
   const labelStyle = {
     display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151',
     marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px'
@@ -72,9 +69,18 @@ export default function OrgLogin() {
         <input style={inputStyle} type="email" placeholder="you@yourorg.org"
           value={email} onChange={e => setEmail(e.target.value)} />
         <label style={labelStyle}>Password</label>
-        <input style={inputStyle} type="password" placeholder="Your password"
-          value={password} onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+        <div style={{ position: 'relative', marginBottom: '8px' }}>
+          <input style={{ ...inputStyle, marginBottom: 0, paddingRight: '44px' }}
+            type={showPassword ? 'text' : 'password'}
+            placeholder="Your password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+          <button onClick={() => setShowPassword(!showPassword)}
+            style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#9ca3af', padding: '0' }}>
+            {showPassword ? '🙈' : '👁️'}
+          </button>
+        </div>
         <button onClick={handleLogin} disabled={loading}
           style={{ width: '100%', background: '#1a3d2b', color: 'white', border: 'none', padding: '14px', borderRadius: '999px', fontSize: '15px', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, marginTop: '8px' }}>
           {loading ? 'Logging in…' : 'Log In →'}
