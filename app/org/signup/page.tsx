@@ -10,6 +10,7 @@ export default function OrgSignup() {
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
   const [form, setForm] = useState({
     name: '', email: '', password: '', confirmPassword: '',
     description: '', website: '', phone: '', instagram: '', facebook: '',
@@ -34,36 +35,36 @@ export default function OrgSignup() {
     }
     setLoading(true)
     setError('')
+
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
+      options: {
+        data: {
+          org_name: form.name,
+          org_email: form.email,
+          org_description: form.description,
+          org_website: form.website,
+          org_phone: form.phone,
+          org_instagram: form.instagram,
+          org_facebook: form.facebook,
+        }
+      }
     })
-    console.log('authData:', JSON.stringify(authData))
+
     if (authError || !authData.user) {
       setError(authError?.message || 'Account creation failed. Please try again.')
       setLoading(false)
       return
     }
-    await new Promise(resolve => setTimeout(resolve, 500))
-    const { error: orgError } = await supabase
-      .from('organizations')
-      .insert([{
-        user_id: authData.user?.id,
-        name: form.name, email: form.email, description: form.description,
-        website: form.website, phone: form.phone,
-        instagram: form.instagram, facebook: form.facebook,
-      }])
-    if (orgError) {
-      setError(orgError.message)
-      setLoading(false)
-      return
-    }
+
+    // Send welcome email
     await fetch('/api/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: form.email,
-        subject: 'Welcome to Townstir — you\'re almost set up! 🌲',
+        subject: 'Welcome to Townstir — please confirm your email 🌲',
         html: `
           <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 24px;">
             <div style="margin-bottom: 24px;">
@@ -71,15 +72,11 @@ export default function OrgSignup() {
             </div>
             <h1 style="font-size: 22px; color: #1f2937; margin-bottom: 8px;">Welcome to Townstir, ${form.name}!</h1>
             <p style="color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
-              Thanks for joining Townstir, Mill Valley's community events calendar. We're excited to have your organization on board!
+              Thanks for joining Townstir, Mill Valley's community events calendar. Please check your email for a confirmation link from Supabase to activate your account.
             </p>
             <p style="color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 32px;">
-              Your account is being reviewed. Once approved, your events will appear on the Townstir calendar. In the meantime, log in to your dashboard to connect your calendar feed.
+              Once confirmed, log in to your dashboard to connect your calendar and start posting events.
             </p>
-            <a href="https://mill-valley-calendar-cindieframes-projects.vercel.app/org/dashboard"
-               style="display: inline-block; background: #1a3d2b; color: white; padding: 14px 32px; border-radius: 999px; font-weight: 700; font-size: 15px; text-decoration: none; margin-bottom: 32px;">
-              Go to Dashboard →
-            </a>
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
             <p style="color: #9ca3af; font-size: 12px;">
               Questions? Reply to this email and we'll help you get set up.<br>
@@ -89,8 +86,9 @@ export default function OrgSignup() {
         `
       })
     })
+
     setLoading(false)
-    router.push('/org/dashboard')
+    setEmailSent(true)
   }
 
   const inputStyle = {
@@ -103,6 +101,34 @@ export default function OrgSignup() {
     display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151',
     marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px'
   }
+
+  if (emailSent) return (
+    <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: 'sans-serif' }}>
+      <header style={{ background: '#1a3d2b', padding: '14px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <span style={{ fontWeight: 800, fontSize: '22px', color: 'white', letterSpacing: '-1px' }}>town</span>
+          <span style={{ fontWeight: 800, fontSize: '22px', color: '#e6a020', letterSpacing: '-1px', textTransform: 'uppercase' }}>STIR</span>
+        </div>
+        <button onClick={() => router.push('/')}
+          style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
+          ← Calendar
+        </button>
+      </header>
+      <div style={{ maxWidth: '480px', margin: '0 auto', padding: '80px 24px', textAlign: 'center' }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>📬</div>
+        <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '26px', fontWeight: 900, color: '#1f2937', marginBottom: '12px' }}>
+          Check your email
+        </h1>
+        <p style={{ color: '#6b7280', fontSize: '15px', lineHeight: 1.6, marginBottom: '24px' }}>
+          We sent a confirmation link to <strong>{form.email}</strong>. Click the link to activate your account, then log in to your dashboard.
+        </p>
+        <button onClick={() => router.push('/org/login')}
+          style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '12px 32px', borderRadius: '999px', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>
+          Go to Login →
+        </button>
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: 'sans-serif' }}>

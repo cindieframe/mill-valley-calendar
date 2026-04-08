@@ -56,11 +56,33 @@ export default function OrgDashboard() {
   async function loadOrg() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/org/login'); return }
-    const { data, error } = await supabase
+
+    let { data, error } = await supabase
       .from('organizations')
       .select('*')
       .eq('user_id', user.id)
       .single()
+
+    if (!data && user.user_metadata?.org_name) {
+      const { data: newOrg, error: insertError } = await supabase
+        .from('organizations')
+        .insert([{
+          user_id: user.id,
+          name: user.user_metadata.org_name,
+          email: user.user_metadata.org_email,
+          description: user.user_metadata.org_description || '',
+          website: user.user_metadata.org_website || '',
+          phone: user.user_metadata.org_phone || '',
+          instagram: user.user_metadata.org_instagram || '',
+          facebook: user.user_metadata.org_facebook || '',
+        }])
+        .select()
+        .single()
+
+      if (insertError || !newOrg) { router.push('/org/login'); return }
+      data = newOrg
+    }
+
     if (error || !data) { router.push('/org/login'); return }
     setOrg(data)
     setLoading(false)
