@@ -57,7 +57,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     openGraph: {
       title: ev.title,
       description: description.slice(0, 160),
-      url: `https://mill-valley-calendar-cindieframes-projects.vercel.app/event/${ev.id}`,
+      url: `https://www.townstir.com/event/${ev.id}`,
       siteName: 'Townstir Mill Valley',
       type: 'website',
     },

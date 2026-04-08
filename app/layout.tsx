@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Mill Valley Townstir — Community Calendar",
     description: "Everything happening in Mill Valley, CA — all in one place.",
-    url: "https://mill-valley-calendar-cindieframes-projects.vercel.app",
+    url: "hhttps://www.townstir.com",
     siteName: "Townstir Mill Valley",
     type: "website",
   },
