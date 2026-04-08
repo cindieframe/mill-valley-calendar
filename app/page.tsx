@@ -71,7 +71,11 @@ export default function Home() {
   const [currentView, setCurrentView] = useState('today')
   const [fromDate, setFromDate] = useState<Date|null>(null)
   const [toDate, setToDate] = useState<Date|null>(null)
-
+useEffect(() => {
+  if (window.location.hash && window.location.hash.includes('access_token')) {
+    router.push('/auth/confirm' + window.location.hash)
+  }
+}, [])
   useEffect(() => {
     async function loadEvents() {
       const data = await getEvents()
