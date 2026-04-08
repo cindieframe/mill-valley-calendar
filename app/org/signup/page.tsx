@@ -58,34 +58,7 @@ export default function OrgSignup() {
       return
     }
 
-    // Send welcome email
-    await fetch('/api/send-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: form.email,
-        subject: 'Welcome to Townstir — please confirm your email 🌲',
-        html: `
-          <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 24px;">
-            <div style="margin-bottom: 24px;">
-              <span style="font-weight: 800; font-size: 24px; color: #1a3d2b;">town</span><span style="font-weight: 800; font-size: 24px; color: #e6a020; text-transform: uppercase;">STIR</span>
-            </div>
-            <h1 style="font-size: 22px; color: #1f2937; margin-bottom: 8px;">Welcome to Townstir, ${form.name}!</h1>
-            <p style="color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
-              Thanks for joining Townstir, Mill Valley's community events calendar. Please check your email for a confirmation link from Supabase to activate your account.
-            </p>
-            <p style="color: #6b7280; font-size: 15px; line-height: 1.6; margin-bottom: 32px;">
-              Once confirmed, log in to your dashboard to connect your calendar and start posting events.
-            </p>
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
-            <p style="color: #9ca3af; font-size: 12px;">
-              Questions? Reply to this email and we'll help you get set up.<br>
-              <strong style="color: #1a3d2b;">The Townstir Team</strong> · Mill Valley, CA
-            </p>
-          </div>
-        `
-      })
-    })
+    
 
     setLoading(false)
     setEmailSent(true)
