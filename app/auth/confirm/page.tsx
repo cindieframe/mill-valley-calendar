@@ -2,28 +2,40 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '../../supabase'
+import { createBrowserClient } from '@supabase/ssr'
 
 export default function AuthConfirm() {
   const router = useRouter()
 
   useEffect(() => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
     async function handleConfirm() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
+      // Get the token from the URL hash
+      const hashParams = new URLSearchParams(window.location.hash.substring(1))
+      const accessToken = hashParams.get('access_token')
+      const refreshToken = hashParams.get('refresh_token')
+
+      if (accessToken && refreshToken) {
+        await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
         router.push('/org/login')
       } else {
-        // Wait for Supabase to process the token from the URL
-        const { data, error } = await supabase.auth.exchangeCodeForSession(
-          window.location.href
-        )
-        if (data.session) {
+        // Check if already has session
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) {
           router.push('/org/login')
         } else {
           router.push('/org/signup')
         }
       }
     }
+
     handleConfirm()
   }, [router])
 
