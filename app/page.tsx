@@ -170,7 +170,7 @@ useEffect(() => {
     { label: `Tomorrow  ${tomorrowLabel}`,   value: 'tomorrow' },
     { label: `This Weekend  ${weekendLabel}`,value: 'weekend' },
     { label: 'All Dates',                    value: 'all' },
-    { label: '📆 Pick a Date',               value: 'pick' },
+   { label: '📆 Custom Dates',              value: 'pick' },
   ]
 
   return (
