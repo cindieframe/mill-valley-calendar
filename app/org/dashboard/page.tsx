@@ -26,9 +26,13 @@ type Event = {
 }
 
 const CATEGORIES = [
-  'Arts & Culture', 'Community', 'Education', 'Environment', 'Family',
-  'Food & Drink', 'Health & Wellness', 'Music', 'Outdoors', 'Sports',
-  'Volunteering', 'Other'
+  { label: 'Outdoors, Sports & Movement', value: 'outdoors' },
+  { label: 'Arts & Performances', value: 'arts' },
+  { label: 'Food, Drink & Social', value: 'food' },
+  { label: 'Volunteer & Community', value: 'community' },
+  { label: 'Family & Youth', value: 'family' },
+  { label: 'Classes & Lectures', value: 'classes' },
+  { label: 'Local Government', value: 'gov' },
 ]
 
 export default function OrgDashboard() {
@@ -493,7 +497,7 @@ export default function OrgDashboard() {
                 <label style={labelStyle}>Category</label>
                 <select style={inputStyle} value={eventForm.category || ''} onChange={e => setEventForm({ ...eventForm, category: e.target.value })}>
                   <option value="">Select category</option>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
             </div>
