@@ -7,6 +7,9 @@ export async function GET(request: NextRequest) {
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}` && querySecret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  // Delete past events automatically
+  const today = new Date().toISOString().split('T')[0]
+  await supabase.from('events').delete().lt('date', today)
   const { data: orgs, error } = await supabase
     .from('organizations')
     .select('name, ical_feed_url')
@@ -31,6 +34,6 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       results.push({ org: org.name, error: 'Failed' })
     }
-  }
+  }c
   return NextResponse.json({ success: true, synced: orgs.length, results })
 }
