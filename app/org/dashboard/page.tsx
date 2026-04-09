@@ -540,8 +540,29 @@ export default function OrgDashboard() {
             <label style={labelStyle}>Online Meeting Link (optional)</label>
             <input style={inputStyle} placeholder="https://zoom.us/..." value={eventForm.meeting_link || ''} onChange={e => setEventForm({ ...eventForm, meeting_link: e.target.value })} />
 
-            <label style={labelStyle}>Tags (comma separated)</label>
-            <input style={inputStyle} placeholder="e.g. family, outdoor, free" value={eventForm.tags || ''} onChange={e => setEventForm({ ...eventForm, tags: e.target.value })} />
+            <label style={labelStyle}>Tags</label>
+<div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+  {[
+    { value: 'free', label: '🟢 Free' },
+    { value: 'family', label: '⭐ Family-Friendly' },
+    { value: 'senior', label: '🌟 50+ Friendly' },
+    { value: 'wellness', label: '🧘 Health & Wellness' },
+    { value: 'reg', label: '🎟️ Reg. Required' },
+  ].map(tag => {
+    const selected = (eventForm.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean).includes(tag.value)
+    return (
+      <button key={tag.value} type="button"
+        onClick={() => {
+          const current = (eventForm.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean)
+          const updated = selected ? current.filter((t: string) => t !== tag.value) : [...current, tag.value]
+          setEventForm({ ...eventForm, tags: updated.join(', ') })
+        }}
+        style={{ padding: '6px 14px', borderRadius: '999px', border: `1.5px solid ${selected ? '#1a3d2b' : '#e5e7eb'}`, background: selected ? '#1a3d2b' : 'white', color: selected ? 'white' : '#374151', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+        {tag.label}
+      </button>
+    )
+  })}
+</div>
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
               <button onClick={() => setShowEventModal(false)}
