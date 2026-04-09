@@ -109,7 +109,7 @@ document.title = `${orgData.name} | Townstir Mill Valley`
         </h2>
         {events.length > 0 ? (
           events.map((ev: any) => (
-            <a href={`/?event=${ev.id}`} key={ev.id} style={{ textDecoration: 'none' }}>
+            <a href={`/event/${ev.id}`} key={ev.id} style={{ textDecoration: 'none' }}>
               <div style={{ background: 'white', borderRadius: '12px', padding: '16px 18px', marginBottom: '10px', border: '1.5px solid #e5e7eb', cursor: 'pointer' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', margin: '0 0 4px 0' }}>{ev.title}</h3>
                 <div style={{ fontSize: '13px', color: '#6b7280' }}>
