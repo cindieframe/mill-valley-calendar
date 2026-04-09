@@ -34,6 +34,6 @@ export async function GET(request: NextRequest) {
     } catch (err) {
       results.push({ org: org.name, error: 'Failed' })
     }
-  }c
+  }
   return NextResponse.json({ success: true, synced: orgs.length, results })
 }
