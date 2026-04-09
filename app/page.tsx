@@ -32,7 +32,7 @@ const TAG_META: Record<string, {label: string, bg: string, color: string, active
   family:    { label: '⭐ Family-Friendly',   bg: '#fef9c3', color: '#854d0e', activeBg: '#b45309' },
   senior:    { label: '🌟 50+ Friendly',      bg: '#ede9fe', color: '#4c1d95', activeBg: '#6d28d9' },
   wellness:  { label: '🧘 Health & Wellness', bg: '#fce7f3', color: '#9d174d', activeBg: '#9d174d' },
-  volunteer: { label: '🙋 Volunteer Opp.',    bg: '#fef9c3', color: '#713f12', activeBg: '#713f12' },
+  
   reg:       { label: '🎟️ Reg. Required',    bg: '#fff7ed', color: '#9a3412', activeBg: '#9a3412' },
 }
 
@@ -102,10 +102,14 @@ useEffect(() => {
     if (currentView==='today' && ev.date !== todayStr) return false
     if (currentView==='tomorrow' && ev.date !== tomorrowStr) return false
     if (currentView==='weekend' && ev.date !== satStr && ev.date !== sunStr) return false
-    if (currentView==='pick' && fromDate && toDate) {
-      const evDate = new Date(ev.date+'T12:00:00')
-      if (evDate < fromDate || evDate > toDate) return false
-    }
+    if (currentView==='pick') {
+  if (!fromDate) return false
+  const evDate = new Date(ev.date+'T12:00:00')
+  const endDate = toDate || fromDate
+  const end = new Date(endDate)
+  end.setHours(23,59,59,999)
+  if (evDate < fromDate || evDate > end) return false
+}
     if (catFilters.length > 0 && !catFilters.some(f => (ev.cats||[]).includes(f))) return false
     if (tagFilters.length > 0 && !tagFilters.every(t => ev.tags?.split(',').map((x:string)=>x.trim()).includes(t))) return false
     if (orgFilter && ev.organization !== orgFilter) return false
