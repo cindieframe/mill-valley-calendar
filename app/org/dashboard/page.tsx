@@ -26,14 +26,25 @@ type Event = {
 }
 
 const CATEGORIES = [
-  { label: 'Outdoors, Sports & Movement', value: 'outdoors' },
-  { label: 'Arts & Performances', value: 'arts' },
-  { label: 'Food, Drink & Social', value: 'food' },
-  { label: 'Volunteer & Community', value: 'community' },
-  { label: 'Family & Youth', value: 'family' },
-  { label: 'Classes & Lectures', value: 'classes' },
-  { label: 'Local Government', value: 'gov' },
+  { label: '🥾 Outdoors, Sports & Movement', value: 'outdoors' },
+  { label: '🎭 Arts & Performances', value: 'arts' },
+  { label: '🍷 Food, Drink & Social', value: 'food' },
+  { label: '🤝 Volunteer & Community', value: 'community' },
+  { label: '👨‍👩‍👧 Family & Youth', value: 'family' },
+  { label: '📚 Classes & Lectures', value: 'classes' },
+  { label: '🏛️ Local Government', value: 'gov' },
 ]
+
+const timeSlots: string[] = []
+for (let h = 0; h < 24; h++) {
+  for (const m of [0, 30]) {
+    const ampm = h >= 12 ? 'PM' : 'AM'
+    const hour = h % 12 || 12
+    const label = `${hour}:${String(m).padStart(2, '0')} ${ampm}`
+    const value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    timeSlots.push(`${value}|${label}`)
+  }
+}
 
 export default function OrgDashboard() {
   const router = useRouter()
@@ -53,20 +64,13 @@ export default function OrgDashboard() {
   const [eventError, setEventError] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
 
-  useEffect(() => {
-    loadOrg()
-  }, [])
+  useEffect(() => { loadOrg() }, [])
 
   async function loadOrg() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/org/login'); return }
-
     let { data, error } = await supabase
-      .from('organizations')
-      .select('*')
-      .eq('user_id', user.id)
-      .single()
-
+      .from('organizations').select('*').eq('user_id', user.id).single()
     if (!data && user.user_metadata?.org_name) {
       const { data: newOrg, error: insertError } = await supabase
         .from('organizations')
@@ -80,13 +84,10 @@ export default function OrgDashboard() {
           instagram: user.user_metadata.org_instagram || '',
           facebook: user.user_metadata.org_facebook || '',
         }])
-        .select()
-        .single()
-
+        .select().single()
       if (insertError || !newOrg) { router.push('/org/login'); return }
       data = newOrg
     }
-
     if (error || !data) { router.push('/org/login'); return }
     setOrg(data)
     setLoading(false)
@@ -96,9 +97,7 @@ export default function OrgDashboard() {
   async function loadEvents(orgName: string) {
     setEventsLoading(true)
     const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .ilike('organization', orgName)
+      .from('events').select('*').ilike('organization', orgName)
       .order('date', { ascending: true })
     if (!error && data) setEvents(data)
     setEventsLoading(false)
@@ -127,12 +126,8 @@ export default function OrgDashboard() {
 
   async function handleDeleteEvent(id: number) {
     const { error } = await supabase.from('events').delete().eq('id', id)
-    if (error) {
-      setError('Failed to delete event: ' + error.message)
-    } else {
-      setEvents(events.filter(e => e.id !== id))
-      setDeleteConfirmId(null)
-    }
+    if (error) { setError('Failed to delete event: ' + error.message) }
+    else { setEvents(events.filter(e => e.id !== id)); setDeleteConfirmId(null) }
   }
 
   async function handleSaveEvent() {
@@ -142,8 +137,7 @@ export default function OrgDashboard() {
     setEventError('')
 
     const { data: existing } = await supabase
-      .from('events')
-      .select('id')
+      .from('events').select('id')
       .ilike('organization', org.name)
       .ilike('title', eventForm.title.trim())
       .eq('date', eventForm.date)
@@ -156,11 +150,20 @@ export default function OrgDashboard() {
       return
     }
 
+    // Format time for display
+    const formatTime = (val: string) => {
+      if (!val) return ''
+      const [h, m] = val.split(':').map(Number)
+      const ampm = h >= 12 ? 'PM' : 'AM'
+      const hour = h % 12 || 12
+      return `${hour}:${String(m).padStart(2, '0')} ${ampm}`
+    }
+
     const payload = {
       title: eventForm.title,
       date: eventForm.date,
-      time: eventForm.time || '',
-      end_time: eventForm.end_time || '',
+      time: formatTime(eventForm.time || ''),
+      end_time: formatTime(eventForm.end_time || ''),
       location: eventForm.location || '',
       address: eventForm.address || '',
       organization: org.name,
@@ -217,14 +220,11 @@ export default function OrgDashboard() {
     setSaving(true)
     setError('')
     setSuccess('')
-    const { error } = await supabase
-      .from('organizations')
-      .update({
-        name: org.name, description: org.description, website: org.website,
-        phone: org.phone, email: org.email, instagram: org.instagram,
-        facebook: org.facebook, ical_feed_url: org.ical_feed_url,
-      })
-      .eq('id', org.id)
+    const { error } = await supabase.from('organizations').update({
+      name: org.name, description: org.description, website: org.website,
+      phone: org.phone, email: org.email, instagram: org.instagram,
+      facebook: org.facebook, ical_feed_url: org.ical_feed_url,
+    }).eq('id', org.id)
     if (error) { setError(error.message); setSaving(false); return }
     if (org.ical_feed_url) {
       try {
@@ -239,12 +239,8 @@ export default function OrgDashboard() {
         } else {
           setSuccess(`Profile saved! ${importData.imported} new events imported, ${importData.skipped} already existed.`)
         }
-      } catch {
-        setSuccess('Profile saved! Calendar sync will retry shortly.')
-      }
-    } else {
-      setSuccess('Profile saved successfully!')
-    }
+      } catch { setSuccess('Profile saved! Calendar sync will retry shortly.') }
+    } else { setSuccess('Profile saved successfully!') }
     setSaving(false)
     setTimeout(() => setSuccess(''), 5000)
   }
@@ -268,7 +264,7 @@ export default function OrgDashboard() {
   function statusBadge(status: string) {
     const styles: Record<string, { bg: string; color: string; label: string }> = {
       approved: { bg: '#f0fdf4', color: '#16803c', label: 'Approved' },
-      pending:  { bg: '#fffbeb', color: '#b45309', label: 'Pending' },
+      pending: { bg: '#fffbeb', color: '#b45309', label: 'Pending' },
       rejected: { bg: '#fee2e2', color: '#dc2626', label: 'Rejected' },
     }
     const s = styles[status] || styles.pending
@@ -409,7 +405,7 @@ export default function OrgDashboard() {
           </div>
         </div>
 
-        {/* Organization Profile + Logo */}
+        {/* Organization Profile */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '24px', marginBottom: '24px', border: '1.5px solid #e5e7eb' }}>
           <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '16px' }}>Organization Profile</h2>
           <label style={labelStyle}>Organization Name</label>
@@ -438,7 +434,7 @@ export default function OrgDashboard() {
             </div>
           </div>
 
-          {/* Logo — inside profile, above save */}
+          {/* Logo */}
           <div style={{ borderTop: '1px solid #f3f4f6', marginTop: '20px', paddingTop: '20px' }}>
             <label style={labelStyle}>Organization Logo <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#9ca3af' }}>(optional)</span></label>
             <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>PNG or JPG, under 2MB. Appears on your events and profile.</p>
@@ -488,29 +484,46 @@ export default function OrgDashboard() {
             <label style={labelStyle}>Title *</label>
             <input style={inputStyle} value={eventForm.title || ''} onChange={e => setEventForm({ ...eventForm, title: e.target.value })} />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={labelStyle}>Date *</label>
-                <input type="date" style={inputStyle} value={eventForm.date || ''} onChange={e => setEventForm({ ...eventForm, date: e.target.value })} />
-              </div>
-              <div>
-                <label style={labelStyle}>Category</label>
-                <select style={inputStyle} value={eventForm.category || ''} onChange={e => setEventForm({ ...eventForm, category: e.target.value })}>
-                  <option value="">Select category</option>
-                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                </select>
-              </div>
-            </div>
+            <label style={labelStyle}>Date *</label>
+            <input type="date" style={inputStyle} value={eventForm.date || ''} onChange={e => setEventForm({ ...eventForm, date: e.target.value })} />
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={labelStyle}>Start Time</label>
-                <input type="time" style={inputStyle} value={eventForm.time || ''} onChange={e => setEventForm({ ...eventForm, time: e.target.value })} />
+                <select style={inputStyle} value={eventForm.time || ''} onChange={e => setEventForm({ ...eventForm, time: e.target.value })}>
+                  <option value=''>Select time…</option>
+                  {timeSlots.map(slot => {
+                    const [value, label] = slot.split('|')
+                    return <option key={value} value={value}>{label}</option>
+                  })}
+                </select>
               </div>
               <div>
                 <label style={labelStyle}>End Time</label>
-                <input type="time" style={inputStyle} value={eventForm.end_time || ''} onChange={e => setEventForm({ ...eventForm, end_time: e.target.value })} />
+                <select style={inputStyle} value={eventForm.end_time || ''} onChange={e => setEventForm({ ...eventForm, end_time: e.target.value })}>
+                  <option value=''>No end time…</option>
+                  {timeSlots.map(slot => {
+                    const [value, label] = slot.split('|')
+                    return <option key={value} value={value}>{label}</option>
+                  })}
+                </select>
               </div>
+            </div>
+
+            <label style={labelStyle}>Category *</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+              {CATEGORIES.map(cat => {
+                const isActive = (eventForm.category || '') === cat.value
+                return (
+                  <label key={cat.value}
+                    style={{ display: 'block', padding: '10px 14px', borderRadius: '8px', border: `1.5px solid ${isActive ? '#1a3d2b' : '#e5e7eb'}`, background: isActive ? '#f0fdf4' : 'white', cursor: 'pointer' }}>
+                    <input type="radio" checked={isActive}
+                      onChange={() => setEventForm({ ...eventForm, category: cat.value })}
+                      style={{ display: 'none' }} />
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: isActive ? '#1a3d2b' : '#1f2937' }}>{cat.label}</div>
+                  </label>
+                )
+              })}
             </div>
 
             <label style={labelStyle}>Location / Venue Name</label>
@@ -541,28 +554,28 @@ export default function OrgDashboard() {
             <input style={inputStyle} placeholder="https://zoom.us/..." value={eventForm.meeting_link || ''} onChange={e => setEventForm({ ...eventForm, meeting_link: e.target.value })} />
 
             <label style={labelStyle}>Tags</label>
-<div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-  {[
-    { value: 'free', label: '🟢 Free' },
-    { value: 'family', label: '⭐ Family-Friendly' },
-    { value: 'senior', label: '🌟 50+ Friendly' },
-    { value: 'wellness', label: '🧘 Health & Wellness' },
-    { value: 'reg', label: '🎟️ Reg. Required' },
-  ].map(tag => {
-    const selected = (eventForm.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean).includes(tag.value)
-    return (
-      <button key={tag.value} type="button"
-        onClick={() => {
-          const current = (eventForm.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean)
-          const updated = selected ? current.filter((t: string) => t !== tag.value) : [...current, tag.value]
-          setEventForm({ ...eventForm, tags: updated.join(', ') })
-        }}
-        style={{ padding: '6px 14px', borderRadius: '999px', border: `1.5px solid ${selected ? '#1a3d2b' : '#e5e7eb'}`, background: selected ? '#1a3d2b' : 'white', color: selected ? 'white' : '#374151', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
-        {tag.label}
-      </button>
-    )
-  })}
-</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+              {[
+                { value: 'free', label: '🟢 Free' },
+                { value: 'family', label: '⭐ Family-Friendly' },
+                { value: 'senior', label: '🌟 50+ Friendly' },
+                { value: 'wellness', label: '🧘 Health & Wellness' },
+                { value: 'reg', label: '🎟️ Reg. Required' },
+              ].map(tag => {
+                const selected = (eventForm.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean).includes(tag.value)
+                return (
+                  <button key={tag.value} type="button"
+                    onClick={() => {
+                      const current = (eventForm.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean)
+                      const updated = selected ? current.filter((t: string) => t !== tag.value) : [...current, tag.value]
+                      setEventForm({ ...eventForm, tags: updated.join(', ') })
+                    }}
+                    style={{ padding: '6px 14px', borderRadius: '999px', border: `1.5px solid ${selected ? '#1a3d2b' : '#e5e7eb'}`, background: selected ? '#1a3d2b' : 'white', color: selected ? 'white' : '#374151', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                    {tag.label}
+                  </button>
+                )
+              })}
+            </div>
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
               <button onClick={() => setShowEventModal(false)}
