@@ -23,6 +23,8 @@ type Event = {
   meeting_link: string
   status: string
   verified: boolean
+  unpublished_note?: string
+  rejected_note?: string
 }
 
 const CATEGORIES = [
@@ -150,7 +152,6 @@ export default function OrgDashboard() {
       return
     }
 
-    // Format time for display
     const formatTime = (val: string) => {
       if (!val) return ''
       const [h, m] = val.split(':').map(Number)
@@ -266,6 +267,7 @@ export default function OrgDashboard() {
       approved: { bg: '#f0fdf4', color: '#16803c', label: 'Approved' },
       pending: { bg: '#fffbeb', color: '#b45309', label: 'Pending' },
       rejected: { bg: '#fee2e2', color: '#dc2626', label: 'Rejected' },
+      unpublished: { bg: '#f3f4f6', color: '#6b7280', label: 'Unpublished' },
     }
     const s = styles[status] || styles.pending
     return (
@@ -349,9 +351,19 @@ export default function OrgDashboard() {
                 <div key={event.id} style={{ padding: '16px 24px', borderBottom: i < events.length - 1 ? '1px solid #f3f4f6' : 'none', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 600, fontSize: '14px', color: '#1f2937' }}>{event.title}</span>
-                      {statusBadge(event.status)}
-                    </div>
+  <span style={{ fontWeight: 600, fontSize: '14px', color: '#1f2937' }}>{event.title}</span>
+  {statusBadge(event.status)}
+</div>
+{event.status === 'unpublished' && event.unpublished_note && (
+  <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px', background: '#f3f4f6', borderRadius: '6px', padding: '6px 10px' }}>
+    💬 <em>Admin note: {event.unpublished_note}</em>
+  </div>
+)}
+{event.status === 'rejected' && event.rejected_note && (
+  <div style={{ fontSize: '12px', color: '#dc2626', marginTop: '4px', background: '#fee2e2', borderRadius: '6px', padding: '6px 10px' }}>
+    💬 <em>Admin note: {event.rejected_note}</em>
+  </div>
+)}
                     <div style={{ fontSize: '12px', color: '#6b7280' }}>
                       {event.date}{event.time ? ` · ${event.time}` : ''}{event.location ? ` · ${event.location}` : ''}
                     </div>
@@ -360,10 +372,12 @@ export default function OrgDashboard() {
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                    <button onClick={() => openEditEvent(event)}
-                      style={{ background: '#f3f4f6', color: '#374151', border: 'none', padding: '5px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
-                      Edit
-                    </button>
+                    {event.status !== 'unpublished' && (
+                      <button onClick={() => openEditEvent(event)}
+                        style={{ background: '#f3f4f6', color: '#374151', border: 'none', padding: '5px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                        Edit
+                      </button>
+                    )}
                     <button onClick={() => openDuplicateEvent(event)}
                       style={{ background: '#f3f4f6', color: '#374151', border: 'none', padding: '5px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
                       Copy
@@ -558,7 +572,6 @@ export default function OrgDashboard() {
               {[
                 { value: 'free', label: '🟢 Free' },
                 { value: 'family', label: '⭐ Family-Friendly' },
-                
                 { value: 'wellness', label: '🧘 Health & Wellness' },
                 { value: 'reg', label: '🎟️ Reg. Required' },
               ].map(tag => {

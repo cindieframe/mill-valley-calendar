@@ -23,27 +23,21 @@ export default function Admin() {
   const [showPassword, setShowPassword] = useState(false)
   const [loginError, setLoginError] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
+  const [noteModal, setNoteModal] = useState<{ eventId: number, action: 'unpublished' | 'rejected' } | null>(null)
+  const [noteText, setNoteText] = useState('')
 
-  useEffect(() => {
-    checkSession()
-  }, [])
+  useEffect(() => { checkSession() }, [])
 
   async function checkSession() {
     const { data: { session } } = await supabase.auth.getSession()
-    if (session?.user?.email === ADMIN_EMAIL) {
-      setAuthed(true)
-    }
+    if (session?.user?.email === ADMIN_EMAIL) setAuthed(true)
     setAuthLoading(false)
   }
 
   useEffect(() => {
     if (!authed) return
-    if (filter === 'organizations') {
-      loadOrgs()
-    } else {
-      loadEvents()
-      setSelected(new Set())
-    }
+    if (filter === 'organizations') loadOrgs()
+    else { loadEvents(); setSelected(new Set()) }
   }, [filter, authed])
 
   async function handleLogin() {
@@ -51,17 +45,8 @@ export default function Admin() {
     setLoginLoading(true)
     setLoginError('')
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error || !data.user) {
-      setLoginError('Invalid email or password.')
-      setLoginLoading(false)
-      return
-    }
-    if (data.user.email !== ADMIN_EMAIL) {
-      await supabase.auth.signOut()
-      setLoginError('You do not have admin access.')
-      setLoginLoading(false)
-      return
-    }
+    if (error || !data.user) { setLoginError('Invalid email or password.'); setLoginLoading(false); return }
+    if (data.user.email !== ADMIN_EMAIL) { await supabase.auth.signOut(); setLoginError('You do not have admin access.'); setLoginLoading(false); return }
     setAuthed(true)
     setLoginLoading(false)
   }
@@ -75,41 +60,46 @@ export default function Admin() {
 
   async function loadEvents() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .eq('status', filter)
-      .order('date', { ascending: true })
-      .order('time', { ascending: true })
+    const { data, error } = await supabase.from('events').select('*').eq('status', filter)
+      .order('date', { ascending: true }).order('time', { ascending: true })
     if (!error) setEvents(data || [])
     setLoading(false)
   }
 
   async function loadOrgs() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('organizations')
-      .select('*')
-      .order('name', { ascending: true })
+    const { data, error } = await supabase.from('organizations').select('*').order('name', { ascending: true })
     if (!error) setOrgs(data || [])
     setLoading(false)
   }
 
   async function toggleVerify(org: any) {
     const newVerified = !org.verified
-    const { error } = await supabase
-      .from('organizations')
-      .update({ verified: newVerified })
-      .eq('id', org.id)
+    const { error } = await supabase.from('organizations').update({ verified: newVerified }).eq('id', org.id)
     if (!error) {
       await supabase.from('events').update({ verified: newVerified }).eq('organization', org.name)
       setOrgs(prev => prev.map(o => o.id === org.id ? { ...o, verified: newVerified } : o))
     }
   }
 
-  async function updateStatus(id: number, status: string) {
-    const { error } = await supabase.from('events').update({ status }).eq('id', id)
+  async function updateStatus(id: number, status: string, note?: string) {
+    const updatePayload: any = { status }
+    if (status === 'unpublished') updatePayload.unpublished_note = note || null
+    if (status === 'rejected') updatePayload.rejected_note = note || null
+    const { error } = await supabase.from('events').update(updatePayload).eq('id', id)
     if (!error) setEvents(prev => prev.filter(ev => ev.id !== id))
+  }
+
+  async function handleNoteConfirm() {
+    if (!noteModal) return
+    await updateStatus(noteModal.eventId, noteModal.action, noteText)
+    setNoteModal(null)
+    setNoteText('')
+  }
+
+  function openNoteModal(eventId: number, action: 'unpublished' | 'rejected') {
+    setNoteText('')
+    setNoteModal({ eventId, action })
   }
 
   async function deleteEvent(id: number) {
@@ -127,11 +117,8 @@ export default function Admin() {
   }
 
   function toggleSelectAll() {
-    if (selected.size === events.length) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(events.map(ev => ev.id)))
-    }
+    if (selected.size === events.length) setSelected(new Set())
+    else setSelected(new Set(events.map(ev => ev.id)))
   }
 
   async function bulkApprove() {
@@ -149,7 +136,7 @@ export default function Admin() {
     if (!confirm(`Reject ${selected.size} events?`)) return
     setBulkWorking(true)
     const ids = Array.from(selected)
-    const { error } = await supabase.from('events').update({ status: 'rejected' }).in('id', ids)
+    const { error } = await supabase.from('events').update({ status: 'rejected', rejected_note: null }).in('id', ids)
     if (!error) { setEvents(prev => prev.filter(ev => !selected.has(ev.id))); setSelected(new Set()) }
     setBulkWorking(false)
   }
@@ -269,14 +256,12 @@ export default function Admin() {
           </div>
         )}
         <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Email</label>
-        <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-          placeholder="admin@townstir.com"
+        <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@townstir.com"
           style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 14px', fontSize: '14px', outline: 'none', marginBottom: '12px', boxSizing: 'border-box' as const }} />
         <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Password</label>
         <div style={{ position: 'relative', marginBottom: '16px' }}>
           <input type={showPassword ? 'text' : 'password'} value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleLogin()}
+            onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()}
             placeholder="Password"
             style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 44px 10px 14px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' as const }} />
           <button onClick={() => setShowPassword(!showPassword)}
@@ -294,6 +279,37 @@ export default function Admin() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: 'sans-serif' }}>
+
+      {/* Note Modal */}
+      {noteModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '440px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '6px' }}>
+              {noteModal.action === 'unpublished' ? '✕ Unpublish Event' : '✕ Reject Event'}
+            </h3>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
+              Optionally add a note for the org explaining why. They will see this in their dashboard.
+            </p>
+            <textarea
+              placeholder="e.g. Please update the event date and resubmit."
+              value={noteText}
+              onChange={e => setNoteText(e.target.value)}
+              style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', fontFamily: 'sans-serif', outline: 'none', minHeight: '90px', resize: 'vertical', boxSizing: 'border-box' as const, marginBottom: '16px' }}
+            />
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => { setNoteModal(null); setNoteText('') }}
+                style={{ flex: 1, background: '#f3f4f6', color: '#374151', border: 'none', padding: '11px', borderRadius: '999px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={handleNoteConfirm}
+                style={{ flex: 2, background: noteModal.action === 'unpublished' ? '#6b7280' : '#dc2626', color: 'white', border: 'none', padding: '11px', borderRadius: '999px', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>
+                {noteModal.action === 'unpublished' ? 'Confirm Unpublish' : 'Confirm Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header style={{ background: '#1a3d2b', padding: '14px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <span style={{ fontWeight: 800, fontSize: '22px', color: 'white', letterSpacing: '-1px' }}>town</span>
@@ -320,8 +336,8 @@ export default function Admin() {
         <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '28px', fontWeight: 900, color: '#1f2937', marginBottom: '6px' }}>Admin</h1>
         <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '24px' }}>Manage events and organizations.</p>
 
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
-          {['pending', 'approved', 'rejected', 'organizations'].map(s => (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
+          {['pending', 'approved', 'unpublished', 'rejected', 'organizations'].map(s => (
             <button key={s} onClick={() => setFilter(s)}
               style={{ padding: '8px 20px', borderRadius: '999px', border: '1.5px solid', borderColor: filter === s ? '#1a3d2b' : '#e5e7eb', background: filter === s ? '#1a3d2b' : 'white', color: filter === s ? 'white' : '#6b7280', fontWeight: 600, fontSize: '13px', cursor: 'pointer', textTransform: 'capitalize' }}>
               {s}
@@ -427,25 +443,39 @@ export default function Admin() {
                         style={{ background: '#16803c', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
                         ✓ Approve
                       </button>
-                      <button onClick={() => updateStatus(ev.id, 'rejected')}
+                      <button onClick={() => openNoteModal(ev.id, 'rejected')}
                         style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
                         ✕ Reject
                       </button>
                     </>}
-                    {filter === 'rejected' && <>
-                      <button onClick={() => updateStatus(ev.id, 'approved')}
-                        style={{ background: '#16803c', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
-                        ✓ Approve anyway
+                    {filter === 'approved' && <>
+                      <button onClick={() => openNoteModal(ev.id, 'unpublished')}
+                        style={{ background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
+                        ✕ Unpublish
                       </button>
                       <button onClick={() => deleteEvent(ev.id)}
                         style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
                         🗑 Delete permanently
                       </button>
                     </>}
-                    {filter === 'approved' && <>
-                      <button onClick={() => updateStatus(ev.id, 'rejected')}
-                        style={{ background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
-                        ✕ Unpublish
+                    {filter === 'unpublished' && <>
+                      <button onClick={() => updateStatus(ev.id, 'approved')}
+                        style={{ background: '#16803c', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
+                        ✓ Re-publish
+                      </button>
+                      <button onClick={() => openNoteModal(ev.id, 'rejected')}
+                        style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
+                        ✕ Reject
+                      </button>
+                      <button onClick={() => deleteEvent(ev.id)}
+                        style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
+                        🗑 Delete permanently
+                      </button>
+                    </>}
+                    {filter === 'rejected' && <>
+                      <button onClick={() => updateStatus(ev.id, 'approved')}
+                        style={{ background: '#16803c', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
+                        ✓ Approve anyway
                       </button>
                       <button onClick={() => deleteEvent(ev.id)}
                         style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
