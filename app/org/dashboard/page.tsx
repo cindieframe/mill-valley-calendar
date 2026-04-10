@@ -558,7 +558,7 @@ export default function OrgDashboard() {
               {[
                 { value: 'free', label: '🟢 Free' },
                 { value: 'family', label: '⭐ Family-Friendly' },
-                { value: 'senior', label: '🌟 50+ Friendly' },
+                
                 { value: 'wellness', label: '🧘 Health & Wellness' },
                 { value: 'reg', label: '🎟️ Reg. Required' },
               ].map(tag => {

@@ -30,7 +30,7 @@ const CAT_COLORS: Record<string, {bg: string, border: string}> = {
 const TAG_META: Record<string, {label: string, bg: string, color: string, activeBg: string}> = {
   free:      { label: '🟢 Free',             bg: '#dcfce7', color: '#166534', activeBg: '#16a34a' },
   family:    { label: '⭐ Family-Friendly',   bg: '#fef9c3', color: '#854d0e', activeBg: '#b45309' },
-  senior:    { label: '🌟 50+ Friendly',      bg: '#ede9fe', color: '#4c1d95', activeBg: '#6d28d9' },
+  
   wellness:  { label: '🧘 Health & Wellness', bg: '#fce7f3', color: '#9d174d', activeBg: '#9d174d' },
   
   reg:       { label: '🎟️ Reg. Required',    bg: '#fff7ed', color: '#9a3412', activeBg: '#9a3412' },

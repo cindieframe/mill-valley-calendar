@@ -95,7 +95,7 @@ export default function PostEvent() {
   const tags = [
     { value: 'free',      label: '🟢 Free' },
     { value: 'family',    label: '⭐ Family-Friendly' },
-    { value: 'senior',    label: '🌟 50+ Friendly' },
+    
     { value: 'wellness',  label: '🧘 Health & Wellness' },
     
     { value: 'reg',       label: '🎟️ Registration Required' },
