@@ -97,7 +97,7 @@ export default function PostEvent() {
     { value: 'family',    label: '⭐ Family-Friendly' },
     { value: 'senior',    label: '🌟 50+ Friendly' },
     { value: 'wellness',  label: '🧘 Health & Wellness' },
-    { value: 'volunteer', label: '🙋 Volunteer Opportunity' },
+    
     { value: 'reg',       label: '🎟️ Registration Required' },
   ]
 
