@@ -430,8 +430,18 @@ export default function Admin() {
                     <div style={{ fontSize: '11px', color: '#9ca3af', flexShrink: 0, marginLeft: '12px' }}>#{ev.id}</div>
                   </div>
                   <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, marginBottom: '16px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
-                    {ev.description}
-                  </p>
+  {ev.description}
+</p>
+{ev.unpublished_note && (
+  <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px', background: '#f3f4f6', borderRadius: '6px', padding: '8px 12px' }}>
+    💬 <em>Admin note: {ev.unpublished_note}</em>
+  </div>
+)}
+{ev.rejected_note && (
+  <div style={{ fontSize: '12px', color: '#dc2626', marginBottom: '12px', background: '#fee2e2', borderRadius: '6px', padding: '8px 12px' }}>
+    💬 <em>Admin note: {ev.rejected_note}</em>
+  </div>
+)}
                   <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '16px' }}>
                     {ev.email && <span>📧 {ev.email}&nbsp;&nbsp;</span>}
                     {ev.website && <span>🌐 {ev.website}&nbsp;&nbsp;</span>}
