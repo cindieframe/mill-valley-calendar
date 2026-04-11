@@ -84,15 +84,19 @@ useEffect(() => {
     }
     loadEvents()
     async function loadOrgList() {
-      const { data } = await supabase
-        .from('events')
-        .select('organization')
-        .eq('status', 'approved')
-      if (data) {
-        const unique = [...new Set(data.map((e: any) => e.organization).filter(Boolean))].sort() as string[]
-        setOrgList(unique)
-      }
-    }
+  const { data } = await supabase
+    .from('events')
+    .select('organization')
+    .eq('status', 'approved')
+  if (data) {
+    const counts: Record<string, number> = {}
+    data.forEach((e: any) => {
+      if (e.organization) counts[e.organization] = (counts[e.organization] || 0) + 1
+    })
+    const unique = Object.keys(counts).filter(org => counts[org] >= 2).sort()
+    setOrgList(unique)
+  }
+}
     loadOrgList()
   }, [])
 
