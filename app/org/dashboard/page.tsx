@@ -28,13 +28,13 @@ type Event = {
 }
 
 const CATEGORIES = [
-  { label: '🥾 Outdoors, Sports & Movement', value: 'outdoors' },
-  { label: '🎭 Arts & Performances', value: 'arts' },
-  { label: '🍷 Food, Drink & Social', value: 'food' },
-  { label: '🤝 Volunteer & Community', value: 'community' },
-  { label: '👨‍👩‍👧 Family & Youth', value: 'family' },
-  { label: '📚 Classes & Lectures', value: 'classes' },
-  { label: '🏛️ Local Government', value: 'gov' },
+  { label: '🥾 Outdoors, Sports & Movement', value: 'outdoors', ex: 'Hikes, yoga, leagues, races, running clubs, martial arts' },
+  { label: '🎭 Arts & Performances', value: 'arts', ex: 'Concerts, film screenings, theater, open studios, open mic' },
+  { label: '🍷 Food, Drink & Social', value: 'food', ex: 'Farmers markets, potlucks, mixers, wine tastings, trivia' },
+  { label: '🤝 Volunteer & Community', value: 'community', ex: 'Trail cleanups, food bank, habitat restoration, protests' },
+  { label: '👨‍👩‍👧 Family & Youth', value: 'family', ex: 'Storytime, kids workshops, school events, family activities' },
+  { label: '📚 Classes & Lectures', value: 'classes', ex: 'Cooking, photography, pickleball lessons, lectures, demos' },
+  { label: '🏛️ Local Government', value: 'gov', ex: 'City council, planning commission, town halls, hearings' },
 ]
 
 const timeSlots: string[] = []
@@ -524,20 +524,25 @@ export default function OrgDashboard() {
               </div>
             </div>
 
-            <label style={labelStyle}>Category *</label>
+            <label style={labelStyle}>Category * <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#9ca3af' }}>(choose all that apply)</span></label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
               {CATEGORIES.map(cat => {
-                const isActive = (eventForm.category || '') === cat.value
-                return (
-                  <label key={cat.value}
-                    style={{ display: 'block', padding: '10px 14px', borderRadius: '8px', border: `1.5px solid ${isActive ? '#1a3d2b' : '#e5e7eb'}`, background: isActive ? '#f0fdf4' : 'white', cursor: 'pointer' }}>
-                    <input type="radio" checked={isActive}
-                      onChange={() => setEventForm({ ...eventForm, category: cat.value })}
-                      style={{ display: 'none' }} />
-                    <div style={{ fontSize: '13px', fontWeight: 700, color: isActive ? '#1a3d2b' : '#1f2937' }}>{cat.label}</div>
-                  </label>
-                )
-              })}
+  const isActive = (eventForm.category || '').split(',').map((c: string) => c.trim()).includes(cat.value)
+  return (
+    <label key={cat.value}
+      style={{ display: 'block', padding: '11px 14px', borderRadius: '8px', border: `1.5px solid ${isActive ? '#1a3d2b' : '#e5e7eb'}`, background: isActive ? '#f0fdf4' : 'white', cursor: 'pointer', transition: 'all 0.18s' }}>
+      <input type="checkbox" checked={isActive}
+        onChange={() => {
+          const current = (eventForm.category || '').split(',').map((c: string) => c.trim()).filter(Boolean)
+          const updated = isActive ? current.filter((c: string) => c !== cat.value) : [...current, cat.value]
+          setEventForm({ ...eventForm, category: updated.join(',') })
+        }}
+        style={{ display: 'none' }} />
+      <div style={{ fontSize: '13px', fontWeight: 700, color: isActive ? '#1a3d2b' : '#1f2937', marginBottom: '2px' }}>{cat.label}</div>
+      <div style={{ fontSize: '11px', color: isActive ? '#16a34a' : '#9ca3af' }}>{cat.ex}</div>
+    </label>
+  )
+})}
             </div>
 
             <label style={labelStyle}>Location / Venue Name</label>

@@ -25,6 +25,9 @@ export default function Admin() {
   const [loginLoading, setLoginLoading] = useState(false)
   const [noteModal, setNoteModal] = useState<{ eventId: number, action: 'unpublished' | 'rejected' } | null>(null)
   const [noteText, setNoteText] = useState('')
+  const [filterOrg, setFilterOrg] = useState('')
+const [filterCategory, setFilterCategory] = useState('')
+const [filterDate, setFilterDate] = useState('')
 
   useEffect(() => { checkSession() }, [])
 
@@ -344,7 +347,40 @@ export default function Admin() {
             </button>
           ))}
         </div>
-
+{filter !== 'organizations' && (
+  <div style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '12px', padding: '12px 20px', marginBottom: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+    <input
+      type="date"
+      value={filterDate}
+      onChange={e => setFilterDate(e.target.value)}
+      style={{ border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '6px 12px', fontSize: '13px', outline: 'none', color: '#374151' }}
+    />
+    <select value={filterOrg} onChange={e => setFilterOrg(e.target.value)}
+  style={{ border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '6px 12px', fontSize: '13px', outline: 'none', color: '#374151', background: 'white' }}>
+  <option value=''>All Orgs</option>
+  {[...new Set(events.map(ev => ev.organization).filter(Boolean))].sort().map(org => (
+    <option key={org} value={org}>{org}</option>
+  ))}
+</select>
+<select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
+  style={{ border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '6px 12px', fontSize: '13px', outline: 'none', color: '#374151', background: 'white' }}>
+  <option value=''>All Categories</option>
+  <option value='outdoors'>🥾 Outdoors, Sports & Movement</option>
+  <option value='arts'>🎭 Arts & Performances</option>
+  <option value='food'>🍷 Food, Drink & Social</option>
+  <option value='community'>🤝 Volunteer & Community</option>
+  <option value='family'>👨‍👩‍👧 Family & Youth</option>
+  <option value='classes'>📚 Classes & Lectures</option>
+  <option value='gov'>🏛️ Local Government</option>
+</select>
+    {(filterOrg || filterCategory || filterDate) && (
+      <button onClick={() => { setFilterOrg(''); setFilterCategory(''); setFilterDate('') }}
+        style={{ background: '#f3f4f6', color: '#6b7280', border: 'none', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+        ✕ Clear filters
+      </button>
+    )}
+  </div>
+)}
         {filter === 'organizations' && (
           <>
             {loading ? (
@@ -410,7 +446,12 @@ export default function Admin() {
                 <p>No {filter} events.</p>
               </div>
             ) : (
-              events.map(ev => (
+              events.filter(ev => {
+  if (filterDate && ev.date !== filterDate) return false
+  if (filterOrg && !ev.organization?.toLowerCase().includes(filterOrg.toLowerCase())) return false
+  if (filterCategory && !ev.category?.split(',').map((c: string) => c.trim()).includes(filterCategory)) return false
+  return true
+}).map(ev => (
                 <div key={ev.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${selected.has(ev.id) ? '#1a3d2b' : '#e5e7eb'}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                     {filter === 'pending' && (
