@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
+import ReCAPTCHA from 'react-google-recaptcha'
 
 export default function PostEvent() {
+  const recaptchaRef = useRef<any>(null)
   const router = useRouter()
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -42,7 +44,6 @@ export default function PostEvent() {
         : [...prev[field], value]
     }))
 
-  // Format time value for display e.g. "14:30" → "2:30 PM"
   const formatTime = (val: string) => {
     if (!val) return ''
     const [h, m] = val.split(':').map(Number)
@@ -54,6 +55,21 @@ export default function PostEvent() {
   const handleSubmit = async () => {
     if (!form.title || !form.date || !form.time || !form.location || !form.organization || !form.description || form.category.length === 0) {
       alert('Please fill in all required fields and select at least one category.')
+      return
+    }
+    const recaptchaToken = recaptchaRef.current?.getValue()
+    if (!recaptchaToken) {
+      alert('Please complete the reCAPTCHA verification.')
+      return
+    }
+    const verifyRes = await fetch('/api/verify-recaptcha', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: recaptchaToken }),
+    })
+    if (!verifyRes.ok) {
+      alert('reCAPTCHA verification failed. Please try again.')
+      recaptchaRef.current?.reset()
       return
     }
     setSubmitting(true)
@@ -78,37 +94,39 @@ export default function PostEvent() {
       alert('Something went wrong. Please try again.')
       console.error(error)
     } else {
+      await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: 'admin@townstir.com',
+          subject: `New event submitted: ${form.title}`,
+          html: `
+            <p>A new event has been submitted for review.</p>
+            <p><strong>Title:</strong> ${form.title}</p>
+            <p><strong>Date:</strong> ${form.date}</p>
+            <p><strong>Organization:</strong> ${form.organization}</p>
+            <p><a href="https://www.townstir.com/admin">Review it in the admin dashboard →</a></p>
+          `,
+        }),
+      })
+      if (form.email) {
+        await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: form.email,
+            subject: `We received your event: ${form.title}`,
+            html: `
+              <p>Hi there,</p>
+              <p>Thanks for submitting <strong>${form.title}</strong> to Townstir! We'll review it within 24 hours and you'll hear from us once it's approved.</p>
+              <p><strong>Date:</strong> ${form.date}</p>
+              <p>Thanks for helping make Mill Valley's community calendar great!</p>
+              <p>— The Townstir Team</p>
+            `,
+          }),
+        })
+      }
       setSubmitted(true)
-    }
-  }
-
-  const cats = [
-    { value: 'outdoors',  label: '🥾 Outdoors, Sports & Movement', ex: 'Hikes, yoga, leagues, races, running clubs, martial arts' },
-    { value: 'arts',      label: '🎭 Arts & Performances',         ex: 'Concerts, film screenings, theater, open studios, open mic' },
-    { value: 'food',      label: '🍷 Food, Drink & Social',        ex: 'Farmers markets, potlucks, mixers, wine tastings, trivia' },
-    { value: 'community', label: '🤝 Volunteer & Community',       ex: 'Trail cleanups, food bank, habitat restoration, protests' },
-    { value: 'family',    label: '👨‍👩‍👧 Family & Youth',             ex: 'Storytime, kids workshops, school events, family activities' },
-    { value: 'classes',   label: '📚 Classes & Lectures',          ex: 'Cooking, photography, pickleball lessons, lectures, demos' },
-    { value: 'gov',       label: '🏛️ Local Government',            ex: 'City council, planning commission, town halls, hearings' },
-  ]
-
-  const tags = [
-    { value: 'free',      label: '🟢 Free' },
-    { value: 'family',    label: '⭐ Family-Friendly' },
-    
-    { value: 'wellness',  label: '🧘 Health & Wellness' },
-    
-    { value: 'reg',       label: '🎟️ Registration Required' },
-  ]
-
-  const timeSlots: string[] = []
-  for (let h = 0; h < 24; h++) {
-    for (const m of [0, 30]) {
-      const ampm = h >= 12 ? 'PM' : 'AM'
-      const hour = h % 12 || 12
-      const label = `${hour}:${String(m).padStart(2,'0')} ${ampm}`
-      const value = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
-      timeSlots.push(`${value}|${label}`)
     }
   }
 
@@ -123,11 +141,6 @@ export default function PostEvent() {
         <p style={{fontSize:'13px',color:'#6b7280',marginBottom:'24px',lineHeight:1.6}}>
           Our team will review it within 24 hours. Once approved it will appear on the Mill Valley Townstir calendar.
         </p>
-        {form.email && (
-          <div style={{background:'#f0fdf4',borderRadius:'8px',padding:'12px 16px',marginBottom:'24px',fontSize:'12px',color:'#166534',fontWeight:500}}>
-            A confirmation will be sent to {form.email} once the site goes live.
-          </div>
-        )}
         <button onClick={() => router.push('/')}
           style={{background:'#1a3d2b',color:'white',border:'none',padding:'12px 28px',borderRadius:'999px',fontSize:'14px',fontWeight:700,cursor:'pointer'}}>
           Back to Calendar
@@ -135,6 +148,34 @@ export default function PostEvent() {
       </div>
     </div>
   )
+
+  const cats = [
+    { value: 'outdoors',  label: '🥾 Outdoors, Sports & Movement', ex: 'Hikes, yoga, leagues, races, running clubs, martial arts' },
+    { value: 'arts',      label: '🎭 Arts & Performances',         ex: 'Concerts, film screenings, theater, open studios, open mic' },
+    { value: 'food',      label: '🍷 Food, Drink & Social',        ex: 'Farmers markets, potlucks, mixers, wine tastings, trivia' },
+    { value: 'community', label: '🤝 Volunteer & Community',       ex: 'Trail cleanups, food bank, habitat restoration, protests' },
+    { value: 'family',    label: '👨‍👩‍👧 Family & Youth',             ex: 'Storytime, kids workshops, school events, family activities' },
+    { value: 'classes',   label: '📚 Classes & Lectures',          ex: 'Cooking, photography, pickleball lessons, lectures, demos' },
+    { value: 'gov',       label: '🏛️ Local Government',            ex: 'City council, planning commission, town halls, hearings' },
+  ]
+
+  const tags = [
+    { value: 'free',     label: '🟢 Free' },
+    { value: 'family',   label: '⭐ Family-Friendly' },
+    { value: 'wellness', label: '🧘 Health & Wellness' },
+    { value: 'reg',      label: '🎟️ Registration Required' },
+  ]
+
+  const timeSlots: string[] = []
+  for (let h = 0; h < 24; h++) {
+    for (const m of [0, 30]) {
+      const ampm = h >= 12 ? 'PM' : 'AM'
+      const hour = h % 12 || 12
+      const label = `${hour}:${String(m).padStart(2,'0')} ${ampm}`
+      const value = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+      timeSlots.push(`${value}|${label}`)
+    }
+  }
 
   const inputStyle = {
     width:'100%',border:'1.5px solid #e5e7eb',borderRadius:'8px',
@@ -151,8 +192,6 @@ export default function PostEvent() {
 
   return (
     <div style={{minHeight:'100vh',background:'#fafaf8',fontFamily:'sans-serif'}}>
-
-      {/* Header */}
       <header style={{background:'#1a3d2b',padding:'14px 40px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div>
           <span style={{fontWeight:800,fontSize:'22px',color:'white',letterSpacing:'-1px'}}>town</span>
@@ -173,21 +212,19 @@ export default function PostEvent() {
           Events are reviewed before going live — usually within 24 hours.
         </p>
 
-        {/* Title */}
         <div style={{marginBottom:'16px'}}>
           <label style={labelStyle}>Event Title *</label>
           <input style={inputStyle} placeholder="e.g. Morning Runners — Tam Trail"
             value={form.title} onChange={e=>update('title',e.target.value)}/>
         </div>
 
-        {/* Date */}
         <div style={{marginBottom:'16px'}}>
           <label style={labelStyle}>Date *</label>
           <input style={inputStyle} type="date"
-            value={form.date} onChange={e=>update('date',e.target.value)}/>
+            value={form.date} onChange={e=>update('date',e.target.value)}
+            onFocus={e => (e.target as any).showPicker?.()}/>
         </div>
 
-        {/* Start + End Time */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'16px'}}>
           <div>
             <label style={labelStyle}>Start Time *</label>
@@ -211,7 +248,6 @@ export default function PostEvent() {
           </div>
         </div>
 
-        {/* Recurrence */}
         <div style={{marginBottom:'16px'}}>
           <label style={labelStyle}>Repeats</label>
           <select style={selectStyle} value={recurrence}
@@ -224,7 +260,6 @@ export default function PostEvent() {
           </select>
         </div>
 
-        {/* Custom recurrence panel */}
         {recurrence === 'custom' && (
           <div style={{background:'#f9fafb',borderRadius:'10px',padding:'16px',marginBottom:'16px',border:'1.5px solid #e5e7eb'}}>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'12px'}}>
@@ -265,7 +300,6 @@ export default function PostEvent() {
           </div>
         )}
 
-        {/* Cost + Age */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'16px'}}>
           <div>
             <label style={labelStyle}>Cost</label>
@@ -279,7 +313,6 @@ export default function PostEvent() {
           </div>
         </div>
 
-        {/* Location */}
         <div style={{marginBottom:'16px'}}>
           <label style={labelStyle}>Venue / Location Name *</label>
           <input style={inputStyle} placeholder="e.g. Old Mill Park"
@@ -292,14 +325,12 @@ export default function PostEvent() {
             value={form.address} onChange={e=>update('address',e.target.value)}/>
         </div>
 
-        {/* Online meeting link */}
         <div style={{marginBottom:'16px'}}>
           <label style={labelStyle}>Online Meeting Link <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,color:'#9ca3af'}}>(optional — for hybrid or virtual events)</span></label>
           <input style={inputStyle} type="url" placeholder="https://zoom.us/j/… or https://meet.google.com/…"
             value={form.meeting_link} onChange={e=>update('meeting_link',e.target.value)}/>
         </div>
 
-        {/* Category */}
         <div style={{marginBottom:'16px'}}>
           <label style={labelStyle}>Category * <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,color:'#9ca3af'}}>(choose all that apply)</span></label>
           <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
@@ -320,7 +351,6 @@ export default function PostEvent() {
           <div style={{fontSize:'11px',color:'#9ca3af',marginTop:'6px'}}>Tip: pick the main reason someone would attend.</div>
         </div>
 
-        {/* Tags */}
         <div style={{marginBottom:'16px'}}>
           <label style={labelStyle}>Tags</label>
           <div style={{display:'flex',gap:'7px',flexWrap:'wrap'}}>
@@ -339,14 +369,12 @@ export default function PostEvent() {
           </div>
         </div>
 
-        {/* Organization */}
         <div style={{marginBottom:'16px'}}>
           <label style={labelStyle}>Organization / Posted By *</label>
           <input style={inputStyle} placeholder="e.g. Tam Valley Running Club"
             value={form.organization} onChange={e=>update('organization',e.target.value)}/>
         </div>
 
-        {/* Description */}
         <div style={{marginBottom:'16px'}}>
           <label style={labelStyle}>Description *</label>
           <textarea style={{...inputStyle,minHeight:'100px',resize:'vertical'}}
@@ -354,13 +382,11 @@ export default function PostEvent() {
             value={form.description} onChange={e=>update('description',e.target.value)}/>
         </div>
 
-        {/* Photo placeholder */}
         <div style={{marginBottom:'16px',background:'#f9fafb',borderRadius:'8px',padding:'14px 16px',border:'1.5px dashed #e5e7eb'}}>
           <label style={labelStyle}>Event Photo <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,color:'#9ca3af'}}>(optional)</span></label>
-          <p style={{fontSize:'12px',color:'#9ca3af',marginTop:'4px'}}>📸 Photo upload will be available when the site goes live.</p>
+          <p style={{fontSize:'12px',color:'#9ca3af',marginTop:'4px'}}>📸 Photo upload will be available soon.</p>
         </div>
 
-        {/* Contact */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'32px'}}>
           <div>
             <label style={labelStyle}>Contact Email</label>
@@ -374,7 +400,13 @@ export default function PostEvent() {
           </div>
         </div>
 
-        {/* Submit */}
+        <div style={{marginBottom:'16px'}}>
+          <ReCAPTCHA
+            ref={recaptchaRef}
+            sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ''}
+          />
+        </div>
+
         <button onClick={handleSubmit} disabled={submitting}
           style={{width:'100%',background:'#1a3d2b',color:'white',border:'none',padding:'14px',borderRadius:'999px',fontSize:'15px',fontWeight:700,cursor:submitting?'not-allowed':'pointer',opacity:submitting?0.7:1}}>
           {submitting ? 'Submitting…' : 'Submit Event for Review'}

@@ -186,11 +186,44 @@ export default function OrgDashboard() {
       if (error) { setEventError(error.message); setEventSaving(false); return }
       setEvents(events.map(e => e.id === editingEvent.id ? data : e))
     } else {
-      const { data, error } = await supabase
-        .from('events').insert(payload).select().single()
-      if (error) { setEventError(error.message); setEventSaving(false); return }
-      setEvents([...events, data].sort((a, b) => a.date.localeCompare(b.date)))
-    }
+  const { data, error } = await supabase
+    .from('events').insert(payload).select().single()
+  if (error) { setEventError(error.message); setEventSaving(false); return }
+  setEvents([...events, data].sort((a, b) => a.date.localeCompare(b.date)))
+  // Notify admin
+  await fetch('/api/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      to: 'admin@townstir.com',
+      subject: `New event submitted: ${payload.title}`,
+      html: `
+        <p>A new event has been submitted for review.</p>
+        <p><strong>Title:</strong> ${payload.title}</p>
+        <p><strong>Date:</strong> ${payload.date}</p>
+        <p><strong>Organization:</strong> ${payload.organization}</p>
+        <p><a href="https://www.townstir.com/admin">Review it in the admin dashboard →</a></p>
+      `,
+    }),
+  })
+  // Confirm to org
+  if (org.email) {
+    await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: org.email,
+        subject: `We received your event: ${payload.title}`,
+        html: `
+          <p>Hi ${org.name},</p>
+          <p>Thanks for submitting <strong>${payload.title}</strong> to Townstir! We'll review it within 24 hours and you'll hear from us once it's approved.</p>
+          <p><strong>Date:</strong> ${payload.date}</p>
+          <p>— The Townstir Team</p>
+        `,
+      }),
+    })
+  }
+}
 
     setEventSaving(false)
     setShowEventModal(false)
@@ -499,8 +532,8 @@ export default function OrgDashboard() {
             <input style={inputStyle} value={eventForm.title || ''} onChange={e => setEventForm({ ...eventForm, title: e.target.value })} />
 
             <label style={labelStyle}>Date *</label>
-            <input type="date" style={inputStyle} value={eventForm.date || ''} onChange={e => setEventForm({ ...eventForm, date: e.target.value })} />
-
+            <input type="date" style={inputStyle} value={eventForm.date || ''} onChange={e => setEventForm({ ...eventForm, date: e.target.value })}
+  onFocus={e => e.target.showPicker?.()} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={labelStyle}>Start Time</label>

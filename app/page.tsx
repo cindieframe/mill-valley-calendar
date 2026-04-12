@@ -194,11 +194,15 @@ useEffect(() => {
       </header>
 
       {/* For Organizations banner */}
-      <div style={{background:'#2d6a4f',padding:'8px',textAlign:'center'}}>
-        <a href="/org/signup" style={{color:'#e6a020',fontSize:'12px',fontWeight:700,textDecoration:'none'}}>
-          Are you a local organization? Add your events to Townstir →
-        </a>
-      </div>
+<div style={{background:'#2d6a4f',padding:'8px',textAlign:'center'}}>
+  <a href="/org/signup" style={{color:'#e6a020',fontSize:'12px',fontWeight:700,textDecoration:'none'}}>
+    Are you a local organization? Add your events to Townstir →
+  </a>
+  <span style={{color:'rgba(255,255,255,0.4)',margin:'0 10px'}}>|</span>
+  <a href="/org/login" style={{color:'rgba(255,255,255,0.7)',fontSize:'12px',fontWeight:600,textDecoration:'none'}}>
+    Org Login
+  </a>
+</div>
 
       {/* Hero */}
       <div style={{background:'linear-gradient(160deg,#1a3d2b 0%,#2d6a4f 60%,#1a4a30 100%)',padding:'40px',textAlign:'center'}}>

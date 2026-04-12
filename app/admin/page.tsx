@@ -85,13 +85,65 @@ const [filterDate, setFilterDate] = useState('')
     }
   }
 
-  async function updateStatus(id: number, status: string, note?: string) {
-    const updatePayload: any = { status }
-    if (status === 'unpublished') updatePayload.unpublished_note = note || null
-    if (status === 'rejected') updatePayload.rejected_note = note || null
-    const { error } = await supabase.from('events').update(updatePayload).eq('id', id)
-    if (!error) setEvents(prev => prev.filter(ev => ev.id !== id))
+async function updateStatus(id: number, status: string, note?: string) {
+  const updatePayload: any = { status }
+  if (status === 'unpublished') updatePayload.unpublished_note = note || null
+  if (status === 'rejected') updatePayload.rejected_note = note || null
+  const { error } = await supabase.from('events').update(updatePayload).eq('id', id)
+  if (!error) {
+    const ev = events.find(e => e.id === id)
+    if (ev?.email || ev?.organization) {
+      let recipientEmail = ev.email
+if (!recipientEmail && ev.organization) {
+  const { data: orgData } = await supabase
+    .from('organizations')
+    .select('email')
+    .ilike('name', ev.organization)
+    .single()
+  if (orgData?.email) recipientEmail = orgData.email
+}
+      if (recipientEmail) {
+        let subject = ''
+        let html = ''
+        if (status === 'approved') {
+          subject = `Your event is live: ${ev.title}`
+          html = `
+            <p>Great news!</p>
+            <p>Your event <strong>${ev.title}</strong> on <strong>${ev.date}</strong> has been approved and is now live on the Townstir calendar.</p>
+            <p><a href="https://www.townstir.com/event/${ev.id}">View your event →</a></p>
+            <p>— The Townstir Team</p>
+          `
+        } else if (status === 'rejected') {
+          subject = `Update on your event: ${ev.title}`
+          html = `
+            <p>Hi there,</p>
+            <p>Unfortunately your event <strong>${ev.title}</strong> on <strong>${ev.date}</strong> was not approved for the Townstir calendar.</p>
+            ${note ? `<p><strong>Note from admin:</strong> ${note}</p>` : ''}
+            <p>You're welcome to make changes and resubmit at <a href="https://www.townstir.com/post-event">townstir.com/post-event</a>.</p>
+            <p>— The Townstir Team</p>
+          `
+        } else if (status === 'unpublished') {
+          subject = `Your event has been unpublished: ${ev.title}`
+          html = `
+            <p>Hi there,</p>
+            <p>Your event <strong>${ev.title}</strong> on <strong>${ev.date}</strong> has been temporarily unpublished from the Townstir calendar.</p>
+            ${note ? `<p><strong>Note from admin:</strong> ${note}</p>` : ''}
+            <p>Please log in to your dashboard to make any needed updates.</p>
+            <p>— The Townstir Team</p>
+          `
+        }
+        if (subject) {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: recipientEmail, subject, html }),
+          })
+        }
+      }
+    }
+    setEvents(prev => prev.filter(ev => ev.id !== id))
   }
+}
 
   async function handleNoteConfirm() {
     if (!noteModal) return
