@@ -11,6 +11,8 @@ export default function OrgSignup() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
+const [matchingOrgs, setMatchingOrgs] = useState<string[]>([])
+const [claimedOrg, setClaimedOrg] = useState('')
   const [form, setForm] = useState({
     name: '', email: '', password: '', confirmPassword: '',
     description: '', website: '', phone: '', instagram: '', facebook: '',
@@ -19,7 +21,24 @@ export default function OrgSignup() {
   function set(field: string, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
   }
-
+async function searchMatchingOrgs(name: string) {
+  if (name.length < 3) { setMatchingOrgs([]); return }
+  const { data: eventData } = await supabase
+    .from('events')
+    .select('organization')
+    .ilike('organization', `%${name}%`)
+    .eq('status', 'approved')
+  if (!eventData) return
+  const allNames = [...new Set(eventData.map((e: any) => e.organization).filter(Boolean))] as string[]
+  const { data: orgData } = await supabase
+    .from('organizations')
+    .select('name, canonical_name')
+  const claimedNames = new Set(
+    (orgData || []).flatMap((o: any) => [o.name?.toLowerCase(), o.canonical_name?.toLowerCase()].filter(Boolean))
+  )
+  const available = allNames.filter(n => !claimedNames.has(n.toLowerCase()))
+  setMatchingOrgs(available.slice(0, 5))
+}
   async function handleSignup() {
     if (!form.name || !form.email || !form.password) {
       setError('Organization name, email, and password are required.')
@@ -40,28 +59,45 @@ export default function OrgSignup() {
       email: form.email,
       password: form.password,
       options: {
-        data: {
-          org_name: form.name,
-          org_email: form.email,
-          org_description: form.description,
-          org_website: form.website,
-          org_phone: form.phone,
-          org_instagram: form.instagram,
-          org_facebook: form.facebook,
-        }
-      }
+  data: {
+    org_name: form.name,
+    org_email: form.email,
+    org_description: form.description,
+    org_website: form.website,
+    org_phone: form.phone,
+    org_instagram: form.instagram,
+    org_facebook: form.facebook,
+    org_canonical_name: claimedOrg || '',
+  }
+}
     })
 
     if (authError || !authData.user) {
-      setError(authError?.message || 'Account creation failed. Please try again.')
-      setLoading(false)
-      return
-    }
+  setError(authError?.message || 'Account creation failed. Please try again.')
+  setLoading(false)
+  return
+}
 
-    
+const { error: orgError } = await supabase
+  .from('organizations')
+  .insert([{
+    user_id: authData.user.id,
+    name: form.name,
+    email: form.email,
+    description: form.description || '',
+    website: form.website || '',
+    phone: form.phone || '',
+    instagram: form.instagram || '',
+    facebook: form.facebook || '',
+    canonical_name: claimedOrg || '',
+  }])
 
-    setLoading(false)
-    setEmailSent(true)
+if (orgError) {
+  console.error('Org creation error:', orgError)
+}
+
+setLoading(false)
+setEmailSent(true)
   }
 
   const inputStyle = {
@@ -129,8 +165,32 @@ export default function OrgSignup() {
           </div>
         )}
         <label style={labelStyle}>Organization Name *</label>
-        <input style={inputStyle} placeholder="e.g. Mill Valley Library"
-          value={form.name} onChange={e => set('name', e.target.value)} />
+<input style={inputStyle} placeholder="e.g. Mill Valley Library"
+  value={form.name} onChange={e => { set('name', e.target.value); setClaimedOrg(''); searchMatchingOrgs(e.target.value) }} />
+{matchingOrgs.length > 0 && !claimedOrg && (
+  <div style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '8px', marginBottom: '8px', overflow: 'hidden' }}>
+    <div style={{ padding: '8px 14px', fontSize: '11px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.8px', background: '#f9fafb' }}>
+      Is your org already on Townstir? Click to claim it:
+    </div>
+    {matchingOrgs.map(org => (
+      <div key={org} onClick={() => { setClaimedOrg(org); setMatchingOrgs([]); set('name', org) }}
+        style={{ padding: '10px 14px', fontSize: '13px', color: '#1f2937', cursor: 'pointer', borderTop: '1px solid #f3f4f6', fontWeight: 600 }}
+        onMouseOver={e => (e.currentTarget.style.background = '#f0fdf4')}
+        onMouseOut={e => (e.currentTarget.style.background = 'white')}>
+        ✓ {org}
+      </div>
+    ))}
+    <div onClick={() => setMatchingOrgs([])}
+      style={{ padding: '10px 14px', fontSize: '12px', color: '#9ca3af', cursor: 'pointer', borderTop: '1px solid #f3f4f6' }}>
+      None of these — we're new to Townstir
+    </div>
+  </div>
+)}
+{claimedOrg && (
+  <div style={{ background: '#f0fdf4', border: '1.5px solid #16803c', borderRadius: '8px', padding: '10px 14px', marginBottom: '8px', fontSize: '13px', color: '#16803c', fontWeight: 600 }}>
+    ✅ You'll be linked to existing events for: {claimedOrg}
+  </div>
+)}
         <label style={labelStyle}>Email Address *</label>
         <input style={inputStyle} type="email" placeholder="you@yourorg.org"
           value={form.email} onChange={e => set('email', e.target.value)} />

@@ -75,17 +75,18 @@ export default function OrgDashboard() {
       .from('organizations').select('*').eq('user_id', user.id).single()
     if (!data && user.user_metadata?.org_name) {
       const { data: newOrg, error: insertError } = await supabase
-        .from('organizations')
-        .insert([{
-          user_id: user.id,
-          name: user.user_metadata.org_name,
-          email: user.user_metadata.org_email,
-          description: user.user_metadata.org_description || '',
-          website: user.user_metadata.org_website || '',
-          phone: user.user_metadata.org_phone || '',
-          instagram: user.user_metadata.org_instagram || '',
-          facebook: user.user_metadata.org_facebook || '',
-        }])
+  .from('organizations')
+  .insert([{
+    user_id: user.id,
+    name: user.user_metadata.org_name,
+    email: user.user_metadata.org_email,
+    description: user.user_metadata.org_description || '',
+    website: user.user_metadata.org_website || '',
+    phone: user.user_metadata.org_phone || '',
+    instagram: user.user_metadata.org_instagram || '',
+    facebook: user.user_metadata.org_facebook || '',
+    canonical_name: user.user_metadata.org_canonical_name || '',
+  }])
         .select().single()
       if (insertError || !newOrg) { router.push('/org/login'); return }
       data = newOrg
@@ -93,17 +94,18 @@ export default function OrgDashboard() {
     if (error || !data) { router.push('/org/login'); return }
     setOrg(data)
     setLoading(false)
-    loadEvents(data.name)
+    loadEvents(data.name, data.canonical_name)
   }
 
-  async function loadEvents(orgName: string) {
-    setEventsLoading(true)
-    const { data, error } = await supabase
-      .from('events').select('*').ilike('organization', orgName)
-      .order('date', { ascending: true })
-    if (!error && data) setEvents(data)
-    setEventsLoading(false)
-  }
+  async function loadEvents(orgName: string, canonicalName?: string) {
+  setEventsLoading(true)
+  const lookupName = canonicalName || orgName
+  const { data, error } = await supabase
+    .from('events').select('*').ilike('organization', lookupName)
+    .order('date', { ascending: true })
+  if (!error && data) setEvents(data)
+  setEventsLoading(false)
+}
 
   function openAddEvent() {
     setEditingEvent(null)
@@ -337,12 +339,18 @@ export default function OrgDashboard() {
       </header>
 
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '40px 24px 80px' }}>
-        <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '28px', fontWeight: 900, color: '#1f2937', marginBottom: '6px' }}>
-          Organization Dashboard
-        </h1>
-        <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '32px' }}>
-          Manage your profile and connect your events calendar.
-        </p>
+        <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '28px', fontWeight: 900, color: '#1f2937', marginBottom: '4px' }}>
+  Organization Dashboard
+</h1>
+<p style={{ fontSize: '20px', fontWeight: 700, color: '#1a3d2b', marginBottom: '4px' }}>
+  {org.name}
+</p>
+<p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>
+  Manage your profile and connect your events calendar.{' '}
+  <a href="#profile" style={{ color: '#1a3d2b', fontWeight: 600, fontSize: '13px' }}>
+    Edit Profile ↓
+  </a>
+</p>
 
         {error && (
           <div style={{ background: '#fee2e2', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: '#dc2626' }}>
@@ -454,7 +462,7 @@ export default function OrgDashboard() {
 
         {/* Organization Profile */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '24px', marginBottom: '24px', border: '1.5px solid #e5e7eb' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '16px' }}>Organization Profile</h2>
+          <h2 id="profile" style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '16px' }}>Organization Profile</h2>
           <label style={labelStyle}>Organization Name</label>
           <input style={inputStyle} value={org.name || ''} onChange={e => setOrg({ ...org, name: e.target.value })} />
           <label style={labelStyle}>Description</label>
