@@ -25,6 +25,8 @@ export default function Admin() {
   const [loginLoading, setLoginLoading] = useState(false)
   const [noteModal, setNoteModal] = useState<{ eventId: number, action: 'unpublished' | 'rejected' } | null>(null)
   const [noteText, setNoteText] = useState('')
+  const [editingOrg, setEditingOrg] = useState<any>(null)
+const [orgSaving, setOrgSaving] = useState(false)
   const [filterOrg, setFilterOrg] = useState('')
 const [filterCategory, setFilterCategory] = useState('')
 const [filterDate, setFilterDate] = useState('')
@@ -75,7 +77,21 @@ const [filterDate, setFilterDate] = useState('')
     if (!error) setOrgs(data || [])
     setLoading(false)
   }
-
+async function saveOrgEdit() {
+  setOrgSaving(true)
+  const originalOrg = orgs.find(o => o.id === editingOrg.id)
+  const { error } = await supabase.from('organizations').update({
+    name: editingOrg.name,
+  }).eq('id', editingOrg.id)
+  if (!error) {
+    if (originalOrg?.name !== editingOrg.name) {
+      await supabase.from('events').update({ organization: editingOrg.name }).ilike('organization', originalOrg.name)
+    }
+    setOrgs(prev => prev.map(o => o.id === editingOrg.id ? editingOrg : o))
+    setEditingOrg(null)
+  }
+  setOrgSaving(false)
+}
   async function toggleVerify(org: any) {
     const newVerified = !org.verified
     const { error } = await supabase.from('organizations').update({ verified: newVerified }).eq('id', org.id)
@@ -444,26 +460,53 @@ if (!recipientEmail && ev.organization) {
               </div>
             ) : (
               orgs.map(org => (
-                <div key={org.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${org.verified ? '#16803c' : '#e5e7eb'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>
-                        {org.name}
-                        {org.verified && <span style={{ marginLeft: '8px', background: '#16803c', color: 'white', fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px' }}>✓ Verified</span>}
-                      </h3>
-                      <div style={{ fontSize: '13px', color: '#6b7280' }}>
-                        📧 {org.email}
-                        {org.website && <>&nbsp;·&nbsp; 🌐 {org.website}</>}
-                      </div>
-                      {org.ical_feed_url && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>📅 iCal feed connected</div>}
-                    </div>
-                    <button onClick={() => toggleVerify(org)}
-                      style={{ background: org.verified ? 'white' : '#16803c', color: org.verified ? '#dc2626' : 'white', border: org.verified ? '1.5px solid #dc2626' : 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
-                      {org.verified ? '✕ Unverify' : '✓ Verify'}
-                    </button>
-                  </div>
-                </div>
-              ))
+  <div key={org.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${org.verified ? '#16803c' : '#e5e7eb'}` }}>
+    {editingOrg?.id === org.id ? (
+      <div>
+        <div style={{ marginBottom: '10px' }}>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>Org Name</label>
+          <input style={{ ...inputStyle, marginBottom: '8px' }} value={editingOrg.name || ''} onChange={e => setEditingOrg({ ...editingOrg, name: e.target.value })} />
+          
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={saveOrgEdit} disabled={orgSaving}
+            style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
+            {orgSaving ? 'Saving…' : '✓ Save'}
+          </button>
+          <button onClick={() => setEditingOrg(null)}
+            style={{ background: '#f3f4f6', color: '#374151', border: 'none', padding: '8px 20px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    ) : (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>
+            {org.name}
+            {org.verified && <span style={{ marginLeft: '8px', background: '#16803c', color: 'white', fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px' }}>✓ Verified</span>}
+          </h3>
+          <div style={{ fontSize: '13px', color: '#6b7280' }}>
+            📧 {org.email}
+            {org.website && <>&nbsp;·&nbsp; 🌐 {org.website}</>}
+          </div>
+          {org.canonical_name && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>🔗 Linked to: {org.canonical_name}</div>}
+          {org.ical_feed_url && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>📅 iCal feed connected</div>}
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={() => setEditingOrg({ ...org })}
+            style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
+            ✏️ Edit
+          </button>
+          <button onClick={() => toggleVerify(org)}
+            style={{ background: org.verified ? 'white' : '#16803c', color: org.verified ? '#dc2626' : 'white', border: org.verified ? '1.5px solid #dc2626' : 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
+            {org.verified ? '✕ Unverify' : '✓ Verify'}
+          </button>
+        </div>
+      </div>
+    )}
+  </div>
+))
             )}
           </>
         )}
