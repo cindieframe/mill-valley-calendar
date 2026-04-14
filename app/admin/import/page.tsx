@@ -3,168 +3,284 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
 
-const KNOWN_FEEDS = [
-  { org: 'Mill Valley Library', url: '' },
-  { org: 'Chamber of Commerce', url: '' },
-  { org: 'City of Mill Valley', url: '' },
-]
-
 export default function ImportPage() {
   const router = useRouter()
+  const [tab, setTab] = useState<'ai' | 'ical'>('ai')
+
+  const [websiteUrl, setWebsiteUrl] = useState('')
+  const [aiOrg, setAiOrg] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiResult, setAiResult] = useState<any>(null)
+  const [aiError, setAiError] = useState('')
+
   const [feedUrl, setFeedUrl] = useState('')
-  const [organization, setOrganization] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<any>(null)
-  const [error, setError] = useState('')
-  const [savedFeeds, setSavedFeeds] = useState<any[]>([])
-
-  async function handleImport() {
-    if (!feedUrl || !organization) {
-      setError('Please enter both a feed URL and organization name.')
-      return
-    }
-    setLoading(true)
-    setError('')
-    setResult(null)
-
-    try {
-      const response = await fetch('/api/import-ical', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feedUrl, organization })
-      })
-      const data = await response.json()
-      if (data.error) {
-        setError(data.error)
-      } else {
-        setResult(data)
-        // Save feed URL to database
-        await supabase.from('ical_feeds').upsert([{
-          organization,
-          url: feedUrl,
-          last_synced: new Date().toISOString(),
-          active: true
-        }])
-      }
-    } catch (err) {
-      setError('Something went wrong. Please try again.')
-    }
-    setLoading(false)
-  }
+  const [icalOrg, setIcalOrg] = useState('')
+  const [icalLoading, setIcalLoading] = useState(false)
+  const [icalResult, setIcalResult] = useState<any>(null)
+  const [icalError, setIcalError] = useState('')
 
   const inputStyle = {
     width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px',
     padding: '10px 14px', fontFamily: 'sans-serif', fontSize: '13px',
-    color: '#1f2937', outline: 'none', background: 'white'
+    color: '#1f2937', outline: 'none', background: 'white',
+    boxSizing: 'border-box' as const,
+  }
+
+  const labelStyle = {
+    display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151',
+    marginBottom: '5px', textTransform: 'uppercase' as const, letterSpacing: '0.8px',
+  }
+
+  async function handleAiExtract() {
+    if (!websiteUrl || !aiOrg) {
+      setAiError('Please enter both a website URL and organization name.')
+      return
+    }
+    setAiLoading(true)
+    setAiError('')
+    setAiResult(null)
+    try {
+      const response = await fetch('/api/extract-events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ websiteUrl, organization: aiOrg }),
+      })
+      const data = await response.json()
+      if (data.error) {
+        setAiError(data.error)
+      } else {
+        setAiResult(data)
+      }
+    } catch {
+      setAiError('Something went wrong. Please try again.')
+    }
+    setAiLoading(false)
+  }
+
+  async function handleIcalImport() {
+    if (!feedUrl || !icalOrg) {
+      setIcalError('Please enter both a feed URL and organization name.')
+      return
+    }
+    setIcalLoading(true)
+    setIcalError('')
+    setIcalResult(null)
+    try {
+      const response = await fetch('/api/import-ical', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedUrl, organization: icalOrg }),
+      })
+      const data = await response.json()
+      if (data.error) {
+        setIcalError(data.error)
+      } else {
+        setIcalResult(data)
+        await supabase.from('ical_feeds').upsert([{
+          organization: icalOrg,
+          url: feedUrl,
+          last_synced: new Date().toISOString(),
+          active: true,
+        }])
+      }
+    } catch {
+      setIcalError('Something went wrong. Please try again.')
+    }
+    setIcalLoading(false)
   }
 
   return (
-    <div style={{minHeight:'100vh',background:'#fafaf8',fontFamily:'sans-serif'}}>
+    <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: 'sans-serif' }}>
 
-      {/* Header */}
-      <header style={{background:'#1a3d2b',padding:'14px 40px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+      <header style={{ background: '#1a3d2b', padding: '14px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <span style={{fontWeight:800,fontSize:'22px',color:'white',letterSpacing:'-1px'}}>town</span>
-          <span style={{fontWeight:800,fontSize:'22px',color:'#e6a020',letterSpacing:'-1px',textTransform:'uppercase'}}>STIR</span>
-          <span style={{fontSize:'12px',color:'rgba(255,255,255,0.5)',marginLeft:'12px'}}>Admin — iCal Import</span>
+          <span style={{ fontWeight: 800, fontSize: '22px', color: 'white', letterSpacing: '-1px' }}>town</span>
+          <span style={{ fontWeight: 800, fontSize: '22px', color: '#e6a020', letterSpacing: '-1px', textTransform: 'uppercase' }}>STIR</span>
+          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginLeft: '12px' }}>Admin — Import Events</span>
         </div>
-        <div style={{display:'flex',gap:'10px'}}>
+        <div style={{ display: 'flex', gap: '10px' }}>
           <button onClick={() => router.push('/admin')}
-            style={{background:'transparent',color:'rgba(255,255,255,0.7)',border:'1.5px solid rgba(255,255,255,0.3)',padding:'8px 18px',borderRadius:'999px',fontWeight:600,fontSize:'13px',cursor:'pointer'}}>
+            style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
             ← Moderation Queue
           </button>
           <button onClick={() => router.push('/')}
-            style={{background:'transparent',color:'rgba(255,255,255,0.7)',border:'1.5px solid rgba(255,255,255,0.3)',padding:'8px 18px',borderRadius:'999px',fontWeight:600,fontSize:'13px',cursor:'pointer'}}>
+            style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
             Calendar
           </button>
         </div>
       </header>
 
-      <div style={{maxWidth:'640px',margin:'0 auto',padding:'40px 24px 80px'}}>
-        <h1 style={{fontFamily:'Georgia,serif',fontSize:'28px',fontWeight:900,color:'#1f2937',marginBottom:'6px'}}>
-          iCal Feed Import
+      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '40px 24px 80px' }}>
+        <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '28px', fontWeight: 900, color: '#1f2937', marginBottom: '6px' }}>
+          Import Events
         </h1>
-        <p style={{color:'#9ca3af',fontSize:'14px',marginBottom:'32px'}}>
-          Paste an iCal feed URL to import events automatically. Claude will categorize each event.
+        <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '28px' }}>
+          Add events from any org website or iCal feed. Imported events go to the pending queue for your review.
         </p>
 
-        {/* Organization */}
-        <div style={{marginBottom:'14px'}}>
-          <label style={{display:'block',fontSize:'11px',fontWeight:700,color:'#374151',marginBottom:'5px',textTransform:'uppercase',letterSpacing:'0.8px'}}>
-            Organization
-          </label>
-          <input style={inputStyle} placeholder="e.g. Mill Valley Library"
-            value={organization} onChange={e => setOrganization(e.target.value)}/>
+        <div style={{ display: 'flex', marginBottom: '28px', border: '1.5px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+          <button onClick={() => setTab('ai')}
+            style={{ flex: 1, padding: '12px', border: 'none', borderRight: '1.5px solid #e5e7eb', background: tab === 'ai' ? '#1a3d2b' : 'white', color: tab === 'ai' ? 'white' : '#6b7280', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}>
+            🤖 AI — Any Website
+          </button>
+          <button onClick={() => setTab('ical')}
+            style={{ flex: 1, padding: '12px', border: 'none', background: tab === 'ical' ? '#1a3d2b' : 'white', color: tab === 'ical' ? 'white' : '#6b7280', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}>
+            📅 iCal Feed
+          </button>
         </div>
 
-        {/* Feed URL */}
-        <div style={{marginBottom:'20px'}}>
-          <label style={{display:'block',fontSize:'11px',fontWeight:700,color:'#374151',marginBottom:'5px',textTransform:'uppercase',letterSpacing:'0.8px'}}>
-            iCal Feed URL
-          </label>
-          <input style={inputStyle} placeholder="https://calendar.google.com/calendar/ical/..."
-            value={feedUrl} onChange={e => setFeedUrl(e.target.value)}/>
-          <div style={{fontSize:'11px',color:'#9ca3af',marginTop:'5px'}}>
-            Google Calendar: Settings → your calendar → Integrate calendar → copy the iCal link
-          </div>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div style={{background:'#fee2e2',borderRadius:'8px',padding:'12px 16px',marginBottom:'16px',fontSize:'13px',color:'#dc2626'}}>
-            ⚠️ {error}
-          </div>
-        )}
-
-        {/* Import button */}
-        <button onClick={handleImport} disabled={loading}
-          style={{width:'100%',background:'#1a3d2b',color:'white',border:'none',padding:'14px',borderRadius:'999px',fontSize:'15px',fontWeight:700,cursor:loading?'not-allowed':'pointer',opacity:loading?0.7:1,marginBottom:'32px'}}>
-          {loading ? '⏳ Importing & categorizing with Claude…' : '⬇️ Import Events'}
-        </button>
-
-        {/* Results */}
-        {result && (
-          <div style={{background:'#f0fdf4',borderRadius:'12px',padding:'20px',border:'1.5px solid #86efac',marginBottom:'32px'}}>
-            <h3 style={{fontSize:'16px',fontWeight:700,color:'#16803c',marginBottom:'12px'}}>
-              ✅ Import Complete!
-            </h3>
-            <div style={{fontSize:'14px',color:'#166534',marginBottom:'16px'}}>
-              <strong>{result.imported}</strong> events imported &nbsp;·&nbsp;
-              <strong>{result.skipped}</strong> skipped (already exist) &nbsp;·&nbsp;
-              <strong>{result.total}</strong> total in feed
+        {tab === 'ai' && (
+          <div>
+            <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '10px', padding: '14px 18px', marginBottom: '24px', fontSize: '13px', color: '#166534', lineHeight: 1.6 }}>
+              <strong>How this works:</strong> Paste in any org's events page (like <em>sweetwatermusichall.com/events</em>), and Claude will read the page and pull out all upcoming events automatically. No iCal feed needed.
             </div>
-            {result.results?.length > 0 && (
-              <div>
-                <div style={{fontSize:'11px',fontWeight:700,color:'#16803c',textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:'8px'}}>
-                  Imported events — review in moderation queue:
-                </div>
-                {result.results.map((r: any, i: number) => (
-                  <div key={i} style={{background:'white',borderRadius:'8px',padding:'10px 14px',marginBottom:'6px',fontSize:'12px'}}>
-                    <div style={{fontWeight:700,color:'#1f2937',marginBottom:'2px'}}>{r.title}</div>
-                    <div style={{color:'#9ca3af'}}>{r.date} &nbsp;·&nbsp; 🏷️ {r.categories} &nbsp;·&nbsp; {r.tags||'no tags'}</div>
-                  </div>
-                ))}
+
+            <div style={{ marginBottom: '14px' }}>
+              <label style={labelStyle}>Organization Name</label>
+              <input style={inputStyle} placeholder="e.g. Sweetwater Music Hall"
+                value={aiOrg} onChange={e => setAiOrg(e.target.value)} />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>Events Page URL</label>
+              <input style={inputStyle} placeholder="e.g. https://sweetwatermusichall.com/events"
+                value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} />
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '5px' }}>
+                Tip: link directly to their /events or /calendar page for best results
+              </div>
+            </div>
+
+            {aiError && (
+              <div style={{ background: '#fee2e2', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: '#dc2626' }}>
+                ⚠️ {aiError}
               </div>
             )}
-            <button onClick={() => router.push('/admin')}
-              style={{marginTop:'16px',background:'#1a3d2b',color:'white',border:'none',padding:'10px 24px',borderRadius:'999px',fontSize:'13px',fontWeight:700,cursor:'pointer'}}>
-              Review in Moderation Queue →
+
+            <button onClick={handleAiExtract} disabled={aiLoading}
+              style={{ width: '100%', background: '#1a3d2b', color: 'white', border: 'none', padding: '14px', borderRadius: '999px', fontSize: '15px', fontWeight: 700, cursor: aiLoading ? 'not-allowed' : 'pointer', opacity: aiLoading ? 0.7 : 1, marginBottom: '28px' }}>
+              {aiLoading ? '🤖 Claude is reading the page…' : '🤖 Extract Events with AI'}
             </button>
+
+            {aiResult && (
+              <div>
+                {aiResult.imported > 0 ? (
+                  <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '20px', border: '1.5px solid #86efac', marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#16803c', marginBottom: '12px' }}>
+                      ✅ Done! Found {aiResult.total} events, imported {aiResult.imported}
+                    </h3>
+                    <div style={{ fontSize: '13px', color: '#166534', marginBottom: '16px' }}>
+                      <strong>{aiResult.imported}</strong> new events added to pending queue &nbsp;·&nbsp;
+                      <strong>{aiResult.skipped}</strong> skipped (already exist)
+                    </div>
+                    {aiResult.results?.map((r: any, i: number) => (
+                      <div key={i} style={{ background: 'white', borderRadius: '8px', padding: '10px 14px', marginBottom: '6px', fontSize: '12px' }}>
+                        <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: '2px' }}>{r.title}</div>
+                        <div style={{ color: '#9ca3af' }}>
+                          {r.date}{r.time ? ` · ${r.time}` : ''} &nbsp;·&nbsp; 🏷️ {r.categories || 'community'}{r.tags ? ` · ${r.tags}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                    {aiResult.errors?.length > 0 && (
+                      <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '10px' }}>
+                        ℹ️ Skipped: {aiResult.errors.join(', ')}
+                      </div>
+                    )}
+                    <button onClick={() => router.push('/admin')}
+                      style={{ marginTop: '16px', background: '#1a3d2b', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '999px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>
+                      Review in Moderation Queue →
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ background: '#fff7ed', borderRadius: '12px', padding: '20px', border: '1.5px solid #fed7aa', marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#c2410c', marginBottom: '8px' }}>
+                      No new events found
+                    </h3>
+                    <p style={{ fontSize: '13px', color: '#9a3412', margin: 0 }}>
+                      {aiResult.message || 'Try linking directly to their /events or /calendar page.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1.5px solid #e5e7eb' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', marginBottom: '12px' }}>
+                💡 Mill Valley orgs to try
+              </h3>
+              <div style={{ fontSize: '13px', color: '#4b5563', lineHeight: 2 }}>
+                <strong>Sweetwater Music Hall</strong> — sweetwatermusichall.com/events<br />
+                <strong>Throckmorton Theatre</strong> — throckmortontheatre.org/events<br />
+                <strong>Depot Bookstore & Café</strong> — depotbookstore.com<br />
+                <strong>Mill Valley Rec</strong> — cityofmillvalley.org/recreation
+              </div>
+            </div>
           </div>
         )}
 
-        {/* How to find iCal URLs */}
-        <div style={{background:'white',borderRadius:'12px',padding:'20px',border:'1.5px solid #e5e7eb'}}>
-          <h3 style={{fontSize:'14px',fontWeight:700,color:'#1f2937',marginBottom:'12px'}}>
-            📋 How to find iCal feed URLs
-          </h3>
-          <div style={{fontSize:'13px',color:'#4b5563',lineHeight:1.8}}>
-            <strong>Google Calendar:</strong> Settings → click calendar name → Integrate calendar → copy iCal link<br/>
-            <strong>The City of Mill Valley:</strong> cityofmillvalley.gov/Calendar.aspx → Subscribe<br/>
-            <strong>Mill Valley Library:</strong> Check their website for a calendar export or contact them<br/>
-            <strong>Chamber of Commerce:</strong> mvchamber.com — look for calendar or events export
+        {tab === 'ical' && (
+          <div>
+            <div style={{ marginBottom: '14px' }}>
+              <label style={labelStyle}>Organization</label>
+              <input style={inputStyle} placeholder="e.g. Mill Valley Library"
+                value={icalOrg} onChange={e => setIcalOrg(e.target.value)} />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>iCal Feed URL</label>
+              <input style={inputStyle} placeholder="https://calendar.google.com/calendar/ical/..."
+                value={feedUrl} onChange={e => setFeedUrl(e.target.value)} />
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '5px' }}>
+                Google Calendar: Settings → your calendar → Integrate calendar → copy the iCal link
+              </div>
+            </div>
+
+            {icalError && (
+              <div style={{ background: '#fee2e2', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: '#dc2626' }}>
+                ⚠️ {icalError}
+              </div>
+            )}
+
+            <button onClick={handleIcalImport} disabled={icalLoading}
+              style={{ width: '100%', background: '#1a3d2b', color: 'white', border: 'none', padding: '14px', borderRadius: '999px', fontSize: '15px', fontWeight: 700, cursor: icalLoading ? 'not-allowed' : 'pointer', opacity: icalLoading ? 0.7 : 1, marginBottom: '28px' }}>
+              {icalLoading ? '⏳ Importing & categorizing with Claude…' : '⬇️ Import iCal Feed'}
+            </button>
+
+            {icalResult && (
+              <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '20px', border: '1.5px solid #86efac', marginBottom: '28px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#16803c', marginBottom: '12px' }}>
+                  ✅ Import Complete!
+                </h3>
+                <div style={{ fontSize: '14px', color: '#166534', marginBottom: '16px' }}>
+                  <strong>{icalResult.imported}</strong> events imported &nbsp;·&nbsp;
+                  <strong>{icalResult.skipped}</strong> skipped &nbsp;·&nbsp;
+                  <strong>{icalResult.total}</strong> total in feed
+                </div>
+                {icalResult.results?.map((r: any, i: number) => (
+                  <div key={i} style={{ background: 'white', borderRadius: '8px', padding: '10px 14px', marginBottom: '6px', fontSize: '12px' }}>
+                    <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: '2px' }}>{r.title}</div>
+                    <div style={{ color: '#9ca3af' }}>{r.date} &nbsp;·&nbsp; 🏷️ {r.categories} &nbsp;·&nbsp; {r.tags || 'no tags'}</div>
+                  </div>
+                ))}
+                <button onClick={() => router.push('/admin')}
+                  style={{ marginTop: '16px', background: '#1a3d2b', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '999px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>
+                  Review in Moderation Queue →
+                </button>
+              </div>
+            )}
+
+            <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1.5px solid #e5e7eb' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', marginBottom: '12px' }}>
+                📋 How to find iCal feed URLs
+              </h3>
+              <div style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.8 }}>
+                <strong>Google Calendar:</strong> Settings → click calendar name → Integrate calendar → copy iCal link<br />
+                <strong>City of Mill Valley:</strong> cityofmillvalley.gov/Calendar.aspx → Subscribe<br />
+                <strong>Mill Valley Library:</strong> Check their website for a calendar export<br />
+                <strong>Chamber of Commerce:</strong> mvchamber.com — look for calendar or events export
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )
