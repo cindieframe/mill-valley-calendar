@@ -58,11 +58,11 @@ function parseICal(text: string) {
       timeStr = 'All day'
     }
 
-    // Skip past events
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const eventDate = new Date(dateStr)
-    if (eventDate < today) continue
+   // Skip past events
+const today = new Date()
+today.setHours(0, 0, 0, 0)
+const eventDate = new Date(dateStr + 'T12:00:00')
+if (eventDate < today) continue
 
     events.push({ summary, description, location, dateStr, timeStr, url })
   }
@@ -138,11 +138,39 @@ export async function POST(request: NextRequest) {
     }
     
     const icalText = await response.text()
-    const events = parseICal(icalText)
-    
-    if (events.length === 0) {
-      return NextResponse.json({ error: 'No upcoming events found in feed' }, { status: 400 })
-    }
+const events = parseICal(icalText)
+
+if (events.length === 0) {
+  return NextResponse.json({ error: 'No upcoming events found in feed' }, { status: 400 })
+}
+
+// Check if an org account exists with this canonical name
+// If so, use their display name for events and save canonical_name
+const { data: matchingOrg } = await supabase
+  .from('organizations')
+  .select('id, name, canonical_name')
+  .ilike('canonical_name', organization)
+  .single()
+
+// Also check if org exists with this exact name but no canonical_name set yet
+const { data: exactOrg } = !matchingOrg ? await supabase
+  .from('organizations')
+  .select('id, name, canonical_name')
+  .ilike('name', organization)
+  .single() : { data: null }
+
+const linkedOrg = matchingOrg || exactOrg
+
+// If we found a linked org, save canonical_name if not already set
+if (linkedOrg && !linkedOrg.canonical_name) {
+  await supabase
+    .from('organizations')
+    .update({ canonical_name: organization })
+    .eq('id', linkedOrg.id)
+}
+
+// Use display name if org is linked, otherwise use feed name
+const displayName = linkedOrg ? linkedOrg.name : organization
     
     // Process each event
     let imported = 0
@@ -169,18 +197,18 @@ export async function POST(request: NextRequest) {
         
         // Insert into events table as pending
         const { error } = await supabase.from('events').insert([{
-          title: ev.summary,
-          date: ev.dateStr,
-          time: ev.timeStr,
-          location: ev.location || organization,
-          address: ev.location || '',
-          organization,
-          category: categories,
-          tags,
-          description: ev.description || '',
-          website: ev.url || '',
-          status: 'pending',
-        }])
+  title: ev.summary,
+  date: ev.dateStr,
+  time: ev.timeStr,
+  location: ev.location || displayName,
+  address: ev.location || '',
+  organization: displayName,
+  category: categories,
+  tags,
+  description: ev.description || '',
+  website: ev.url || '',
+  status: 'pending',
+}])
         
         if (!error) {
           imported++
