@@ -84,10 +84,12 @@ async function saveOrgEdit() {
     name: editingOrg.name,
   }).eq('id', editingOrg.id)
   if (!error) {
-    if (originalOrg?.name !== editingOrg.name) {
-      await supabase.from('events').update({ organization: editingOrg.name }).ilike('organization', originalOrg.name)
+    if (originalOrg?.name && originalOrg.name !== editingOrg.name) {
+      await supabase.from('events')
+        .update({ organization: editingOrg.name })
+        .ilike('organization', originalOrg.name)
     }
-    setOrgs(prev => prev.map(o => o.id === editingOrg.id ? editingOrg : o))
+    setOrgs(prev => prev.map(o => o.id === editingOrg.id ? { ...o, name: editingOrg.name } : o))
     setEditingOrg(null)
   }
   setOrgSaving(false)

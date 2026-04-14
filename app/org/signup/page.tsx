@@ -13,6 +13,7 @@ export default function OrgSignup() {
   const [emailSent, setEmailSent] = useState(false)
 const [matchingOrgs, setMatchingOrgs] = useState<string[]>([])
 const [claimedOrg, setClaimedOrg] = useState('')
+const [showClaimWarning, setShowClaimWarning] = useState<string>('')
   const [form, setForm] = useState({
     name: '', email: '', password: '', confirmPassword: '',
     description: '', website: '', phone: '', instagram: '', facebook: '',
@@ -52,6 +53,26 @@ async function searchMatchingOrgs(name: string) {
       setError('Password must be at least 8 characters.')
       return
     }
+   if (!claimedOrg && !showClaimWarning) {
+  const { data: eventData } = await supabase
+    .from('events')
+    .select('organization')
+    .ilike('organization', `%${form.name.trim()}%`)
+    .eq('status', 'approved')
+  if (eventData && eventData.length > 0) {
+    const names = [...new Set(eventData.map((e: any) => e.organization).filter(Boolean))] as string[]
+    const { data: orgData } = await supabase.from('organizations').select('name, canonical_name')
+    const claimedNames = new Set(
+      (orgData || []).flatMap((o: any) => [o.name?.toLowerCase(), o.canonical_name?.toLowerCase()].filter(Boolean))
+    )
+    const available = names.filter(n => !claimedNames.has(n.toLowerCase()))
+    if (available.length > 0) {
+      setShowClaimWarning(available[0])
+      setLoading(false)
+      return
+    }
+  }
+}
     setLoading(true)
     setError('')
 
@@ -141,6 +162,36 @@ setEmailSent(true)
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: 'sans-serif' }}>
+
+      {showClaimWarning && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '440px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '8px' }}>
+              Before you continue…
+            </h3>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px', lineHeight: 1.6 }}>
+              We found an existing org on Townstir that looks similar to yours:
+            </p>
+            <div style={{ background: '#f0fdf4', border: '1.5px solid #16803c', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '14px', fontWeight: 700, color: '#16803c' }}>
+              {showClaimWarning}
+            </div>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '20px' }}>
+              Is this your organization? If so, link your account to claim their existing events.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => { setClaimedOrg(showClaimWarning); set('name', showClaimWarning); setShowClaimWarning(''); handleSignup() }}
+                style={{ flex: 2, background: '#16803c', color: 'white', border: 'none', padding: '11px', borderRadius: '999px', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>
+                ✓ Yes, that's us
+              </button>
+              <button onClick={() => { setShowClaimWarning(''); handleSignup() }}
+                style={{ flex: 1, background: '#f3f4f6', color: '#374151', border: 'none', padding: '11px', borderRadius: '999px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+                No, we're different
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header style={{ background: '#1a3d2b', padding: '14px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <span style={{ fontWeight: 800, fontSize: '22px', color: 'white', letterSpacing: '-1px' }}>town</span>
@@ -169,7 +220,7 @@ setEmailSent(true)
   value={form.name} onChange={e => { set('name', e.target.value); setClaimedOrg(''); searchMatchingOrgs(e.target.value) }} />
 {matchingOrgs.length > 0 && !claimedOrg && (
   <div style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '8px', marginBottom: '8px', overflow: 'hidden' }}>
-    <div style={{ padding: '8px 14px', fontSize: '11px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.8px', background: '#f9fafb' }}>
+    <div style={{ padding: '8px 14px', fontSize: '11px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.8px', background: '#f9fafb' }}>
       Is your org already on Townstir? Click to claim it:
     </div>
     {matchingOrgs.map(org => (
