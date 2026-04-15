@@ -275,10 +275,36 @@ if (!recipientEmail && ev.organization) {
         <input style={inputStyle} value={editingEvent.address || ''} onChange={e => setEditingEvent({ ...editingEvent, address: e.target.value })} />
         <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Organization</label>
         <input style={inputStyle} value={editingEvent.organization || ''} onChange={e => setEditingEvent({ ...editingEvent, organization: e.target.value })} />
-        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Category</label>
-        <input style={inputStyle} value={editingEvent.category || ''} placeholder="e.g. outdoors,classes" onChange={e => setEditingEvent({ ...editingEvent, category: e.target.value })} />
+<label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Category</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+          {['outdoors','arts','food','community','family','classes','gov'].map(cat => {
+            const active = (editingEvent.category || '').split(',').map((c: string) => c.trim()).includes(cat)
+            return (
+              <button key={cat} type="button" onClick={() => {
+                const current = (editingEvent.category || '').split(',').map((c: string) => c.trim()).filter(Boolean)
+                const next = active ? current.filter((c: string) => c !== cat) : [...current, cat]
+                setEditingEvent({ ...editingEvent, category: next.join(',') })
+              }} style={{ padding: '7px 14px', borderRadius: '999px', border: '1.5px solid', borderColor: active ? '#1a3d2b' : '#e5e7eb', background: active ? '#1a3d2b' : 'white', color: active ? 'white' : '#6b7280', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
+                {cat}
+              </button>
+            )
+          })}
+        </div>
         <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Tags</label>
-        <input style={inputStyle} value={editingEvent.tags || ''} placeholder="e.g. free,family,senior" onChange={e => setEditingEvent({ ...editingEvent, tags: e.target.value })} />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+          {['free','family','wellness','reg'].map(tag => {
+            const active = (editingEvent.tags || '').split(',').map((t: string) => t.trim()).includes(tag)
+            return (
+              <button key={tag} type="button" onClick={() => {
+                const current = (editingEvent.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean)
+                const next = active ? current.filter((t: string) => t !== tag) : [...current, tag]
+                setEditingEvent({ ...editingEvent, tags: next.join(',') })
+              }} style={{ padding: '7px 14px', borderRadius: '999px', border: '1.5px solid', borderColor: active ? '#10b981' : '#e5e7eb', background: active ? '#10b981' : 'white', color: active ? 'white' : '#6b7280', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
+                {tag}
+              </button>
+            )
+          })}
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Cost</label>
