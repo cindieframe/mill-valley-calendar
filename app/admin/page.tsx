@@ -82,6 +82,7 @@ async function saveOrgEdit() {
   const originalOrg = orgs.find(o => o.id === editingOrg.id)
   const { error } = await supabase.from('organizations').update({
     name: editingOrg.name,
+   
   }).eq('id', editingOrg.id)
   if (!error) {
     if (originalOrg?.name && originalOrg.name !== editingOrg.name) {
@@ -491,7 +492,7 @@ if (!recipientEmail && ev.organization) {
   <div key={org.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${org.verified ? '#16803c' : '#e5e7eb'}` }}>
     {editingOrg?.id === org.id ? (
       <div>
-        <div style={{ marginBottom: '10px' }}>
+       <div style={{ marginBottom: '10px' }}>
           <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>Org Name</label>
           <input style={{ ...inputStyle, marginBottom: '8px' }} value={editingOrg.name || ''} onChange={e => setEditingOrg({ ...editingOrg, name: e.target.value })} />
           
@@ -514,12 +515,12 @@ if (!recipientEmail && ev.organization) {
             {org.name}
             {org.verified && <span style={{ marginLeft: '8px', background: '#16803c', color: 'white', fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px' }}>✓ Verified</span>}
           </h3>
-          <div style={{ fontSize: '13px', color: '#6b7280' }}>
-            📧 {org.email}
+            <div style={{ fontSize: '13px', color: '#6b7280' }}>
+            {org.email && <>📧 {org.email}</>}
             {org.website && <>&nbsp;·&nbsp; 🌐 {org.website}</>}
           </div>
           {org.canonical_name && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>🔗 Linked to: {org.canonical_name}</div>}
-          {org.ical_feed_url && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>📅 iCal feed connected</div>}
+          {org.ical_feed_url && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>📅 {org.ical_feed_url}</div>}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={() => setEditingOrg({ ...org })}

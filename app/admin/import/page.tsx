@@ -20,10 +20,12 @@ export default function ImportPage() {
   const [icalError, setIcalError] = useState('')
 
   const [savedSources, setSavedSources] = useState<any[]>([])
+  const [savedFeeds, setSavedFeeds] = useState<any[]>([])
   const [reextractingId, setReextractingId] = useState<string | null>(null)
   const [reextractResult, setReextractResult] = useState<any>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  useEffect(() => { loadSavedSources() }, [])
+
+  useEffect(() => { loadSavedSources(); loadSavedFeeds() }, [])
 
   async function loadSavedSources() {
     const { data } = await supabase
@@ -32,6 +34,15 @@ export default function ImportPage() {
       .not('website_url', 'is', null)
       .order('name')
     if (data) setSavedSources(data)
+  }
+
+  async function loadSavedFeeds() {
+    const { data } = await supabase
+      .from('ical_feeds')
+      .select('*')
+      .eq('active', true)
+      .order('organization')
+    if (data) setSavedFeeds(data)
   }
 
   const inputStyle = {
@@ -65,7 +76,6 @@ export default function ImportPage() {
         setAiError(data.error)
       } else {
         setAiResult(data)
-        // Save the URL to the org record
         const { data: orgMatch } = await supabase
           .from('organizations')
           .select('id')
@@ -77,7 +87,6 @@ export default function ImportPage() {
             .update({ website_url: websiteUrl })
             .eq('id', orgMatch.id)
         } else {
-          // Save as a new org record just for tracking
           await supabase
             .from('organizations')
             .insert([{ name: aiOrg, website_url: websiteUrl }])
@@ -106,7 +115,8 @@ export default function ImportPage() {
     }
     setReextractingId(null)
   }
-async function handleDeleteSource(org: any) {
+
+  async function handleDeleteSource(org: any) {
     setDeletingId(org.id)
     try {
       const response = await fetch('/api/delete-source', {
@@ -123,6 +133,7 @@ async function handleDeleteSource(org: any) {
     }
     setDeletingId(null)
   }
+
   async function handleIcalImport() {
     if (!feedUrl || !icalOrg) {
       setIcalError('Please enter both a feed URL and organization name.')
@@ -148,6 +159,7 @@ async function handleDeleteSource(org: any) {
           last_synced: new Date().toISOString(),
           active: true,
         }])
+        loadSavedFeeds()
       }
     } catch {
       setIcalError('Something went wrong. Please try again.')
@@ -313,6 +325,10 @@ async function handleDeleteSource(org: any) {
         {/* ICAL TAB */}
         {tab === 'ical' && (
           <div>
+            <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', marginBottom: '16px' }}>
+              ➕ Add New iCal Feed
+            </h3>
+
             <div style={{ marginBottom: '14px' }}>
               <label style={labelStyle}>Organization</label>
               <input style={inputStyle} placeholder="e.g. Mill Valley Library"
@@ -360,15 +376,33 @@ async function handleDeleteSource(org: any) {
               </div>
             )}
 
-            <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1.5px solid #e5e7eb' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', marginBottom: '12px' }}>📋 How to find iCal feed URLs</h3>
-              <div style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.8 }}>
-                <strong>Google Calendar:</strong> Settings → click calendar name → Integrate calendar → copy iCal link<br />
-                <strong>City of Mill Valley:</strong> cityofmillvalley.gov/Calendar.aspx → Subscribe<br />
-                <strong>Mill Valley Library:</strong> Check their website for a calendar export<br />
-                <strong>Chamber of Commerce:</strong> mvchamber.com — look for calendar or events export
+            {/* Active iCal Feeds */}
+            {savedFeeds.length > 0 && (
+              <div style={{ marginTop: '32px' }}>
+                <hr style={{ border: 'none', borderTop: '1.5px solid #e5e7eb', margin: '24px 0' }} />
+                <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', marginBottom: '12px' }}>
+                  📅 Active iCal Feeds — Auto-synced every 6 hours
+                </h3>
+                {savedFeeds.map((feed, i) => (
+                  <div key={i} style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '14px 16px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{feed.organization}</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>{feed.url}</div>
+                        {feed.last_synced && (
+                          <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+                            Last synced: {new Date(feed.last_synced).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '11px', background: '#f0fdf4', color: '#16803c', border: '1.5px solid #86efac', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
+                        ✓ Active
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
