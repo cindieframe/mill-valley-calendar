@@ -1,11 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server'
+import ICAL from 'ical.js'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '../../supabase'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
+async function detectIcalFeed(url: string): Promise<string | null> {
+  const base = new URL(url)
+  const origin = base.origin
+  const pathname = base.pathname.replace(/\/$/, '')
 
+  const candidates = [
+    // Squarespace
+    `${origin}${pathname}?format=ical`,
+    `${origin}/events?format=ical`,
+    // WordPress / The Events Calendar
+    `${origin}/events/?ical=1`,
+    `${origin}${pathname}/?ical=1`,
+    `${origin}/events/feed/ical`,
+    // Generic
+    `${origin}/calendar.ics`,
+    `${origin}/events.ics`,
+    `${origin}/feed.ics`,
+    `${origin}${pathname}.ics`,
+  ]
+
+  for (const candidate of candidates) {
+    try {
+      const res = await fetch(candidate, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!res.ok) continue
+      const text = await res.text()
+      if (text.includes('BEGIN:VCALENDAR') && text.includes('BEGIN:VEVENT')) {
+        return candidate
+      }
+    } catch {
+      continue
+    }
+  }
+
+  // Also scan the original page source for any .ics or webcal links
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (res.ok) {
+      const html = await res.text()
+      const icsMatch = html.match(/["'](https?:\/\/[^"']+\.ics[^"']*?)["']/i)
+      const webcalMatch = html.match(/["'](webcal:\/\/[^"']+?)["']/i)
+      const feedUrl = icsMatch?.[1] || webcalMatch?.[1]?.replace('webcal://', 'https://')
+      if (feedUrl) {
+        const check = await fetch(feedUrl, { signal: AbortSignal.timeout(5000) })
+        const text = await check.text()
+        if (text.includes('BEGIN:VCALENDAR')) return feedUrl
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null
+}
 export async function POST(request: NextRequest) {
   try {
     const { websiteUrl, organization } = await request.json()
@@ -14,6 +73,69 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'websiteUrl and organization required' }, { status: 400 })
     }
 
+        // Step 1 — try to find an iCal feed first
+    const detectedFeed = await detectIcalFeed(websiteUrl)
+    if (detectedFeed) {
+      try {
+        const feedRes = await fetch(detectedFeed, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
+          signal: AbortSignal.timeout(10000),
+        })
+        const feedText = await feedRes.text()
+        const jcalData = ICAL.parse(feedText)
+        const comp = new ICAL.Component(jcalData)
+        const vevents = comp.getAllSubcomponents('vevent')
+        const today = new Date().toISOString().split('T')[0]
+        let imported = 0
+        let skipped = 0
+        const results = []
+
+        for (const vevent of vevents) {
+          const ev = new ICAL.Event(vevent)
+          const start = ev.startDate?.toJSDate()
+          const dateStr = start ? new Date(start).toISOString().split('T')[0] : null
+          if (!dateStr || dateStr < today) { skipped++; continue }
+
+          const { data: existing } = await supabase
+            .from('events').select('id').eq('title', ev.summary || '').eq('date', dateStr).single()
+          if (existing) { skipped++; continue }
+
+          const timeStr = start ? new Date(start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : null
+
+          const { error } = await supabase.from('events').insert([{
+            title: ev.summary || 'Untitled Event',
+            date: dateStr,
+            time: timeStr,
+            location: ev.location || organization,
+            address: ev.location || '',
+            organization: organization,
+            category: 'community',
+            tags: '',
+            description: ev.description || '',
+            website: vevent.getFirstPropertyValue('url') || websiteUrl,
+            status: 'pending',
+          }])
+
+          if (!error) {
+            imported++
+            results.push({ title: ev.summary, date: dateStr, time: timeStr, categories: 'community', tags: '' })
+          } else {
+            skipped++
+          }
+        }
+
+        return NextResponse.json({
+          success: true, imported, skipped,
+          total: imported + skipped, results, errors: [],
+          feedDetected: detectedFeed,
+          message: `✅ Found iCal feed automatically! Used ${detectedFeed} instead of scraping.`
+        })
+      } catch {
+        // iCal parse failed — fall through to Claude
+      }
+    }
+
+    // Step 2 — no feed found, fall back to Claude extraction
     let pageText = ''
     try {
       const response = await fetch(websiteUrl, {

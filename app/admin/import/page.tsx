@@ -22,7 +22,7 @@ export default function ImportPage() {
   const [savedSources, setSavedSources] = useState<any[]>([])
   const [reextractingId, setReextractingId] = useState<string | null>(null)
   const [reextractResult, setReextractResult] = useState<any>(null)
-
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   useEffect(() => { loadSavedSources() }, [])
 
   async function loadSavedSources() {
@@ -106,7 +106,23 @@ export default function ImportPage() {
     }
     setReextractingId(null)
   }
-
+async function handleDeleteSource(org: any) {
+    setDeletingId(org.id)
+    try {
+      const response = await fetch('/api/delete-source', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: org.id }),
+      })
+      const data = await response.json()
+      if (!data.error) {
+        await loadSavedSources()
+      }
+    } catch {
+      console.error('Delete failed')
+    }
+    setDeletingId(null)
+  }
   async function handleIcalImport() {
     if (!feedUrl || !icalOrg) {
       setIcalError('Please enter both a feed URL and organization name.')
@@ -223,6 +239,11 @@ export default function ImportPage() {
                     <div style={{ fontSize: '13px', color: '#166534', marginBottom: '12px' }}>
                       {aiResult.skipped} skipped (already exist)
                     </div>
+                    {aiResult.feedDetected && (
+                      <div style={{ fontSize: '12px', color: '#166534', background: '#dcfce7', borderRadius: '6px', padding: '6px 10px', marginBottom: '10px' }}>
+                        📡 iCal feed auto-detected: {aiResult.feedDetected}
+                      </div>
+                    )}
                     {aiResult.results?.map((r: any, i: number) => (
                       <div key={i} style={{ background: 'white', borderRadius: '8px', padding: '10px 14px', marginBottom: '6px', fontSize: '12px' }}>
                         <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: '2px' }}>{r.title}</div>
@@ -258,12 +279,20 @@ export default function ImportPage() {
                         <div style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{org.name}</div>
                         <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>{org.website_url}</div>
                       </div>
-                      <button
-                        onClick={() => handleReextract(org)}
-                        disabled={reextractingId === org.id}
-                        style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: reextractingId === org.id ? 'not-allowed' : 'pointer', opacity: reextractingId === org.id ? 0.7 : 1, whiteSpace: 'nowrap' as const }}>
-                        {reextractingId === org.id ? '🤖 Reading…' : '🔁 Re-extract'}
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => handleReextract(org)}
+                          disabled={reextractingId === org.id}
+                          style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: reextractingId === org.id ? 'not-allowed' : 'pointer', opacity: reextractingId === org.id ? 0.7 : 1, whiteSpace: 'nowrap' as const }}>
+                          {reextractingId === org.id ? '🤖 Reading…' : '🔁 Re-extract'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSource(org)}
+                          disabled={deletingId === org.id}
+                          style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '8px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: deletingId === org.id ? 'not-allowed' : 'pointer', opacity: deletingId === org.id ? 0.7 : 1, whiteSpace: 'nowrap' as const }}>
+                          {deletingId === org.id ? 'Deleting…' : '🗑️ Delete'}
+                        </button>
+                      </div>
                     </div>
                     {reextractResult?.orgId === org.id && (
                       <div style={{ marginTop: '10px', fontSize: '12px', color: reextractResult.error ? '#dc2626' : '#16803c', background: reextractResult.error ? '#fee2e2' : '#f0fdf4', borderRadius: '6px', padding: '8px 12px' }}>
