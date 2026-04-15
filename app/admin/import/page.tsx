@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
 
@@ -18,6 +18,21 @@ export default function ImportPage() {
   const [icalLoading, setIcalLoading] = useState(false)
   const [icalResult, setIcalResult] = useState<any>(null)
   const [icalError, setIcalError] = useState('')
+
+  const [savedSources, setSavedSources] = useState<any[]>([])
+  const [reextractingId, setReextractingId] = useState<string | null>(null)
+  const [reextractResult, setReextractResult] = useState<any>(null)
+
+  useEffect(() => { loadSavedSources() }, [])
+
+  async function loadSavedSources() {
+    const { data } = await supabase
+      .from('organizations')
+      .select('id, name, website_url')
+      .not('website_url', 'is', null)
+      .order('name')
+    if (data) setSavedSources(data)
+  }
 
   const inputStyle = {
     width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px',
@@ -50,11 +65,46 @@ export default function ImportPage() {
         setAiError(data.error)
       } else {
         setAiResult(data)
+        // Save the URL to the org record
+        const { data: orgMatch } = await supabase
+          .from('organizations')
+          .select('id')
+          .ilike('name', aiOrg)
+          .single()
+        if (orgMatch) {
+          await supabase
+            .from('organizations')
+            .update({ website_url: websiteUrl })
+            .eq('id', orgMatch.id)
+        } else {
+          // Save as a new org record just for tracking
+          await supabase
+            .from('organizations')
+            .insert([{ name: aiOrg, website_url: websiteUrl }])
+        }
+        loadSavedSources()
       }
     } catch {
       setAiError('Something went wrong. Please try again.')
     }
     setAiLoading(false)
+  }
+
+  async function handleReextract(org: any) {
+    setReextractingId(org.id)
+    setReextractResult(null)
+    try {
+      const response = await fetch('/api/extract-events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ websiteUrl: org.website_url, organization: org.name }),
+      })
+      const data = await response.json()
+      setReextractResult({ orgId: org.id, ...data })
+    } catch {
+      setReextractResult({ orgId: org.id, error: 'Something went wrong.' })
+    }
+    setReextractingId(null)
   }
 
   async function handleIcalImport() {
@@ -118,6 +168,7 @@ export default function ImportPage() {
           Add events from any org website or iCal feed. Imported events go to the pending queue for your review.
         </p>
 
+        {/* Tabs */}
         <div style={{ display: 'flex', marginBottom: '28px', border: '1.5px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
           <button onClick={() => setTab('ai')}
             style={{ flex: 1, padding: '12px', border: 'none', borderRight: '1.5px solid #e5e7eb', background: tab === 'ai' ? '#1a3d2b' : 'white', color: tab === 'ai' ? 'white' : '#6b7280', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}>
@@ -129,21 +180,22 @@ export default function ImportPage() {
           </button>
         </div>
 
+        {/* AI TAB */}
         {tab === 'ai' && (
           <div>
             <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '10px', padding: '14px 18px', marginBottom: '24px', fontSize: '13px', color: '#166534', lineHeight: 1.6 }}>
-              <strong>How this works:</strong> Paste in any org's events page (like <em>sweetwatermusichall.com/events</em>), and Claude will read the page and pull out all upcoming events automatically. No iCal feed needed.
+              <strong>How this works:</strong> Paste in any org's events page and Claude will read it and pull out all upcoming events automatically. No iCal feed needed.
             </div>
 
             <div style={{ marginBottom: '14px' }}>
               <label style={labelStyle}>Organization Name</label>
-              <input style={inputStyle} placeholder="e.g. Sweetwater Music Hall"
+              <input style={inputStyle} placeholder="e.g. Depot Bookstore & Cafe"
                 value={aiOrg} onChange={e => setAiOrg(e.target.value)} />
             </div>
 
             <div style={{ marginBottom: '20px' }}>
               <label style={labelStyle}>Events Page URL</label>
-              <input style={inputStyle} placeholder="e.g. https://sweetwatermusichall.com/events"
+              <input style={inputStyle} placeholder="e.g. https://depotbookstore.com/events"
                 value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} />
               <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '5px' }}>
                 Tip: link directly to their /events or /calendar page for best results
@@ -164,37 +216,27 @@ export default function ImportPage() {
             {aiResult && (
               <div>
                 {aiResult.imported > 0 ? (
-                  <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '20px', border: '1.5px solid #86efac', marginBottom: '16px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#16803c', marginBottom: '12px' }}>
-                      ✅ Done! Found {aiResult.total} events, imported {aiResult.imported}
+                  <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '20px', border: '1.5px solid #86efac', marginBottom: '24px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#16803c', marginBottom: '8px' }}>
+                      ✅ Done! Imported {aiResult.imported} of {aiResult.total} events
                     </h3>
-                    <div style={{ fontSize: '13px', color: '#166534', marginBottom: '16px' }}>
-                      <strong>{aiResult.imported}</strong> new events added to pending queue &nbsp;·&nbsp;
-                      <strong>{aiResult.skipped}</strong> skipped (already exist)
+                    <div style={{ fontSize: '13px', color: '#166534', marginBottom: '12px' }}>
+                      {aiResult.skipped} skipped (already exist)
                     </div>
                     {aiResult.results?.map((r: any, i: number) => (
                       <div key={i} style={{ background: 'white', borderRadius: '8px', padding: '10px 14px', marginBottom: '6px', fontSize: '12px' }}>
                         <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: '2px' }}>{r.title}</div>
-                        <div style={{ color: '#9ca3af' }}>
-                          {r.date}{r.time ? ` · ${r.time}` : ''} &nbsp;·&nbsp; 🏷️ {r.categories || 'community'}{r.tags ? ` · ${r.tags}` : ''}
-                        </div>
+                        <div style={{ color: '#9ca3af' }}>{r.date}{r.time ? ` · ${r.time}` : ''} &nbsp;·&nbsp; 🏷️ {r.categories || 'community'}</div>
                       </div>
                     ))}
-                    {aiResult.errors?.length > 0 && (
-                      <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '10px' }}>
-                        ℹ️ Skipped: {aiResult.errors.join(', ')}
-                      </div>
-                    )}
                     <button onClick={() => router.push('/admin')}
-                      style={{ marginTop: '16px', background: '#1a3d2b', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '999px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>
+                      style={{ marginTop: '12px', background: '#1a3d2b', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '999px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>
                       Review in Moderation Queue →
                     </button>
                   </div>
                 ) : (
-                  <div style={{ background: '#fff7ed', borderRadius: '12px', padding: '20px', border: '1.5px solid #fed7aa', marginBottom: '16px' }}>
-                    <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#c2410c', marginBottom: '8px' }}>
-                      No new events found
-                    </h3>
+                  <div style={{ background: '#fff7ed', borderRadius: '12px', padding: '20px', border: '1.5px solid #fed7aa', marginBottom: '24px' }}>
+                    <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#c2410c', marginBottom: '8px' }}>No new events found</h3>
                     <p style={{ fontSize: '13px', color: '#9a3412', margin: 0 }}>
                       {aiResult.message || 'Try linking directly to their /events or /calendar page.'}
                     </p>
@@ -203,20 +245,43 @@ export default function ImportPage() {
               </div>
             )}
 
-            <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1.5px solid #e5e7eb' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', marginBottom: '12px' }}>
-                💡 Mill Valley orgs to try
-              </h3>
-              <div style={{ fontSize: '13px', color: '#4b5563', lineHeight: 2 }}>
-                <strong>Sweetwater Music Hall</strong> — sweetwatermusichall.com/events<br />
-                <strong>Throckmorton Theatre</strong> — throckmortontheatre.org/events<br />
-                <strong>Depot Bookstore & Café</strong> — depotbookstore.com<br />
-                <strong>Mill Valley Rec</strong> — cityofmillvalley.org/recreation
+            {/* Saved Sources */}
+            {savedSources.length > 0 && (
+              <div style={{ marginTop: '8px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', marginBottom: '12px' }}>
+                  🔁 Saved Sources — Re-extract anytime
+                </h3>
+                {savedSources.map(org => (
+                  <div key={org.id} style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '14px 16px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{org.name}</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>{org.website_url}</div>
+                      </div>
+                      <button
+                        onClick={() => handleReextract(org)}
+                        disabled={reextractingId === org.id}
+                        style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: reextractingId === org.id ? 'not-allowed' : 'pointer', opacity: reextractingId === org.id ? 0.7 : 1, whiteSpace: 'nowrap' as const }}>
+                        {reextractingId === org.id ? '🤖 Reading…' : '🔁 Re-extract'}
+                      </button>
+                    </div>
+                    {reextractResult?.orgId === org.id && (
+                      <div style={{ marginTop: '10px', fontSize: '12px', color: reextractResult.error ? '#dc2626' : '#16803c', background: reextractResult.error ? '#fee2e2' : '#f0fdf4', borderRadius: '6px', padding: '8px 12px' }}>
+                        {reextractResult.error
+                          ? `⚠️ ${reextractResult.error}`
+                          : reextractResult.imported > 0
+                            ? `✅ Imported ${reextractResult.imported} new events!`
+                            : 'No new events found — all up to date!'}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            </div>
+            )}
           </div>
         )}
 
+        {/* ICAL TAB */}
         {tab === 'ical' && (
           <div>
             <div style={{ marginBottom: '14px' }}>
@@ -247,9 +312,7 @@ export default function ImportPage() {
 
             {icalResult && (
               <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '20px', border: '1.5px solid #86efac', marginBottom: '28px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#16803c', marginBottom: '12px' }}>
-                  ✅ Import Complete!
-                </h3>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#16803c', marginBottom: '12px' }}>✅ Import Complete!</h3>
                 <div style={{ fontSize: '14px', color: '#166534', marginBottom: '16px' }}>
                   <strong>{icalResult.imported}</strong> events imported &nbsp;·&nbsp;
                   <strong>{icalResult.skipped}</strong> skipped &nbsp;·&nbsp;
@@ -269,9 +332,7 @@ export default function ImportPage() {
             )}
 
             <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1.5px solid #e5e7eb' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', marginBottom: '12px' }}>
-                📋 How to find iCal feed URLs
-              </h3>
+              <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', marginBottom: '12px' }}>📋 How to find iCal feed URLs</h3>
               <div style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.8 }}>
                 <strong>Google Calendar:</strong> Settings → click calendar name → Integrate calendar → copy iCal link<br />
                 <strong>City of Mill Valley:</strong> cityofmillvalley.gov/Calendar.aspx → Subscribe<br />
