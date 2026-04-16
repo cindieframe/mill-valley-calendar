@@ -37,12 +37,13 @@ export default function OrgSignup() {
 
     const { data: orgData } = await supabase
       .from('organizations')
-      .select('name, canonical_name, user_id')
+      .select('name, user_id')
 
     const claimedWithAccount = new Set(
       (orgData || [])
         .filter((o: any) => o.user_id)
-        .flatMap((o: any) => [o.name?.toLowerCase(), o.canonical_name?.toLowerCase()].filter(Boolean))
+        .map((o: any) => o.name?.toLowerCase())
+        .filter(Boolean)
     )
 
     const unclaimed = allNames.filter(n => !claimedWithAccount.has(n.toLowerCase()))
@@ -76,11 +77,12 @@ export default function OrgSignup() {
         .eq('status', 'approved')
       if (eventData && eventData.length > 0) {
         const names = [...new Set(eventData.map((e: any) => e.organization).filter(Boolean))] as string[]
-        const { data: orgData } = await supabase.from('organizations').select('name, canonical_name, user_id')
+        const { data: orgData } = await supabase.from('organizations').select('name, user_id')
         const claimedNames = new Set(
           (orgData || [])
             .filter((o: any) => o.user_id)
-            .flatMap((o: any) => [o.name?.toLowerCase(), o.canonical_name?.toLowerCase()].filter(Boolean))
+            .map((o: any) => o.name?.toLowerCase())
+            .filter(Boolean)
         )
         const available = names.filter(n => !claimedNames.has(n.toLowerCase()))
         if (available.length > 0) {
@@ -106,7 +108,6 @@ export default function OrgSignup() {
           org_phone: form.phone,
           org_instagram: form.instagram,
           org_facebook: form.facebook,
-          org_canonical_name: claimedOrg || '',
         }
       }
     })
@@ -128,11 +129,18 @@ export default function OrgSignup() {
         phone: form.phone || '',
         instagram: form.instagram || '',
         facebook: form.facebook || '',
-        canonical_name: claimedOrg || '',
       }])
 
     if (orgError) {
       console.error('Org creation error:', orgError)
+    }
+
+    // If org claimed existing events, rename those events to match the new org name
+    if (claimedOrg && claimedOrg !== form.name) {
+      await supabase
+        .from('events')
+        .update({ organization: form.name })
+        .ilike('organization', claimedOrg)
     }
 
     setLoading(false)
@@ -194,10 +202,10 @@ export default function OrgSignup() {
               {showClaimWarning}
             </div>
             <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '20px' }}>
-              Is this your organization? If so, link your account to claim their existing events.
+              Is this your organization? If so, we'll link your account and update all existing events to use your org name.
             </p>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => { setClaimedOrg(showClaimWarning); set('name', showClaimWarning); setShowClaimWarning(''); handleSignup() }}
+              <button onClick={() => { setClaimedOrg(showClaimWarning); setShowClaimWarning(''); handleSignup() }}
                 style={{ flex: 2, background: '#16803c', color: 'white', border: 'none', padding: '11px', borderRadius: '999px', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>
                 ✓ Yes, that's us
               </button>
@@ -269,7 +277,7 @@ export default function OrgSignup() {
                   ⚠️ This organization already has an account on Townstir.
                 </div>
                 <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                  If you are a member, please contact your account administrator or email <strong>cindieframe@gmail.com</strong> for access.
+                  If you are a member, please contact your account administrator or email <strong>townstir.admin@gmail.com</strong> for access.
                 </div>
               </div>
             )}
@@ -278,7 +286,7 @@ export default function OrgSignup() {
 
         {claimedOrg && (
           <div style={{ background: '#f0fdf4', border: '1.5px solid #16803c', borderRadius: '8px', padding: '10px 14px', marginBottom: '8px', fontSize: '13px', color: '#16803c', fontWeight: 600 }}>
-            ✅ You'll be linked to existing events for: {claimedOrg}
+            ✅ Your account will be linked to existing events for: {claimedOrg}
           </div>
         )}
 
