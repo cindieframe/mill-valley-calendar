@@ -65,6 +65,11 @@ export default function OrgDashboard() {
   const [eventSaving, setEventSaving] = useState(false)
   const [eventError, setEventError] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+  const [showContactModal, setShowContactModal] = useState(false)
+  const [contactSubject, setContactSubject] = useState('')
+  const [contactMessage, setContactMessage] = useState('')
+  const [contactSending, setContactSending] = useState(false)
+  const [contactSent, setContactSent] = useState(false)
   const locationInputRef = useRef<any>(null)
   const autocompleteRef = useRef<any>(null)
 
@@ -317,7 +322,33 @@ export default function OrgDashboard() {
     setSaving(false)
     setTimeout(() => setSuccess(''), 5000)
   }
-
+async function handleContactAdmin() {
+    if (!contactSubject || !contactMessage) return
+    setContactSending(true)
+    await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: 'townstir.admin@gmail.com',
+        subject: `Message from ${org.name}: ${contactSubject}`,
+        html: `
+          <p><strong>From:</strong> ${org.name} (${org.email})</p>
+          <p><strong>Subject:</strong> ${contactSubject}</p>
+          <br/>
+          ${contactMessage.split('\n').map((line: string) => `<p>${line}</p>`).join('')}
+        `,
+        replyTo: org.email,
+      }),
+    })
+    setContactSending(false)
+    setContactSent(true)
+    setTimeout(() => {
+      setShowContactModal(false)
+      setContactSubject('')
+      setContactMessage('')
+      setContactSent(false)
+    }, 2000)
+  }
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/')
@@ -364,6 +395,10 @@ export default function OrgDashboard() {
           <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginLeft: '12px' }}>{org.name}</span>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={() => setShowContactModal(true)}
+            style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
+            ✉️ Contact
+          </button>
           <button onClick={() => router.push('/')}
             style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
             ← Calendar
@@ -553,6 +588,51 @@ export default function OrgDashboard() {
           style={{ width: '100%', background: '#1a3d2b', color: 'white', border: 'none', padding: '14px', borderRadius: '999px', fontSize: '15px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
           {saving ? 'Saving…' : '✓ Save Profile'}
         </button>
+           {/* Contact Admin Modal */}
+      {showContactModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '480px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>
+              ✉️ Contact Townstir
+            </h3>
+            <p style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '16px' }}>
+              Have a question or need help? Send us a message and we'll get back to you.
+            </p>
+            {contactSent ? (
+              <div style={{ textAlign: 'center', padding: '20px', fontSize: '15px', color: '#16803c', fontWeight: 700 }}>
+                ✅ Message sent!
+              </div>
+            ) : (
+              <>
+                <label style={labelStyle}>Subject</label>
+                <input
+                  style={{ ...inputStyle, marginBottom: '12px' }}
+                  placeholder="e.g. Question about my listing"
+                  value={contactSubject}
+                  onChange={e => setContactSubject(e.target.value)}
+                />
+                <label style={labelStyle}>Message</label>
+                <textarea
+                  placeholder="Write your message here…"
+                  value={contactMessage}
+                  onChange={e => setContactMessage(e.target.value)}
+                  style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', fontFamily: 'sans-serif', outline: 'none', minHeight: '120px', resize: 'vertical', boxSizing: 'border-box' as const, marginBottom: '16px' }}
+                />
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button onClick={() => { setShowContactModal(false); setContactSubject(''); setContactMessage('') }}
+                    style={{ flex: 1, background: '#f3f4f6', color: '#374151', border: 'none', padding: '11px', borderRadius: '999px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                  <button onClick={handleContactAdmin} disabled={contactSending || !contactSubject || !contactMessage}
+                    style={{ flex: 2, background: '#1a3d2b', color: 'white', border: 'none', padding: '11px', borderRadius: '999px', fontSize: '14px', fontWeight: 700, cursor: contactSending ? 'not-allowed' : 'pointer', opacity: contactSending || !contactSubject || !contactMessage ? 0.7 : 1 }}>
+                    {contactSending ? 'Sending…' : 'Send Message'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       </div>
 
       {/* Event Modal */}
