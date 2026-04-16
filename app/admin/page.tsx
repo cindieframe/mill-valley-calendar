@@ -82,7 +82,7 @@ async function saveOrgEdit() {
   const originalOrg = orgs.find(o => o.id === editingOrg.id)
   const { error } = await supabase.from('organizations').update({
     name: editingOrg.name,
-   
+    canonical_name: editingOrg.canonical_name || null,
   }).eq('id', editingOrg.id)
   if (!error) {
     if (originalOrg?.name && originalOrg.name !== editingOrg.name) {
@@ -493,8 +493,11 @@ if (!recipientEmail && ev.organization) {
     {editingOrg?.id === org.id ? (
       <div>
        <div style={{ marginBottom: '10px' }}>
-          <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>Org Name</label>
+<label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>Org Name</label>
           <input style={{ ...inputStyle, marginBottom: '8px' }} value={editingOrg.name || ''} onChange={e => setEditingOrg({ ...editingOrg, name: e.target.value })} />
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>Linked To (Canonical Name)</label>
+          <input style={{ ...inputStyle, marginBottom: '4px' }} placeholder="e.g. Art Commission Meetings" value={editingOrg.canonical_name || ''} onChange={e => setEditingOrg({ ...editingOrg, canonical_name: e.target.value })} />
+          <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>The name the iCal feed uses to identify this org. Links their account to existing events. Must match exactly.</div>
           
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
