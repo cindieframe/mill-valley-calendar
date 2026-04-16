@@ -1,12 +1,44 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
 import ReCAPTCHA from 'react-google-recaptcha'
 
 export default function PostEvent() {
   const recaptchaRef = useRef<any>(null)
+    const locationInputRef = useRef<any>(null)
+  const autocompleteRef = useRef<any>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const loadGoogleMaps = () => {
+      if ((window as any).google?.maps?.places) {
+        initAutocomplete()
+        return
+      }
+      const script = document.createElement('script')
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`
+      script.async = true
+      script.onload = initAutocomplete
+      document.head.appendChild(script)
+    }
+    const initAutocomplete = () => {
+      if (!locationInputRef.current) return
+      const autocomplete = new (window as any).google.maps.places.Autocomplete(
+        locationInputRef.current,
+        { types: ['establishment', 'geocode'], componentRestrictions: { country: 'us' } }
+      )
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace()
+        if (place.name) update('location', place.name)
+        if (place.formatted_address) update('address', place.formatted_address)
+      })
+      autocompleteRef.current = autocomplete
+    }
+    loadGoogleMaps()
+  }, [])
+
   const router = useRouter()
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -315,9 +347,17 @@ export default function PostEvent() {
 
         <div style={{marginBottom:'16px'}}>
           <label style={labelStyle}>Venue / Location Name *</label>
-          <input style={inputStyle} placeholder="e.g. Old Mill Park"
-            value={form.location} onChange={e=>update('location',e.target.value)}/>
+          <input
+            ref={locationInputRef}
+            style={inputStyle}
+            placeholder="e.g. Old Mill Park"
+            value={form.location}
+            onChange={e=>update('location',e.target.value)}/>
+          <div style={{fontSize:'11px',color:'#9ca3af',marginTop:'4px'}}>
+            Start typing a venue name and select from the dropdown to auto-fill the address.
+          </div>
         </div>
+
 
         <div style={{marginBottom:'16px'}}>
           <label style={labelStyle}>Full Address</label>
