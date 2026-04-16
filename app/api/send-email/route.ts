@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 export async function POST(req: Request) {
-  const { to, subject, html } = await req.json()
+  const { to, subject, html, replyTo } = await req.json()
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -13,6 +13,7 @@ export async function POST(req: Request) {
       to,
       subject,
       html,
+      reply_to: replyTo || 'townstir.admin@gmail.com',
     }),
   })
   const data = await res.json()
