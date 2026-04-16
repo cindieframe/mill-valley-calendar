@@ -136,14 +136,13 @@ export default function OrgDashboard() {
     if (error || !data) { router.push('/org/login'); return }
     setOrg(data)
     setLoading(false)
-    loadEvents(data.name, data.canonical_name)
+    loadEvents(data.name)
   }
 
-  async function loadEvents(orgName: string, canonicalName?: string) {
+async function loadEvents(orgName: string) {
   setEventsLoading(true)
-  const lookupName = canonicalName || orgName
   const { data, error } = await supabase
-    .from('events').select('*').ilike('organization', lookupName)
+    .from('events').select('*').ilike('organization', orgName)
     .order('date', { ascending: true })
   if (!error && data) setEvents(data)
   setEventsLoading(false)
