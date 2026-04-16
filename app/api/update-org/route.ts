@@ -1,0 +1,32 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+const adminSupabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+export async function POST(request: NextRequest) {
+  try {
+    const { id, name, originalName } = await request.json()
+    if (!id || !name) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+
+    const { error } = await adminSupabase
+      .from('organizations')
+      .update({ name })
+      .eq('id', id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    if (originalName && originalName !== name) {
+      await adminSupabase
+        .from('events')
+        .update({ organization: name })
+        .ilike('organization', originalName)
+    }
+
+    return NextResponse.json({ success: true })
+  } catch {
+    return NextResponse.json({ error: 'Something went wrong' }, { status: 500 })
+  }
+}

@@ -30,7 +30,7 @@ const [orgSaving, setOrgSaving] = useState(false)
   const [filterOrg, setFilterOrg] = useState('')
 const [filterCategory, setFilterCategory] = useState('')
 const [filterDate, setFilterDate] = useState('')
-
+const [orgEventCounts, setOrgEventCounts] = useState<Record<string, number>>({})
   useEffect(() => { checkSession() }, [])
 
   async function checkSession() {
@@ -71,27 +71,49 @@ const [filterDate, setFilterDate] = useState('')
     setLoading(false)
   }
 
-  async function loadOrgs() {
+    async function loadOrgs() {
     setLoading(true)
     const { data, error } = await supabase.from('organizations').select('*').order('name', { ascending: true })
-    if (!error) setOrgs(data || [])
+    if (!error && data) {
+      setOrgs(data)
+      const { data: eventData } = await supabase
+        .from('events')
+        .select('organization')
+        .eq('status', 'approved')
+      if (eventData) {
+        const counts: Record<string, number> = {}
+        for (const org of data) {
+          counts[org.id] = eventData.filter(e =>
+            e.organization?.toLowerCase() === org.name?.toLowerCase() ||
+            (org.canonical_name && e.organization?.toLowerCase() === org.canonical_name?.toLowerCase())
+          ).length
+        }
+        setOrgEventCounts(counts)
+      }
+    }
     setLoading(false)
   }
 async function saveOrgEdit() {
   setOrgSaving(true)
   const originalOrg = orgs.find(o => o.id === editingOrg.id)
-  const { error } = await supabase.from('organizations').update({
-    name: editingOrg.name,
-    canonical_name: editingOrg.canonical_name || null,
-  }).eq('id', editingOrg.id)
-  if (!error) {
-    if (originalOrg?.name && originalOrg.name !== editingOrg.name) {
-      await supabase.from('events')
-        .update({ organization: editingOrg.name })
-        .ilike('organization', originalOrg.name)
+  try {
+    const response = await fetch('/api/update-org', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editingOrg.id,
+        name: editingOrg.name,
+        originalName: originalOrg?.name,
+      }),
+    })
+    const data = await response.json()
+    if (!data.error) {
+      setOrgs(prev => prev.map(o => o.id === editingOrg.id ? { ...o, name: editingOrg.name } : o))
+      setEditingOrg(null)
+      loadOrgs()
     }
-    setOrgs(prev => prev.map(o => o.id === editingOrg.id ? { ...o, name: editingOrg.name } : o))
-    setEditingOrg(null)
+  } catch {
+    console.error('Save org failed')
   }
   setOrgSaving(false)
 }
@@ -495,9 +517,6 @@ if (!recipientEmail && ev.organization) {
        <div style={{ marginBottom: '10px' }}>
 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>Org Name</label>
           <input style={{ ...inputStyle, marginBottom: '8px' }} value={editingOrg.name || ''} onChange={e => setEditingOrg({ ...editingOrg, name: e.target.value })} />
-          <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>Linked To (Canonical Name)</label>
-          <input style={{ ...inputStyle, marginBottom: '4px' }} placeholder="e.g. Art Commission Meetings" value={editingOrg.canonical_name || ''} onChange={e => setEditingOrg({ ...editingOrg, canonical_name: e.target.value })} />
-          <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>The name the iCal feed uses to identify this org. Links their account to existing events. Must match exactly.</div>
           
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -522,7 +541,14 @@ if (!recipientEmail && ev.organization) {
             {org.email && <>📧 {org.email}</>}
             {org.website && <>&nbsp;·&nbsp; 🌐 {org.website}</>}
           </div>
-          {org.canonical_name && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>🔗 Linked to: {org.canonical_name}</div>}
+          <div style={{ marginTop: '4px' }}>
+            <span
+              onClick={() => { setFilter('approved'); setFilterOrg(org.name) }}
+              style={{ fontSize: '12px', color: orgEventCounts[org.id] > 0 ? '#1a3d2b' : '#9ca3af', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>
+              {orgEventCounts[org.id] ?? '…'} approved event{orgEventCounts[org.id] !== 1 ? 's' : ''}
+            </span>
+          </div>
+          
           {org.ical_feed_url && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>📅 {org.ical_feed_url}</div>}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
