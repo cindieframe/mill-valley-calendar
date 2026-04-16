@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
 
@@ -65,7 +65,44 @@ export default function OrgDashboard() {
   const [eventSaving, setEventSaving] = useState(false)
   const [eventError, setEventError] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+  const locationInputRef = useRef<any>(null)
+  const autocompleteRef = useRef<any>(null)
 
+  useEffect(() => {
+    if (!showEventModal) return
+    if (typeof window === 'undefined') return
+    const initAutocomplete = () => {
+      if (!locationInputRef.current) return
+      if (autocompleteRef.current) return
+      const autocomplete = new (window as any).google.maps.places.Autocomplete(
+        locationInputRef.current,
+        { types: ['establishment', 'geocode'], componentRestrictions: { country: 'us' } }
+      )
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace()
+        setEventForm(prev => ({
+          ...prev,
+          location: place.name || prev.location,
+          address: place.formatted_address || prev.address,
+        }))
+      })
+      autocompleteRef.current = autocomplete
+    }
+    if ((window as any).google?.maps?.places) {
+      setTimeout(initAutocomplete, 100)
+      return
+    }
+    if (document.querySelector('script[src*="maps.googleapis.com"]')) {
+      setTimeout(initAutocomplete, 500)
+      return
+    }
+    const script = document.createElement('script')
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`
+    script.async = true
+    script.onload = () => setTimeout(initAutocomplete, 100)
+    document.head.appendChild(script)
+    return () => { autocompleteRef.current = null }
+  }, [showEventModal])
   useEffect(() => { loadOrg() }, [])
 
   async function loadOrg() {
@@ -565,6 +602,20 @@ export default function OrgDashboard() {
               </div>
             </div>
 
+                        <label style={labelStyle}>Location / Venue Name</label>
+            <input
+              ref={locationInputRef}
+              style={inputStyle}
+              placeholder="e.g. Mill Valley Community Center"
+              value={eventForm.location || ''}
+              onChange={e => setEventForm({ ...eventForm, location: e.target.value })} />
+            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px', marginTop: '-4px' }}>
+              Start typing to auto-fill the address below.
+            </div>
+
+            <label style={labelStyle}>Address</label>
+            <input style={inputStyle} placeholder="e.g. 180 Camino Alto, Mill Valley, CA" value={eventForm.address || ''} onChange={e => setEventForm({ ...eventForm, address: e.target.value })} />
+
             <label style={labelStyle}>Category * <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#9ca3af' }}>(choose all that apply)</span></label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
               {CATEGORIES.map(cat => {
@@ -585,12 +636,6 @@ export default function OrgDashboard() {
   )
 })}
             </div>
-
-            <label style={labelStyle}>Location / Venue Name</label>
-            <input style={inputStyle} placeholder="e.g. Mill Valley Community Center" value={eventForm.location || ''} onChange={e => setEventForm({ ...eventForm, location: e.target.value })} />
-
-            <label style={labelStyle}>Address</label>
-            <input style={inputStyle} placeholder="e.g. 180 Camino Alto, Mill Valley, CA" value={eventForm.address || ''} onChange={e => setEventForm({ ...eventForm, address: e.target.value })} />
 
             <label style={labelStyle}>Description</label>
             <textarea style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }}
