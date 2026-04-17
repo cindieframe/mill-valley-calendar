@@ -40,7 +40,10 @@ export default function PostEvent() {
   }, [])
 
   const router = useRouter()
+  const [imageUrl, setImageUrl] = useState('')
+  const [imageUploading, setImageUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
   const [submitted, setSubmitted] = useState(false)
   const [recurrence, setRecurrence] = useState('none')
   const [endsOn, setEndsOn] = useState('never')
@@ -83,7 +86,20 @@ export default function PostEvent() {
     const hour = h % 12 || 12
     return `${hour}:${String(m).padStart(2,'0')} ${ampm}`
   }
-
+const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB'); return }
+    setImageUploading(true)
+    const ext = file.name.split('.').pop()
+    const fileName = `${Date.now()}.${ext}`
+    const { error: uploadError } = await supabase.storage
+      .from('event-images').upload(fileName, file, { upsert: true })
+    if (uploadError) { alert('Upload failed. Please try again.'); setImageUploading(false); return }
+    const { data: { publicUrl } } = supabase.storage.from('event-images').getPublicUrl(fileName)
+    setImageUrl(publicUrl)
+    setImageUploading(false)
+  }
   const handleSubmit = async () => {
     if (!form.title || !form.date || !form.time || !form.location || !form.organization || !form.description || form.category.length === 0) {
       alert('Please fill in all required fields and select at least one category.')
@@ -119,6 +135,7 @@ export default function PostEvent() {
       description: form.description,
       email: form.email,
       website: form.website,
+      image_url: imageUrl || null,
       status: 'pending',
     }])
     setSubmitting(false)
@@ -422,9 +439,31 @@ export default function PostEvent() {
             value={form.description} onChange={e=>update('description',e.target.value)}/>
         </div>
 
-        <div style={{marginBottom:'16px',background:'#f9fafb',borderRadius:'8px',padding:'14px 16px',border:'1.5px dashed #e5e7eb'}}>
+        <div style={{marginBottom:'16px'}}>
           <label style={labelStyle}>Event Photo <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,color:'#9ca3af'}}>(optional)</span></label>
-          <p style={{fontSize:'12px',color:'#9ca3af',marginTop:'4px'}}>📸 Photo upload will be available soon.</p>
+          {imageUrl ? (
+            <div style={{marginTop:'8px'}}>
+              <img src={imageUrl} alt="Event preview" style={{width:'100%',maxHeight:'200px',objectFit:'cover',borderRadius:'8px',marginBottom:'8px'}}/>
+              <button onClick={() => setImageUrl('')}
+                style={{background:'white',color:'#dc2626',border:'1.5px solid #dc2626',padding:'6px 14px',borderRadius:'999px',fontSize:'12px',fontWeight:600,cursor:'pointer'}}>
+                Remove photo
+              </button>
+            </div>
+          ) : (
+            <label style={{display:'block',marginTop:'8px',cursor:'pointer'}}>
+              <div style={{border:'1.5px dashed #e5e7eb',borderRadius:'8px',padding:'24px',textAlign:'center' as const,background:'#f9fafb'}}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '12px', border: '1.5px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <div style={{fontSize:'13px',fontWeight:600,color:'#374151',marginBottom:'2px'}}>
+                  {imageUploading ? 'Uploading…' : 'Click to upload a photo'}
+                </div>
+                <div style={{fontSize:'11px',color:'#9ca3af'}}>JPG, PNG or WebP · Max 5MB</div>
+              </div>
+              <input type="file" accept="image/*" onChange={handleImageUpload}
+                style={{display:'none'}} disabled={imageUploading}/>
+            </label>
+          )}
         </div>
 
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'32px'}}>

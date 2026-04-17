@@ -70,6 +70,8 @@ export default function OrgDashboard() {
   const [contactMessage, setContactMessage] = useState('')
   const [contactSending, setContactSending] = useState(false)
   const [contactSent, setContactSent] = useState(false)
+  const [eventImageUrl, setEventImageUrl] = useState('')
+  const [eventImageUploading, setEventImageUploading] = useState(false)
   const locationInputRef = useRef<any>(null)
   const autocompleteRef = useRef<any>(null)
 
@@ -152,6 +154,7 @@ async function loadEvents(orgName: string) {
     setEditingEvent(null)
     setEventForm({ organization: org.name, status: 'pending' })
     setEventError('')
+    setEventImageUrl('')
     setShowEventModal(true)
   }
 
@@ -159,13 +162,15 @@ async function loadEvents(orgName: string) {
     setEditingEvent(event)
     setEventForm({ ...event })
     setEventError('')
+    setEventImageUrl((event as any).image_url || '')
     setShowEventModal(true)
   }
 
-  function openDuplicateEvent(event: Event) {
+ function openDuplicateEvent(event: Event) {
     setEditingEvent(null)
     setEventForm({ ...event, id: undefined, status: 'pending' })
     setEventError('')
+    setEventImageUrl('')
     setShowEventModal(true)
   }
 
@@ -219,6 +224,7 @@ async function loadEvents(orgName: string) {
       email: eventForm.email || '',
       website: eventForm.website || '',
       meeting_link: eventForm.meeting_link || '',
+      image_url: eventImageUrl || null,
       status: editingEvent ? eventForm.status : 'pending',
       verified: org.verified || false,
     }
@@ -320,6 +326,20 @@ async function loadEvents(orgName: string) {
     } else { setSuccess('Profile saved successfully!') }
     setSaving(false)
     setTimeout(() => setSuccess(''), 5000)
+  }
+  async function handleEventImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) { setEventError('Image must be under 5MB'); return }
+    setEventImageUploading(true)
+    const ext = file.name.split('.').pop()
+    const fileName = `${Date.now()}.${ext}`
+    const { error: uploadError } = await supabase.storage
+      .from('event-images').upload(fileName, file, { upsert: true })
+    if (uploadError) { setEventError('Upload failed'); setEventImageUploading(false); return }
+    const { data: { publicUrl } } = supabase.storage.from('event-images').getPublicUrl(fileName)
+    setEventImageUrl(publicUrl)
+    setEventImageUploading(false)
   }
 async function handleContactAdmin() {
     if (!contactSubject || !contactMessage) return
@@ -759,9 +779,35 @@ async function handleContactAdmin() {
                 )
               })}
             </div>
+   <label style={labelStyle}>Event Photo <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#9ca3af' }}>(optional)</span></label>
+            {eventImageUrl ? (
+              <div style={{ marginBottom: '16px' }}>
+                <img src={eventImageUrl} alt="Preview" style={{ width: '100%', maxHeight: '160px', objectFit: 'cover', borderRadius: '8px', marginBottom: '8px' }} />
+                <button onClick={() => setEventImageUrl('')}
+                  style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '5px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                  Remove photo
+                </button>
+              </div>
+            ) : (
+              <label style={{ display: 'block', marginBottom: '16px', cursor: 'pointer' }}>
+                <div style={{ border: '1.5px dashed #e5e7eb', borderRadius: '8px', padding: '16px', textAlign: 'center' as const, background: '#f9fafb' }}>
+                  <div style={{ border: '1.5px dashed #e5e7eb', borderRadius: '8px', padding: '20px', textAlign: 'center' as const, background: '#f9fafb' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', border: '1.5px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px', background: 'white' }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '2px' }}>
+                    {eventImageUploading ? 'Uploading…' : 'Click to upload a photo'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9ca3af' }}>JPG, PNG or WebP · Max 5MB</div>
+                </div>
+                </div>
+                <input type="file" accept="image/*" onChange={handleEventImageUpload} style={{ display: 'none' }} disabled={eventImageUploading} />
+              </label>
+            )}
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
               <button onClick={() => setShowEventModal(false)}
+            
                 style={{ flex: 1, background: '#f3f4f6', color: '#374151', border: 'none', padding: '12px', borderRadius: '999px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
                 Cancel
               </button>

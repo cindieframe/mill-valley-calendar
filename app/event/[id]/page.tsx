@@ -101,6 +101,11 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
       </header>
 
       <div style={{ maxWidth: '700px', margin: '0 auto', padding: '40px 24px 80px' }}>
+        {ev.image_url && (
+          <div style={{ marginBottom: '24px', borderRadius: '12px', overflow: 'hidden', maxHeight: '320px' }}>
+            <img src={ev.image_url} alt={ev.title} style={{ width: '100%', height: '320px', objectFit: 'cover', display: 'block' }} />
+          </div>
+        )}
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
           {cats.map((c: string) => (
             CATS[c] ? (
