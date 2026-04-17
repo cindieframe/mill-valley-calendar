@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import ShareButtons from './ShareButtons'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -171,25 +172,35 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.address || ev.location)}`}
             target="_blank" rel="noopener noreferrer"
-            style={{ background: '#4285f4', color: 'white', padding: '10px 20px', borderRadius: '999px', textDecoration: 'none', fontSize: '13px', fontWeight: 700 }}>
-            🗺 Get Directions
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '999px', border: '0.5px solid #e5e7eb', background: 'white', textDecoration: 'none', fontSize: '13px', fontWeight: 500, color: '#1f2937' }}>
+            Get Directions
           </a>
           {ev.website && (
             <a href={ev.website} target="_blank" rel="noopener noreferrer"
-              style={{ background: 'white', color: '#1f2937', padding: '10px 20px', borderRadius: '999px', textDecoration: 'none', fontSize: '13px', fontWeight: 700, border: '1.5px solid #e5e7eb' }}>
-              🎟 Learn More
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '999px', border: '0.5px solid #e5e7eb', background: 'white', textDecoration: 'none', fontSize: '13px', fontWeight: 500, color: '#1f2937' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Learn More
             </a>
           )}
           {ev.meeting_link && (
             <a href={ev.meeting_link} target="_blank" rel="noopener noreferrer"
-              style={{ background: '#2563eb', color: 'white', padding: '10px 20px', borderRadius: '999px', textDecoration: 'none', fontSize: '13px', fontWeight: 700 }}>
-              💻 Join Online
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '999px', border: '0.5px solid #e5e7eb', background: 'white', textDecoration: 'none', fontSize: '13px', fontWeight: 500, color: '#1f2937' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              Join Online
             </a>
           )}
         </div>
+
+        <ShareButtons
+          eventId={String(ev.id)}
+          title={ev.title}
+          date={date}
+          time={ev.time || ''}
+          location={ev.location || ''}
+        />
       </div>
     </div>
   )
