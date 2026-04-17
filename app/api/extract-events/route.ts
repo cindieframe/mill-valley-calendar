@@ -201,7 +201,8 @@ Return ONLY valid JSON, no markdown, no explanation. Use this exact shape:
       "description": "1-2 sentence description, or null",
       "website": "Direct URL to event page if available, or null",
       "category": "outdoors,arts",
-      "tags": "free,family"
+      "tags": "free,family",
+      "image_url": "https://... or null"
     }
   ],
   "errors": ["reason if any events were skipped or uncertain"]
@@ -262,6 +263,7 @@ Rules:
         tags: ev.tags || '',
         description: ev.description || '',
         website: ev.website || websiteUrl,
+          image_url: ev.image_url || null,
         status: 'pending',
       }])
 

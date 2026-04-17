@@ -20,10 +20,10 @@ function parseICal(text: string) {
     
     const dtstart = get('DTSTART')
     const summary = get('SUMMARY')
-       const description = get('DESCRIPTION').replace(/\\n/g, ' ').replace(/\\,/g, ',').replace(/https?:\/\/\S+/g, '').replace(/#\S+/g, '').replace(/@\S+/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)
-            // max 300 characters
+    const description = get('DESCRIPTION').replace(/\\n/g, ' ').replace(/\\,/g, ',').replace(/https?:\/\/\S+/g, '').replace(/#\S+/g, '').replace(/@\S+/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)
     const location = get('LOCATION').replace(/\\,/g, ',')
     const url = get('URL')
+    const image = get('IMAGE') || get('X-IMAGE') || ''
     
     if (!summary || !dtstart) continue
     
@@ -64,7 +64,7 @@ today.setHours(0, 0, 0, 0)
 const eventDate = new Date(dateStr + 'T12:00:00')
 if (eventDate < today) continue
 
-    events.push({ summary, description, location, dateStr, timeStr, url })
+   events.push({ summary, description, location, dateStr, timeStr, url, image })
   }
   
   // Sort by date ascending
@@ -207,6 +207,7 @@ const displayName = linkedOrg ? linkedOrg.name : organization
   tags,
   description: ev.description || '',
   website: ev.url || '',
+  image_url: ev.image || null,
   status: 'pending',
 }])
         
