@@ -289,7 +289,7 @@ export default function ImportPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{org.name}</div>
-                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>{org.website_url}</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{org.website_url}</div>
                       </div>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button
@@ -388,7 +388,7 @@ export default function ImportPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{feed.organization}</div>
-                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>{feed.url}</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{feed.url}</div>
                         {feed.last_synced && (
                           <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
                             Last synced: {new Date(feed.last_synced).toLocaleDateString()}
