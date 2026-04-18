@@ -30,9 +30,7 @@ const CAT_COLORS: Record<string, {bg: string, border: string}> = {
 const TAG_META: Record<string, {label: string, bg: string, color: string, activeBg: string}> = {
   free:      { label: '🟢 Free',             bg: '#dcfce7', color: '#166534', activeBg: '#16a34a' },
   family:    { label: '⭐ Family-Friendly',   bg: '#fef9c3', color: '#854d0e', activeBg: '#b45309' },
-  
   wellness:  { label: '🧘 Health & Wellness', bg: '#fce7f3', color: '#9d174d', activeBg: '#9d174d' },
-  
   reg:       { label: '🎟️ Reg. Required',    bg: '#fff7ed', color: '#9a3412', activeBg: '#9a3412' },
 }
 
@@ -42,7 +40,6 @@ function getDateStrings() {
   const todayStr = today.toISOString().split('T')[0]
   const tomorrow = new Date(today)
   tomorrow.setDate(tomorrow.getDate()+1)
-  const tomorrowStr = tomorrow.toISOString().split('T')[0]
   const day = today.getDay()
   const satOffset = (6-day+7)%7||7
   const sat = new Date(today); sat.setDate(today.getDate()+satOffset)
@@ -50,7 +47,7 @@ function getDateStrings() {
   const satStr = sat.toISOString().split('T')[0]
   const sunStr = sun.toISOString().split('T')[0]
   const fmt = (d: Date) => d.toLocaleDateString('en-US',{month:'short',day:'numeric'})
-  return { todayStr, tomorrowStr, satStr, sunStr,
+  return { todayStr, tomorrowStr: tomorrow.toISOString().split('T')[0], satStr, sunStr,
     todayLabel: fmt(today),
     tomorrowLabel: fmt(tomorrow),
     weekendLabel: `${fmt(sat)}–${fmt(sun)}`
@@ -65,17 +62,20 @@ export default function Home() {
   const [tagFilters, setTagFilters] = useState<string[]>([])
   const [orgFilter, setOrgFilter] = useState('')
   const [orgList, setOrgList] = useState<string[]>([])
-
   const [search, setSearch] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [aiFilters, setAiFilters] = useState<{cats:string[],tags:string[],dateFrom:string|null,dateTo:string|null,keyword:string}|null>(null)
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [currentView, setCurrentView] = useState('today')
   const [fromDate, setFromDate] = useState<Date|null>(null)
   const [toDate, setToDate] = useState<Date|null>(null)
-useEffect(() => {
-  if (window.location.hash && window.location.hash.includes('access_token')) {
-    router.push('/auth/confirm' + window.location.hash)
-  }
-}, [])
+
+  useEffect(() => {
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      router.push('/auth/confirm' + window.location.hash)
+    }
+  }, [])
+
   useEffect(() => {
     async function loadEvents() {
       const data = await getEvents()
@@ -84,19 +84,19 @@ useEffect(() => {
     }
     loadEvents()
     async function loadOrgList() {
-  const { data } = await supabase
-    .from('events')
-    .select('organization')
-    .eq('status', 'approved')
-  if (data) {
-    const counts: Record<string, number> = {}
-    data.forEach((e: any) => {
-      if (e.organization) counts[e.organization] = (counts[e.organization] || 0) + 1
-    })
-    const unique = Object.keys(counts).filter(org => counts[org] >= 2).sort()
-    setOrgList(unique)
-  }
-}
+      const { data } = await supabase
+        .from('events')
+        .select('organization')
+        .eq('status', 'approved')
+      if (data) {
+        const counts: Record<string, number> = {}
+        data.forEach((e: any) => {
+          if (e.organization) counts[e.organization] = (counts[e.organization] || 0) + 1
+        })
+        const unique = Object.keys(counts).filter(org => counts[org] >= 2).sort()
+        setOrgList(unique)
+      }
+    }
     loadOrgList()
   }, [])
 
@@ -107,20 +107,77 @@ useEffect(() => {
     if (currentView==='tomorrow' && ev.date !== tomorrowStr) return false
     if (currentView==='weekend' && ev.date !== satStr && ev.date !== sunStr) return false
     if (currentView==='pick') {
-  if (!fromDate) return false
-  const evDate = new Date(ev.date+'T12:00:00')
-  const endDate = toDate || fromDate
-  const end = new Date(endDate)
-  end.setHours(23,59,59,999)
-  if (evDate < fromDate || evDate > end) return false
-}
+      if (!fromDate) return false
+      const evDate = new Date(ev.date+'T12:00:00')
+      const endDate = toDate || fromDate
+      const end = new Date(endDate)
+      end.setHours(23,59,59,999)
+      if (evDate < fromDate || evDate > end) return false
+    }
     if (catFilters.length > 0 && !catFilters.some(f => (ev.cats||[]).includes(f))) return false
     if (tagFilters.length > 0 && !tagFilters.every(t => ev.tags?.split(',').map((x:string)=>x.trim()).includes(t))) return false
     if (orgFilter && ev.organization !== orgFilter) return false
-    if (search && !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
+    if (!aiFilters && search && !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
         !ev.location?.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
+
+  async function handleSearch() {
+    if (!search.trim()) { setAiFilters(null); return }
+    setIsSearching(true)
+    try {
+      const res = await fetch('/api/conversational-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: search }),
+      })
+      const filters = await res.json()
+      setAiFilters(filters)
+      if (filters.cats?.length > 0) setCatFilters(filters.cats)
+      if (filters.tags?.length > 0) setTagFilters(filters.tags)
+      if (filters.dateFrom) {
+        const todayStr = new Date().toISOString().split('T')[0]
+        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1)
+        const tomorrowStr = tomorrow.toISOString().split('T')[0]
+        const day = new Date().getDay()
+        const satOffset = ((6-day+7)%7)||7
+        const sat = new Date(); sat.setDate(new Date().getDate()+satOffset)
+        const sun = new Date(); sun.setDate(new Date().getDate()+satOffset+1)
+        const satStr = sat.toISOString().split('T')[0]
+        const sunStr = sun.toISOString().split('T')[0]
+
+        const isToday = filters.dateFrom === todayStr && (!filters.dateTo || filters.dateTo === todayStr)
+        const isTomorrow = filters.dateFrom === tomorrowStr && (!filters.dateTo || filters.dateTo === tomorrowStr)
+        const isWeekend = filters.dateFrom === satStr && filters.dateTo === sunStr
+
+        if (isToday) {
+          setCurrentView('today')
+        } else if (isTomorrow) {
+          setCurrentView('tomorrow')
+        } else if (isWeekend) {
+          setCurrentView('weekend')
+        } else {
+          setCurrentView('pick')
+          setFromDate(new Date(filters.dateFrom + 'T12:00:00'))
+          setToDate(filters.dateTo ? new Date(filters.dateTo + 'T12:00:00') : null)
+        }
+      }
+      if (filters.keyword) setSearch(filters.keyword)
+    } catch (e) {
+      console.error(e)
+    }
+    setIsSearching(false)
+  }
+
+  function clearSearch() {
+    setSearch('')
+    setAiFilters(null)
+    setCatFilters([])
+    setTagFilters([])
+    setCurrentView('today')
+    setFromDate(null)
+    setToDate(null)
+  }
 
   if (loading) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'sans-serif',color:'#2d6a4f',fontSize:'18px'}}>
@@ -157,12 +214,12 @@ useEffect(() => {
         <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedEvent.address||selectedEvent.location)}`}
           target="_blank" rel="noopener noreferrer"
           style={{background:'#4285f4',color:'white',padding:'10px 20px',borderRadius:'999px',textDecoration:'none',fontSize:'13px',fontWeight:700}}>
-          🗺 Get Directions
+          Get Directions
         </a>
         {selectedEvent.website && (
           <a href={selectedEvent.website} target="_blank" rel="noopener noreferrer"
             style={{background:'white',color:'#1f2937',padding:'10px 20px',borderRadius:'999px',textDecoration:'none',fontSize:'13px',fontWeight:700,border:'1.5px solid #e5e7eb'}}>
-            🎟 Learn More
+            Learn More
           </a>
         )}
       </div>
@@ -174,7 +231,7 @@ useEffect(() => {
     { label: `Tomorrow  ${tomorrowLabel}`,   value: 'tomorrow' },
     { label: `This Weekend  ${weekendLabel}`,value: 'weekend' },
     { label: 'All Dates',                    value: 'all' },
-   { label: '📆 Custom Dates',              value: 'pick' },
+   { label: 'Custom Dates',                 value: 'pick' },
   ]
 
   return (
@@ -194,15 +251,15 @@ useEffect(() => {
       </header>
 
       {/* For Organizations banner */}
-<div style={{background:'#2d6a4f',padding:'8px',textAlign:'center'}}>
-  <a href="/org/signup" style={{color:'#e6a020',fontSize:'12px',fontWeight:700,textDecoration:'none'}}>
-    Are you a local organization? Add your events to Townstir →
-  </a>
-  <span style={{color:'rgba(255,255,255,0.4)',margin:'0 10px'}}>|</span>
-  <a href="/org/login" style={{color:'rgba(255,255,255,0.7)',fontSize:'12px',fontWeight:600,textDecoration:'none'}}>
-    Org Login
-  </a>
-</div>
+      <div style={{background:'#2d6a4f',padding:'8px',textAlign:'center'}}>
+        <a href="/org/signup" style={{color:'#e6a020',fontSize:'12px',fontWeight:700,textDecoration:'none'}}>
+          Are you a local organization? Add your events to Townstir →
+        </a>
+        <span style={{color:'rgba(255,255,255,0.4)',margin:'0 10px'}}>|</span>
+        <a href="/org/login" style={{color:'rgba(255,255,255,0.7)',fontSize:'12px',fontWeight:600,textDecoration:'none'}}>
+          Org Login
+        </a>
+      </div>
 
       {/* Hero */}
       <div style={{background:'linear-gradient(160deg,#1a3d2b 0%,#2d6a4f 60%,#1a4a30 100%)',padding:'40px',textAlign:'center'}}>
@@ -211,14 +268,44 @@ useEffect(() => {
         </h1>
         <p style={{color:'rgba(255,255,255,0.7)',marginBottom:'20px',fontSize:'14px'}}>Your community — all in one place</p>
         <div style={{display:'flex',maxWidth:'540px',margin:'0 auto',background:'white',borderRadius:'999px',overflow:'hidden',boxShadow:'0 8px 32px rgba(0,0,0,0.2)'}}>
-          <input type="text" placeholder="Search events, venues, organizers…"
-            value={search} onChange={e => setSearch(e.target.value)}
+          <input type="text" placeholder='Ask Townstir anything…'
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSearch()}
             style={{flex:1,border:'none',padding:'12px 20px',fontSize:'14px',outline:'none',background:'transparent'}}/>
-          <button style={{background:'#e05d2b',color:'white',border:'none',padding:'10px 22px',margin:'4px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer'}}>
-            Search
+          {aiFilters && (
+            <button onClick={clearSearch}
+              style={{background:'none',border:'none',color:'#9ca3af',fontSize:'18px',padding:'0 8px',cursor:'pointer',lineHeight:1}}>
+              ×
+            </button>
+          )}
+           <button onClick={() => {
+            const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+            if (!SpeechRecognition) return
+            const recognition = new SpeechRecognition()
+            recognition.lang = 'en-US'
+            recognition.onresult = (e: any) => {
+              const transcript = e.results[0][0].transcript
+              setSearch(transcript)
+              setTimeout(() => handleSearch(), 100)
+            }
+            recognition.start()
+          }}
+            style={{background:'none',border:'none',padding:'0 12px',cursor:'pointer',display:'flex',alignItems:'center'}}>
+            <svg xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 0 24 24" width="20" fill="#9ca3af">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+          </button>
+          <button onClick={handleSearch}
+            style={{background:'#e05d2b',color:'white',border:'none',padding:'10px 22px',margin:'4px',borderRadius:'999px',fontWeight:700,fontSize:'13px',cursor:'pointer',opacity:isSearching?0.7:1}}>
+            {isSearching ? '…' : 'Search'}
           </button>
         </div>
       </div>
+
+      
+      
 
       {/* Date shortcuts */}
       <div style={{background:'white',borderBottom:'1px solid #f3f4f6',padding:'10px 40px',display:'flex',gap:'8px',flexWrap:'wrap',justifyContent:'center'}}>
@@ -294,19 +381,21 @@ useEffect(() => {
         <select value={orgFilter} onChange={e=>setOrgFilter(e.target.value)}
           style={{border:'1.5px solid #e5e7eb',borderRadius:'999px',padding:'5px 14px',fontSize:'12px',fontWeight:600,color:'#6b7280',background:'white',cursor:'pointer',outline:'none'}}>
           <option value=''>All Organizations</option>
-{orgList.map(org => (
-  <option key={org} value={org}>{org}</option>
-))}
+          {orgList.map(org => (
+            <option key={org} value={org}>{org}</option>
+          ))}
         </select>
       </div>
 
       {/* Events list */}
-      
-
       <div style={{maxWidth:'900px',margin:'0 auto',padding:'24px 40px'}}>
         {filtered.length === 0 ? (
           <div style={{textAlign:'center',padding:'60px 20px',color:'#9ca3af'}}>
-            <div style={{fontSize:'40px',marginBottom:'12px'}}>📭</div>
+            <div style={{marginBottom:'12px'}}>
+              <svg xmlns="http://www.w3.org/2000/svg" height="48" viewBox="0 0 24 24" width="48" fill="#d1d5db">
+                <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8l8 5 8-5v10zm-8-7L4 6h16l-8 5z"/>
+              </svg>
+            </div>
             <p style={{fontSize:'15px'}}>No events found. Try a different filter or search.</p>
           </div>
         ) : (
@@ -317,23 +406,22 @@ useEffect(() => {
               onMouseOut={e => (e.currentTarget.style.transform='translateY(0)')}>
               <div style={{flex:1}}>
                 <h3 style={{fontSize:'14px',fontWeight:700,color:'#1f2937',margin:'0 0 4px 0'}}>
-  {ev.title}
-  {ev.verified && (
-    <span style={{marginLeft:'6px',background:'#1a3d2b',color:'white',fontSize:'9px',fontWeight:700,padding:'2px 6px',borderRadius:'999px',verticalAlign:'middle'}}>
-      ✓ Verified
-    </span>
-  )}
-</h3>
+                  {ev.title}
+                  {ev.verified && (
+                    <span style={{marginLeft:'6px',background:'#1a3d2b',color:'white',fontSize:'9px',fontWeight:700,padding:'2px 6px',borderRadius:'999px',verticalAlign:'middle'}}>
+                      ✓ Verified
+                    </span>
+                  )}
+                </h3>
                 <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'6px'}}>
-                  📅 {new Date(ev.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric'})} &nbsp;·&nbsp; 🕐 {ev.time} &nbsp;·&nbsp; 📍 {ev.location}
+                  {new Date(ev.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric'})} &nbsp;·&nbsp; {ev.time} &nbsp;·&nbsp; {ev.location}
                   <br/>
                   <a href={`/org/${encodeURIComponent(ev.organization.toLowerCase().replace(/ /g, '-'))}`}
-  style={{ color: '#1a3d2b', fontWeight: 700, textDecoration: 'none' }}
-  onClick={e => e.stopPropagation()}>
-  👥 {ev.organization}
-</a>
-{ev.cost && <>&nbsp;·&nbsp; 💰 {ev.cost}</>}
-```
+                    style={{ color: '#1a3d2b', fontWeight: 700, textDecoration: 'none' }}
+                    onClick={e => e.stopPropagation()}>
+                    {ev.organization}
+                  </a>
+                  {ev.cost && <>&nbsp;·&nbsp; {ev.cost}</>}
                 </div>
                 {ev.tags && ev.tags.split(',').map((tag: string) => {
                   const t = tag.trim()
@@ -358,7 +446,7 @@ useEffect(() => {
           ))
         )}
       </div>
-    {/* For Organizations */}
-      </div>
+
+    </div>
   )
 }
