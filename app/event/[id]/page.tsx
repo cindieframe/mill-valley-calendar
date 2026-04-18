@@ -177,34 +177,17 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.address || ev.location)}`}
-            target="_blank" rel="noopener noreferrer"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '999px', border: '0.5px solid #e5e7eb', background: 'white', textDecoration: 'none', fontSize: '13px', fontWeight: 500, color: '#1f2937' }}>
-            Get Directions
-          </a>
-          {ev.website && (
-            <a href={ev.website} target="_blank" rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '999px', border: '0.5px solid #e5e7eb', background: 'white', textDecoration: 'none', fontSize: '13px', fontWeight: 500, color: '#1f2937' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              Learn More
-            </a>
-          )}
-          {ev.meeting_link && (
-            <a href={ev.meeting_link} target="_blank" rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '999px', border: '0.5px solid #e5e7eb', background: 'white', textDecoration: 'none', fontSize: '13px', fontWeight: 500, color: '#1f2937' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-              Join Online
-            </a>
-          )}
-        </div>
 
         <ShareButtons
           eventId={String(ev.id)}
           title={ev.title}
-          date={date}
+          date={ev.date}
           time={ev.time || ''}
           location={ev.location || ''}
+          description={ev.description || ''}
+          address={ev.address || ''}
+          website={ev.website || ''}
+          meetingLink={ev.meeting_link || ''}
         />
       </div>
     </div>
