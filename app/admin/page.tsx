@@ -36,6 +36,27 @@ export default function Admin() {
   const [messageBody, setMessageBody] = useState('')
   const [messageSending, setMessageSending] = useState(false)
   const [messageSent, setMessageSent] = useState(false)
+  const [approvedEvents, setApprovedEvents] = useState<any[]>([])
+
+  function similarityScore(a: string, b: string): number {
+    a = a.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
+    b = b.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
+    if (a === b) return 1
+    const aWords = new Set(a.split(' ').filter(w => w.length > 2))
+    const bWords = new Set(b.split(' ').filter(w => w.length > 2))
+    if (aWords.size === 0 || bWords.size === 0) return 0
+    let matches = 0
+    aWords.forEach(w => { if (bWords.has(w)) matches++ })
+    return matches / Math.max(aWords.size, bWords.size)
+  }
+
+  function findPossibleDuplicates(ev: any): any[] {
+    return approvedEvents.filter(approved =>
+      approved.date === ev.date &&
+      approved.id !== ev.id &&
+      similarityScore(approved.title, ev.title) >= 0.5
+    )
+  }
 
   useEffect(() => { checkSession() }, [])
 
@@ -74,6 +95,8 @@ export default function Admin() {
     const { data, error } = await supabase.from('events').select('*').eq('status', filter)
       .order('date', { ascending: true }).order('time', { ascending: true })
     if (!error) setEvents(data || [])
+    const { data: approved } = await supabase.from('events').select('id, title, date').eq('status', 'approved')
+    setApprovedEvents(approved || [])
     setLoading(false)
   }
 
@@ -700,6 +723,11 @@ export default function Admin() {
                 return true
               }).map(ev => (
                 <div key={ev.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${selected.has(ev.id) ? '#1a3d2b' : '#e5e7eb'}` }}>
+                 {filter === 'pending' && findPossibleDuplicates(ev).length > 0 && (
+                    <div style={{ background: '#fef9c3', border: '1.5px solid #fde68a', borderRadius: '8px', padding: '8px 14px', marginBottom: '12px', fontSize: '12px', color: '#92400e', fontWeight: 600 }}>
+                      ⚠️ Possible duplicate of: {findPossibleDuplicates(ev).map(d => `"${d.title}" (already approved)`).join(', ')}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                     {filter === 'pending' && (
                       <input type="checkbox" checked={selected.has(ev.id)} onChange={() => toggleSelect(ev.id)}
