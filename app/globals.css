@@ -1,15 +1,20 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600;1,9..144,800&display=swap');
 
 :root {
-  --forest: #1a3d2b;
-  --forest-mid: #2d6a4f;
-  --gold: #e6a020;
-  --accent: #e05d2b;
-  --dark: #1f2937;
-  --cream: #fafaf8;
-  --fog: #f0ede8;
-  --sage: #7a9e7e;
-  --mist: #b8c5bb;
+  --forest:       #1a3d2b;
+  --forest-mid:   #2d6a4f;
+  --forest-dark:  #3a7d44;
+  --amber:        #C9952A;
+  --green:        #7EC8A4;
+  --navy:         #2C3E50;
+  --dark:         #1f2937;
+  --cream:        #fafaf8;
+  --bg:           #f2f3f5;
+  --fog:          #f0ede8;
+  --sage:         #7a9e7e;
+  --mist:         #b8c5bb;
+  --border:       #d0d6db;
+  --border-light: #e8eaed;
 }
 
 * {
@@ -19,8 +24,8 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif;
-  background: var(--cream);
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
   color: var(--dark);
   min-height: 100vh;
 }
@@ -30,19 +35,19 @@ h1, h2, h3 {
 }
 
 button {
-  font-family: 'Inter', sans-serif;
+  font-family: inherit;
   cursor: pointer;
 }
 
 input, select, textarea {
-  font-family: 'Inter', sans-serif;
+  font-family: inherit;
 }
+
 .date-picker-input {
-  border: 1.5px solid #e5e7eb;
+  border: 1.5px solid var(--border);
   border-radius: 8px;
   padding: 7px 12px;
   font-size: 13px;
   outline: none;
-  font-family: 'Inter', sans-serif;
   cursor: pointer;
 }

@@ -8,33 +8,33 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const CATS: Record<string, {label: string, icon: string}> = {
-  outdoors:  { label: 'Outdoors, Sports & Movement', icon: '🥾' },
-  arts:      { label: 'Arts & Performances',         icon: '🎭' },
-  food:      { label: 'Food, Drink & Social',        icon: '🍷' },
-  community: { label: 'Volunteer & Community',       icon: '🤝' },
-  family:    { label: 'Family & Youth',              icon: '👨‍👩‍👧' },
-  classes:   { label: 'Classes & Lectures',          icon: '📚' },
-  gov:       { label: 'Local Government',            icon: '🏛️' },
+const CATS: Record<string, { label: string }> = {
+  outdoors:  { label: 'Outdoors, Sports & Movement' },
+  arts:      { label: 'Arts & Performances' },
+  food:      { label: 'Food, Drink & Social' },
+  community: { label: 'Volunteer & Community' },
+  youth:     { label: 'Youth' },
+  family:    { label: 'Youth' },
+  classes:   { label: 'Classes & Lectures' },
+  gov:       { label: "Local Gov't" },
 }
 
-const CAT_COLORS: Record<string, {bg: string}> = {
-  outdoors:  { bg: '#16803c' },
-  arts:      { bg: '#7c22ce' },
-  food:      { bg: '#c2410c' },
-  community: { bg: '#b45309' },
-  family:    { bg: '#0e7490' },
-  classes:   { bg: '#4338ca' },
-  gov:       { bg: '#4b5563' },
+const CAT_CARD: Record<string, { bg: string; color: string }> = {
+  outdoors:  { bg: 'rgba(20,100,60,0.07)',   color: '#145a30' },
+  arts:      { bg: 'rgba(100,80,200,0.07)',  color: '#4a3fa0' },
+  food:      { bg: 'rgba(180,80,20,0.07)',   color: '#7a3000' },
+  community: { bg: 'rgba(30,80,160,0.07)',   color: '#1a4f8a' },
+  youth:     { bg: 'rgba(40,120,60,0.07)',   color: '#1e6b30' },
+  family:    { bg: 'rgba(40,120,60,0.07)',   color: '#1e6b30' },
+  classes:   { bg: 'rgba(160,30,30,0.07)',   color: '#7a1a1a' },
+  gov:       { bg: 'rgba(60,60,80,0.07)',    color: '#3a3a50' },
 }
 
-const TAG_META: Record<string, {label: string, bg: string, color: string}> = {
-  free:      { label: '🟢 Free',             bg: '#dcfce7', color: '#166534' },
-  family:    { label: '⭐ Family-Friendly',   bg: '#fef9c3', color: '#854d0e' },
-  senior:    { label: '🌟 50+ Friendly',      bg: '#ede9fe', color: '#4c1d95' },
-  wellness:  { label: '🧘 Health & Wellness', bg: '#fce7f3', color: '#9d174d' },
-  volunteer: { label: '🙋 Volunteer Opp.',    bg: '#fef9c3', color: '#713f12' },
-  reg:       { label: '🎟️ Reg. Required',    bg: '#fff7ed', color: '#9a3412' },
+const TAG_META: Record<string, { label: string; bg: string; color: string }> = {
+  free:     { label: 'Free',              bg: 'rgba(180,130,0,0.06)',  color: '#7a5500' },
+  family:   { label: 'Family-friendly',   bg: 'rgba(0,0,0,0.04)',      color: '#555' },
+  wellness: { label: 'Health & Wellness', bg: 'rgba(0,0,0,0.04)',      color: '#555' },
+  reg:      { label: 'Reg. Required',     bg: 'rgba(0,0,0,0.04)',      color: '#555' },
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -80,105 +80,138 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
 
   if (!ev) notFound()
 
-  const cats = ev.category ? ev.category.split(',').map((c: string) => c.trim()) : []
+  const cats = ev.category
+    ? ev.category.split(',').map((c: string) => c.trim())
+    : (ev.cats || [])
   const date = new Date(ev.date + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric'
   })
   const orgSlug = ev.organization?.toLowerCase().replace(/ /g, '-')
+  const tags = ev.tags ? ev.tags.split(',').map((t: string) => t.trim()) : []
+
+  const infoCell = (label: string, value: string, sub?: string) => (
+    <div style={{ padding: '14px 16px' }}>
+      <div style={{ fontSize: '10px', fontWeight: 600, color: '#aaa', textTransform: 'uppercase' as const, letterSpacing: '0.6px', marginBottom: '4px' }}>
+        {label}
+      </div>
+      <div style={{ fontSize: '14px', fontWeight: 600, color: '#1a2530' }}>{value}</div>
+      {sub && <div style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>{sub}</div>}
+    </div>
+  )
+
+  
 
   return (
-    <div style={{ fontFamily: 'sans-serif', minHeight: '100vh', background: '#fafaf8' }}>
-      <header style={{ background: '#1a3d2b', padding: '14px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <span style={{ fontWeight: 800, fontSize: '22px', color: 'white', letterSpacing: '-1px' }}>town</span>
-          <span style={{ fontWeight: 800, fontSize: '22px', color: '#e6a020', letterSpacing: '-1px', textTransform: 'uppercase' }}>STIR</span>
-          <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)', letterSpacing: '2.5px', textTransform: 'uppercase', marginTop: '2px' }}>🌲 Mill Valley, CA</div>
+    <div style={{ fontFamily: "'Helvetica Neue', Arial, sans-serif", minHeight: '100vh', background: '#f2f3f5' }}>
+
+      <header style={{ background: '#1a3d2b', padding: '0 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '56px', position: 'sticky', top: 0, zIndex: 100 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline' }}>
+          <span style={{ color: '#fff', fontSize: '21px', fontWeight: 400 }}>town</span>
+          <span style={{ color: '#7EC8A4', fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: '21px', fontWeight: 400 }}>stir</span>
         </div>
-        <Link href="/"
-          style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', textDecoration: 'none' }}>
-          ← Calendar
+        <Link
+          href="/"
+          style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px', textDecoration: 'none', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '999px', padding: '7px 16px' }}
+        >
+          ← Back
         </Link>
       </header>
 
-      <div style={{ maxWidth: '700px', margin: '0 auto', padding: '40px 24px 80px' }}>
-        {ev.image_url && (
-          <div style={{ marginBottom: '24px', borderRadius: '12px', overflow: 'hidden', maxHeight: '320px' }}>
-            <img src={ev.image_url} alt={ev.title} style={{ width: '100%', height: '320px', objectFit: 'cover', display: 'block' }} />
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
-          {cats.map((c: string) => (
-            CATS[c] ? (
-              <span key={c} style={{ display: 'inline-block', padding: '4px 12px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, background: CAT_COLORS[c]?.bg || '#2d6a4f', color: 'white' }}>
-                {CATS[c].icon} {CATS[c].label}
-              </span>
-            ) : null
-          ))}
+      {ev.image_url && (
+        <div style={{ width: '100%', maxHeight: '320px', overflow: 'hidden' }}>
+          <img
+            src={ev.image_url}
+            alt={ev.title}
+            style={{ width: '100%', height: '320px', objectFit: 'cover', display: 'block' }}
+          />
         </div>
+      )}
 
-        <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '32px', fontWeight: 900, color: '#1f2937', marginBottom: '6px' }}>
-          {ev.title}
-        </h1>
-        <p style={{ color: '#9ca3af', marginBottom: '28px', fontSize: '14px' }}>
-          Presented by{' '}
-          <Link href={`/org/${orgSlug}`} style={{ color: '#1a3d2b', fontWeight: 700, textDecoration: 'none' }}>
-            {ev.organization}
-          </Link>
-          {ev.verified && (
-            <span style={{ marginLeft: '6px', background: '#1a3d2b', color: 'white', fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px' }}>
-              ✓ Verified
-            </span>
+      <div style={{ maxWidth: '720px', margin: '0 auto', padding: '0 16px 60px' }}>
+
+        <div style={{
+          background: '#fff',
+          borderRadius: ev.image_url ? '0 0 12px 12px' : '12px',
+          marginTop: ev.image_url ? '0' : '24px',
+          padding: '28px 28px 24px',
+          marginBottom: '2px',
+        }}>
+
+          {cats.length > 0 && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
+              {cats.map((c: string) => {
+                const s = CAT_CARD[c]
+                const label = CATS[c]?.label
+                if (!s || !label) return null
+                return (
+                  <span key={c} style={{ background: s.bg, color: s.color, fontSize: '12px', borderRadius: '6px', padding: '4px 10px', fontWeight: 500 }}>
+                    {label}
+                  </span>
+                )
+              })}
+            </div>
           )}
-        </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '20px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-          <div>
-            <div style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>Date</div>
-            <div style={{ fontWeight: 700 }}>{date}</div>
+          <h1 style={{ fontFamily: 'Georgia, serif', fontSize: '26px', fontWeight: 700, color: '#1a2530', marginBottom: '6px', lineHeight: 1.25 }}>
+            {ev.title}
+          </h1>
+
+          <div style={{ fontSize: '13px', color: '#888', marginBottom: '24px' }}>
+            Presented by{' '}
+            <Link href={`/org/${orgSlug}`} style={{ color: '#3a7d44', fontWeight: 500, textDecoration: 'none' }}>
+              {ev.organization}
+            </Link>
+            {ev.verified && (
+              <span style={{ marginLeft: '6px', background: '#1a3d2b', color: 'white', fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px' }}>
+                ✓ Verified
+              </span>
+            )}
           </div>
-          <div>
-            <div style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>Time</div>
-            <div style={{ fontWeight: 700 }}>{ev.time || 'See organizer'}{ev.end_time ? ` – ${ev.end_time}` : ''}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>Location</div>
-            <div style={{ fontWeight: 700 }}>{ev.location}</div>
-            {ev.address && <div style={{ fontSize: '12px', color: '#9ca3af' }}>{ev.address}</div>}
-          </div>
-          <div>
-            <div style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>Cost</div>
-            <div style={{ fontWeight: 700 }}>{ev.cost || 'See organizer'}</div>
-          </div>
-          {ev.age && (
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', border: '1px solid #e8eaed', borderRadius: '10px', overflow: 'hidden', marginBottom: '24px' }}>
+            <div style={{ borderRight: '1px solid #e8eaed', borderBottom: '1px solid #e8eaed' }}>
+              {infoCell('Date', date)}
+            </div>
+            <div style={{ borderBottom: '1px solid #e8eaed' }}>
+              {infoCell('Time', ev.time ? (ev.end_time ? `${ev.time} – ${ev.end_time}` : ev.time) : 'See organizer')}
+            </div>
+            <div style={{ borderRight: '1px solid #e8eaed' }}>
+              {infoCell('Location', ev.location, ev.address)}
+            </div>
             <div>
-              <div style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' }}>Age</div>
-              <div style={{ fontWeight: 700 }}>{ev.age}</div>
+              {infoCell('Cost', ev.cost || 'See organizer')}
+            </div>
+            {ev.age && (
+              <div style={{ gridColumn: '1 / -1', borderTop: '1px solid #e8eaed' }}>
+                {infoCell('Age', ev.age)}
+              </div>
+            )}
+          </div>
+
+          {ev.description && (
+            <p style={{ fontSize: '15px', color: '#4b5563', lineHeight: 1.75, marginBottom: '24px' }}>
+              {ev.description}
+            </p>
+          )}
+
+          {tags.length > 0 && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {tags.map((t: string) => {
+                const meta = TAG_META[t]
+                if (!meta) return null
+                return (
+                  <span key={t} style={{ background: meta.bg, color: meta.color, fontSize: '12px', borderRadius: '999px', padding: '4px 12px' }}>
+                    {meta.label}
+                  </span>
+                )
+              })}
             </div>
           )}
         </div>
 
-        {ev.description && (
-          <p style={{ fontSize: '15px', color: '#4b5563', lineHeight: 1.8, marginBottom: '28px' }}>
-            {ev.description}
-          </p>
-        )}
+        
 
-        {ev.tags && (
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '28px' }}>
-            {ev.tags.split(',').map((tag: string) => {
-              const t = tag.trim()
-              const meta = TAG_META[t]
-              return meta ? (
-                <span key={t} style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, background: meta.bg, color: meta.color }}>
-                  {meta.label}
-                </span>
-              ) : null
-            })}
-          </div>
-        )}
-
-
-        <ShareButtons
+       <ShareButtons
           eventId={String(ev.id)}
           title={ev.title}
           date={ev.date}
@@ -189,6 +222,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
           website={ev.website || ''}
           meetingLink={ev.meeting_link || ''}
         />
+
       </div>
     </div>
   )
