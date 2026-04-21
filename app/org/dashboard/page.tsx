@@ -540,7 +540,7 @@ async function handleContactAdmin() {
 
         {/* Connect Calendar */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '24px', marginBottom: '24px', border: '2px solid #1a3d2b' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1a3d2b', marginBottom: '4px' }}>📅 Connect Your Calendar</h2>
+          <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1a3d2b', marginBottom: '4px' }}>Connect Your Calendar</h2>
           <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>Paste your iCal feed URL and your events will automatically appear on the Townstir calendar.</p>
           <label style={labelStyle}>iCal Feed URL</label>
           <input style={inputStyle} placeholder="https://calendar.google.com/calendar/ical/..."

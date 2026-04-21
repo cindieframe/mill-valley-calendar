@@ -368,7 +368,7 @@ export default function Home() {
                 {formatDayHeader(dateStr)}
               </div>
               {grouped[dateStr].map(ev => {
-                const catKeys: string[] = ev.cats || []
+                const catKeys: string[] = ev.cats || (ev.category ? ev.category.split(',').map((c: string) => c.trim()) : [])
                 const tagKeys: string[] = ev.tags ? ev.tags.split(',').map((t: string) => t.trim()) : []
                 const desc = ev.description?.trim()
                 return (

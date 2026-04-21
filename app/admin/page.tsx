@@ -334,7 +334,7 @@ export default function Admin() {
       <header style={{ background: '#1a3d2b', padding: '14px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <span style={{ fontWeight: 800, fontSize: '22px', color: 'white', letterSpacing: '-1px' }}>town</span>
-          <span style={{ fontWeight: 800, fontSize: '22px', color: '#e6a020', letterSpacing: '-1px', textTransform: 'uppercase' }}>STIR</span>
+          <span style={{ color: '#7EC8A4', fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: '22px', fontWeight: 400 }}>stir</span>
           <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginLeft: '12px' }}>Edit Event</span>
         </div>
         <button onClick={() => setEditingEvent(null)}
@@ -433,7 +433,7 @@ export default function Admin() {
       <div style={{ background: 'white', borderRadius: '12px', padding: '40px', width: '360px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
         <div style={{ marginBottom: '24px', textAlign: 'center' }}>
           <span style={{ fontWeight: 800, fontSize: '24px', color: '#1a3d2b' }}>town</span>
-          <span style={{ fontWeight: 800, fontSize: '24px', color: '#e6a020', textTransform: 'uppercase' }}>STIR</span>
+          <span style={{ color: '#7EC8A4', fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: '22px', fontWeight: 400 }}>stir</span>
           <p style={{ color: '#6b7280', fontSize: '14px', marginTop: '8px' }}>Admin Access</p>
         </div>
         {loginError && (
@@ -545,13 +545,13 @@ export default function Admin() {
       <header style={{ background: '#1a3d2b', padding: '14px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <span style={{ fontWeight: 800, fontSize: '22px', color: 'white', letterSpacing: '-1px' }}>town</span>
-          <span style={{ fontWeight: 800, fontSize: '22px', color: '#e6a020', letterSpacing: '-1px', textTransform: 'uppercase' }}>STIR</span>
+          <span style={{ color: '#7EC8A4', fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: '22px', fontWeight: 400 }}>stir</span>
           <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginLeft: '12px' }}>Admin</span>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button onClick={() => router.push('/admin/import')}
             style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
-            ⬇️ iCal Import
+            ⬇ iCal Import
           </button>
           <button onClick={() => router.push('/')}
             style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
@@ -591,13 +591,13 @@ export default function Admin() {
             <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
               style={{ border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '6px 12px', fontSize: '13px', outline: 'none', color: '#374151', background: 'white' }}>
               <option value=''>All Categories</option>
-              <option value='outdoors'>🥾 Outdoors, Sports & Movement</option>
-              <option value='arts'>🎭 Arts & Performances</option>
-              <option value='food'>🍷 Food, Drink & Social</option>
-              <option value='community'>🤝 Volunteer & Community</option>
-              <option value='family'>👨‍👩‍👧 Family & Youth</option>
-              <option value='classes'>📚 Classes & Lectures</option>
-              <option value='gov'>🏛️ Local Government</option>
+              <option value='outdoors'>Outdoors, Sports & Movement</option>
+              <option value='arts'>Arts & Performances</option>
+              <option value='food'>Food, Drink & Social</option>
+              <option value='community'>Volunteer & Community</option>
+              <option value='family'>Family & Youth</option>
+              <option value='classes'>Classes & Lectures</option>
+              <option value='gov'>Local Government</option>
             </select>
             {(filterOrg || filterCategory || filterDate) && (
               <button onClick={() => { setFilterOrg(''); setFilterCategory(''); setFilterDate('') }}
@@ -614,7 +614,7 @@ export default function Admin() {
               <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>Loading…</div>
             ) : orgs.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>
-                <div style={{ fontSize: '40px', marginBottom: '12px' }}>🏢</div>
+                <div style={{ fontSize: '40px', marginBottom: '12px' }}></div>
                 <p>No organizations have signed up yet.</p>
               </div>
             ) : (
@@ -622,7 +622,7 @@ export default function Admin() {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
                   <button onClick={() => setMessageModal({ all: true })}
                     style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
-                    ✉️ Message All Orgs
+                    Message All Orgs
                   </button>
                 </div>
                 {orgs.map(org => (
@@ -652,8 +652,8 @@ export default function Admin() {
                             {org.verified && <span style={{ marginLeft: '8px', background: '#16803c', color: 'white', fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px' }}>✓ Verified</span>}
                           </h3>
                           <div style={{ fontSize: '13px', color: '#6b7280' }}>
-                            {org.email && <>📧 {org.email}</>}
-                            {org.website && <>&nbsp;·&nbsp; 🌐 {org.website}</>}
+                            {org.email && <>{org.email}</>}
+                            {org.website && <>&nbsp;·&nbsp; {org.website}</>}
                           </div>
                           <div style={{ marginTop: '4px' }}>
                             <span onClick={() => { setFilter('approved'); setFilterOrg(org.name) }}
@@ -661,7 +661,7 @@ export default function Admin() {
                               {orgEventCounts[org.id] ?? '…'} approved event{orgEventCounts[org.id] !== 1 ? 's' : ''}
                             </span>
                           </div>
-                          {org.ical_feed_url && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>📅 {org.ical_feed_url}</div>}
+                          {org.ical_feed_url && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>{org.ical_feed_url}</div>}
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={() => { setMessageModal(org); setMessageSubject(''); setMessageBody('') }}
@@ -670,7 +670,7 @@ export default function Admin() {
                           </button>
                           <button onClick={() => setEditingOrg({ ...org })}
                             style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
-                            ✏️ Edit
+                            Edit
                           </button>
                           <button onClick={() => toggleVerify(org)}
                             style={{ background: org.verified ? 'white' : '#16803c', color: org.verified ? '#dc2626' : 'white', border: org.verified ? '1.5px solid #dc2626' : 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
@@ -712,7 +712,7 @@ export default function Admin() {
               <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>Loading…</div>
             ) : events.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>
-                <div style={{ fontSize: '40px', marginBottom: '12px' }}>📭</div>
+                <div style={{ fontSize: '40px', marginBottom: '12px' }}></div>
                 <p>No {filter} events.</p>
               </div>
             ) : (
@@ -736,11 +736,11 @@ export default function Admin() {
                     <div style={{ flex: 1 }}>
                       <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>{ev.title}</h3>
                       <div style={{ fontSize: '13px', color: '#6b7280' }}>
-                        📅 {ev.date} &nbsp;·&nbsp; 🕐 {ev.time} &nbsp;·&nbsp; 📍 {ev.location}
+                        {ev.date} &nbsp;·&nbsp; {ev.time} &nbsp;·&nbsp; {ev.location}
                       </div>
                       <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '2px' }}>
-                        👥 {ev.organization} &nbsp;·&nbsp; 🏷️ {ev.category}
-                        {ev.cost && <>&nbsp;·&nbsp; 💰 {ev.cost}</>}
+                        {ev.organization} &nbsp;·&nbsp; {ev.category}
+                        {ev.cost && <>&nbsp;·&nbsp; {ev.cost}</>}
                       </div>
                     </div>
                     <div style={{ fontSize: '11px', color: '#9ca3af', flexShrink: 0, marginLeft: '12px' }}>#{ev.id}</div>
@@ -759,9 +759,9 @@ export default function Admin() {
                     </div>
                   )}
                   <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '16px' }}>
-                    {ev.email && <span>📧 {ev.email}&nbsp;&nbsp;</span>}
-                    {ev.website && <span>🌐 {ev.website}&nbsp;&nbsp;</span>}
-                    {ev.tags && <span>🏷️ {ev.tags}</span>}
+                    {ev.email && <span>{ev.email}&nbsp;&nbsp;</span>}
+                    {ev.website && <span>{ev.website}&nbsp;&nbsp;</span>}
+                    {ev.tags && <span>{ev.tags}</span>}
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {filter === 'pending' && <>
@@ -781,7 +781,7 @@ export default function Admin() {
                       </button>
                       <button onClick={() => deleteEvent(ev.id)}
                         style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
-                        🗑 Delete permanently
+                        Delete permanently
                       </button>
                     </>}
                     {filter === 'unpublished' && <>
@@ -810,7 +810,7 @@ export default function Admin() {
                     </>}
                     <button onClick={() => setEditingEvent(ev)}
                       style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
-                      ✏️ Edit
+                     Edit
                     </button>
                   </div>
                 </div>
