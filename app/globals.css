@@ -51,3 +51,20 @@ input, select, textarea {
   outline: none;
   cursor: pointer;
 }
+
+.mobile-filters { display: none; }
+.desktop-filters { display: block; }
+.event-card-pills { display: flex; }
+.date-label-short { display: none; }
+
+@media (max-width: 640px) {
+  .mobile-filters { display: block; }
+  .desktop-filters { display: none; }
+  .event-card-pills { display: none; }
+  .event-card-body { padding-right: 0 !important; }
+  .date-label-full { display: none; }
+  .date-label-short { display: inline; }
+}
+
+
+

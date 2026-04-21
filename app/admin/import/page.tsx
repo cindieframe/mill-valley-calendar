@@ -30,10 +30,10 @@ export default function ImportPage() {
 
   async function loadSavedSources() {
     const { data } = await supabase
-      .from('organizations')
-      .select('id, name, website_url')
-      .not('website_url', 'is', null)
-      .order('name')
+  .from('organizations')
+  .select('id, name, website_url, last_extracted_at')
+  .not('website_url', 'is', null)
+  .order('name')
     if (data) setSavedSources(data)
   }
 
@@ -101,21 +101,28 @@ export default function ImportPage() {
   }
 
   async function handleReextract(org: any) {
-    setReextractingId(org.id)
-    setReextractResult(null)
-    try {
-      const response = await fetch('/api/extract-events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ websiteUrl: org.website_url, organization: org.name }),
-      })
-      const data = await response.json()
-      setReextractResult({ orgId: org.id, ...data })
-    } catch {
-      setReextractResult({ orgId: org.id, error: 'Something went wrong.' })
-    }
-    setReextractingId(null)
+  setReextractingId(org.id)
+  setReextractResult(null)
+  try {
+    const response = await fetch('/api/extract-events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ websiteUrl: org.website_url, organization: org.name }),
+    })
+    const data = await response.json()
+    setReextractResult({ orgId: org.id, ...data })
+    await supabase
+      .from('organizations')
+      .update({ last_extracted_at: new Date().toISOString() })
+      .eq('id', org.id)
+    setSavedSources(prev => prev.map(s =>
+      s.id === org.id ? { ...s, last_extracted_at: new Date().toISOString() } : s
+    ))
+  } catch {
+    setReextractResult({ orgId: org.id, error: 'Something went wrong.' })
   }
+  setReextractingId(null)
+}
 
   async function handleDeleteSource(org: any) {
     setDeletingId(org.id)
@@ -198,7 +205,7 @@ export default function ImportPage() {
         <div style={{ display: 'flex', marginBottom: '28px', border: '1.5px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
           <button onClick={() => setTab('ai')}
             style={{ flex: 1, padding: '12px', border: 'none', borderRight: '1.5px solid #e5e7eb', background: tab === 'ai' ? '#1a3d2b' : 'white', color: tab === 'ai' ? 'white' : '#6b7280', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}>
-            🤖 AI — Any Website
+            AI — Any Website
           </button>
           <button onClick={() => setTab('ical')}
             style={{ flex: 1, padding: '12px', border: 'none', background: tab === 'ical' ? '#1a3d2b' : 'white', color: tab === 'ical' ? 'white' : '#6b7280', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}>
@@ -236,7 +243,7 @@ export default function ImportPage() {
 
             <button onClick={handleAiExtract} disabled={aiLoading}
               style={{ width: '100%', background: '#1a3d2b', color: 'white', border: 'none', padding: '14px', borderRadius: '999px', fontSize: '15px', fontWeight: 700, cursor: aiLoading ? 'not-allowed' : 'pointer', opacity: aiLoading ? 0.7 : 1, marginBottom: '28px' }}>
-              {aiLoading ? '🤖 Claude is reading the page…' : '🤖 Extract Events with AI'}
+              {aiLoading ? 'Reading page…' : 'Extract Events with AI'}
             </button>
 
             {aiResult && (
@@ -288,19 +295,24 @@ export default function ImportPage() {
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{org.name}</div>
                         <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{org.website_url}</div>
+{org.last_extracted_at && (
+  <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+    Last extracted: {new Date(org.last_extracted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+  </div>
+)}
                       </div>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button
                           onClick={() => handleReextract(org)}
                           disabled={reextractingId === org.id}
                           style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: reextractingId === org.id ? 'not-allowed' : 'pointer', opacity: reextractingId === org.id ? 0.7 : 1, whiteSpace: 'nowrap' as const }}>
-                          {reextractingId === org.id ? '🤖 Reading…' : '🔁 Re-extract'}
+                          {reextractingId === org.id ? 'Reading…' : 'Re-extract'}
                         </button>
                         <button
                           onClick={() => handleDeleteSource(org)}
                           disabled={deletingId === org.id}
                           style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '8px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: deletingId === org.id ? 'not-allowed' : 'pointer', opacity: deletingId === org.id ? 0.7 : 1, whiteSpace: 'nowrap' as const }}>
-                          {deletingId === org.id ? 'Deleting…' : '🗑️ Delete'}
+                          {deletingId === org.id ? 'Deleting…' : 'Delete'}
                         </button>
                       </div>
                     </div>
@@ -350,7 +362,7 @@ export default function ImportPage() {
 
             <button onClick={handleIcalImport} disabled={icalLoading}
               style={{ width: '100%', background: '#1a3d2b', color: 'white', border: 'none', padding: '14px', borderRadius: '999px', fontSize: '15px', fontWeight: 700, cursor: icalLoading ? 'not-allowed' : 'pointer', opacity: icalLoading ? 0.7 : 1, marginBottom: '28px' }}>
-              {icalLoading ? '⏳ Importing & categorizing with Claude…' : '⬇️ Import iCal Feed'}
+              {icalLoading ? 'Importing…' : 'Import iCal Feed'}
             </button>
 
             {icalResult && (

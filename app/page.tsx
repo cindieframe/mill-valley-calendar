@@ -102,6 +102,7 @@ export default function Home() {
   const [currentView, setCurrentView] = useState('today')
   const [fromDate, setFromDate] = useState<Date | null>(null)
   const [toDate, setToDate] = useState<Date | null>(null)
+  const [showFilterDrawer, setShowFilterDrawer] = useState(false)
 
   useEffect(() => {
     if (window.location.hash?.includes('access_token')) {
@@ -219,7 +220,7 @@ export default function Home() {
   const shortcuts = [
     { label: `Today · ${todayLabel}`,                   value: 'today' },
     { label: `Tomorrow · ${tomorrowLabel}`,             value: 'tomorrow' },
-    { label: `This Weekend · ${satLabel}–${sunLabel}`,  value: 'weekend' },
+    { label: `This Weekend · ${satLabel}–${sunLabel}`,  value: 'weekend', shortLabel: 'This Weekend' },
     { label: 'All Dates',                               value: 'all' },
     { label: 'Custom Dates',                            value: 'pick' },
   ]
@@ -291,7 +292,7 @@ export default function Home() {
 
         {/* Date shortcuts */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {shortcuts.map(({ label, value }) => (
+          {shortcuts.map(({ label, value, shortLabel }) => (
             <button key={value} onClick={() => setCurrentView(value)}
               style={{
                 border: `1.5px solid ${currentView === value ? '#1a3d2b' : '#d0d6db'}`,
@@ -301,7 +302,8 @@ export default function Home() {
                 fontWeight: currentView === value ? 600 : 400,
                 cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
               }}>
-              {label}
+              <span className="date-label-full">{label}</span>
+<span className="date-label-short">{shortLabel || label}</span>
             </button>
           ))}
         </div>
@@ -320,37 +322,111 @@ export default function Home() {
       )}
 
       {/* Category filters — rounded rect pills */}
-      <div style={{ background: '#f2f3f5', padding: '10px 20px 8px', display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-        <button onClick={() => setCatFilters([])}
-          style={{ border: `1.5px solid ${catFilters.length === 0 ? '#1a3d2b' : '#d0d6db'}`, background: catFilters.length === 0 ? '#1a3d2b' : '#fff', color: catFilters.length === 0 ? '#fff' : '#444', borderRadius: '8px', padding: '5px 14px', fontSize: '13px', fontWeight: catFilters.length === 0 ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
-          All
+{/* Desktop filters */}
+<div className="desktop-filters">
+  <div style={{ background: '#f2f3f5', padding: '10px 20px 8px', display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+    <button onClick={() => setCatFilters([])}
+      style={{ border: `1.5px solid ${catFilters.length === 0 ? '#1a3d2b' : '#d0d6db'}`, background: catFilters.length === 0 ? '#1a3d2b' : '#fff', color: catFilters.length === 0 ? '#fff' : '#444', borderRadius: '8px', padding: '5px 14px', fontSize: '13px', fontWeight: catFilters.length === 0 ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
+      All
+    </button>
+    {Object.entries(CATS).map(([key, cat]) => {
+      const active = catFilters.includes(key)
+      return (
+        <button key={key} onClick={() => toggleCat(key)}
+          style={{ border: `1.5px solid ${active ? '#1a3d2b' : '#d0d6db'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#444', borderRadius: '8px', padding: '5px 14px', fontSize: '13px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+          {cat.label}
         </button>
-        {Object.entries(CATS).map(([key, cat]) => {
-          const active = catFilters.includes(key)
-          return (
-            <button key={key} onClick={() => toggleCat(key)}
-              style={{ border: `1.5px solid ${active ? '#1a3d2b' : '#d0d6db'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#444', borderRadius: '8px', padding: '5px 14px', fontSize: '13px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
-              {cat.label}
-            </button>
-          )
-        })}
-      </div>
+      )
+    })}
+  </div>
+  <div style={{ margin: '0 20px', borderTop: '1px solid #e8eaed' }} />
+  <div style={{ background: '#f2f3f5', padding: '8px 20px 14px', display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+    {Object.entries(TAG_CARD).map(([key, tag]) => {
+      const active = tagFilters.includes(key)
+      return (
+        <button key={key} onClick={() => toggleTag(key)}
+          style={{ border: `1px solid ${active ? '#1a3d2b' : '#e8eaed'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#666', borderRadius: '999px', padding: '4px 14px', fontSize: '12px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+          {tag.label}
+        </button>
+      )
+    })}
+  </div>
+</div>
 
-      {/* Divider */}
-      <div style={{ margin: '0 20px', borderTop: '1px solid #e8eaed' }} />
+{/* Mobile filters pill */}
+<div className="mobile-filters">
+  <div style={{ background: '#f2f3f5', padding: '6px 20px 12px', display: 'flex', justifyContent: 'center' }}>
+    <button onClick={() => setShowFilterDrawer(true)}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: (catFilters.length + tagFilters.length) > 0 ? '#1a3d2b' : '#fff', border: `1px solid ${(catFilters.length + tagFilters.length) > 0 ? '#1a3d2b' : '#d0d6db'}`, borderRadius: '999px', padding: '7px 18px', cursor: 'pointer', fontFamily: 'inherit' }}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={(catFilters.length + tagFilters.length) > 0 ? '#fff' : '#555'} strokeWidth="2" strokeLinecap="round">
+        <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+      </svg>
+      <span style={{ fontSize: '13px', fontWeight: 500, color: (catFilters.length + tagFilters.length) > 0 ? '#fff' : '#444' }}>
+        {(catFilters.length + tagFilters.length) > 0 ? `Filters · ${catFilters.length + tagFilters.length}` : 'Filters'}
+      </span>
+    </button>
+  </div>
+</div>
 
-      {/* Tag filters — full pill shape */}
-      <div style={{ background: '#f2f3f5', padding: '8px 20px 14px', display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
-        {Object.entries(TAG_CARD).map(([key, tag]) => {
-          const active = tagFilters.includes(key)
-          return (
-            <button key={key} onClick={() => toggleTag(key)}
-              style={{ border: `1px solid ${active ? '#1a3d2b' : '#e8eaed'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#666', borderRadius: '999px', padding: '4px 14px', fontSize: '12px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
-              {tag.label}
-            </button>
-          )
-        })}
+{/* Mobile filter drawer */}
+{showFilterDrawer && (
+  <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
+    <div onClick={() => setShowFilterDrawer(false)}
+      style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} />
+    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#fff', borderRadius: '16px 16px 0 0', padding: '0 0 40px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
+        <div style={{ width: '36px', height: '4px', background: '#e0e0e0', borderRadius: '999px' }} />
       </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 20px 14px' }}>
+        <span style={{ fontSize: '15px', fontWeight: 500, color: '#1a1a1a' }}>
+          {(catFilters.length + tagFilters.length) > 0 ? `Filters · ${catFilters.length + tagFilters.length}` : 'Filters'}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          {(catFilters.length + tagFilters.length) > 0 && (
+            <button onClick={() => { setCatFilters([]); setTagFilters([]) }}
+              style={{ background: 'none', border: 'none', fontSize: '13px', color: '#3a7d44', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Clear all
+            </button>
+          )}
+          <button onClick={() => setShowFilterDrawer(false)}
+            style={{ background: '#1a3d2b', color: '#fff', border: 'none', borderRadius: '999px', padding: '7px 20px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Done
+          </button>
+        </div>
+      </div>
+      <div style={{ height: '1px', background: '#e5e7eb', margin: '0 20px 16px' }} />
+      <div style={{ padding: '0 20px 16px' }}>
+        <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>Category</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {Object.entries(CATS).map(([key, cat]) => {
+            const active = catFilters.includes(key)
+            return (
+              <button key={key} onClick={() => toggleCat(key)}
+                style={{ border: `1.5px solid ${active ? '#1a3d2b' : '#d0d6db'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#444', borderRadius: '8px', padding: '6px 14px', fontSize: '13px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+                {cat.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div style={{ height: '1px', background: '#e5e7eb', margin: '0 20px 16px' }} />
+      <div style={{ padding: '0 20px' }}>
+        <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>Tag</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {Object.entries(TAG_CARD).map(([key, tag]) => {
+            const active = tagFilters.includes(key)
+            return (
+              <button key={key} onClick={() => toggleTag(key)}
+                style={{ border: `1px solid ${active ? '#1a3d2b' : '#e8eaed'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#666', borderRadius: '999px', padding: '6px 16px', fontSize: '13px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+                {tag.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Events list */}
       <div style={{ maxWidth: '860px', margin: '0 auto', padding: '4px 16px 40px' }}>
@@ -389,7 +465,7 @@ export default function Home() {
                     </div>
 
                     {/* Body */}
-                    <div style={{ flex: 1, minWidth: 0, padding: '0 14px' }}>
+                    <div className="event-card-body" style={{ flex: 1, minWidth: 0, padding: '0 14px' }}>
                       <div style={{ fontSize: '15px', fontWeight: 500, color: '#1a2530', marginBottom: '2px' }}>
                         {ev.title}
                         {ev.verified && (
@@ -411,7 +487,7 @@ export default function Home() {
                     </div>
 
                     {/* Pills */}
-                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignItems: 'flex-start', paddingLeft: '12px', borderLeft: '1px solid #eee' }}>
+                    <div className="event-card-pills" style={{ gap: '6px', flexShrink: 0, alignItems: 'flex-start', paddingLeft: '12px', borderLeft: '1px solid #eee' }}>
                       {catKeys.length > 0 && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           {catKeys.map((c: string) => {
