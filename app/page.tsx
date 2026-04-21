@@ -6,6 +6,7 @@ import { getEvents } from './events'
 import { supabase } from './supabase'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
+import Header from '@/app/components/Header'
 
 const BRAND = {
   forest:    '#1a3d2b',
@@ -227,17 +228,14 @@ export default function Home() {
     <div style={{ fontFamily: "'Helvetica Neue', Arial, sans-serif", minHeight: '100vh', background: '#f2f3f5' }}>
 
       {/* Nav */}
-      <header style={{ background: '#1a3d2b', padding: '0 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '56px', position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline' }}>
-          <span style={{ color: '#fff', fontSize: '21px', fontWeight: 400 }}>town</span>
-          <span style={{ color: '#7EC8A4', fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: '21px', fontWeight: 400 }}>stir</span>
-        </div>
-        <button
-          onClick={() => router.push('/post-event')}
-          style={{ background: '#C9952A', color: '#fff', border: 'none', borderRadius: '999px', padding: '10px 22px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-          + Post Event
-        </button>
-      </header>
+      <Header
+  rightSlot={
+    <button onClick={() => router.push('/post-event')}
+      style={{ background: '#C9952A', color: '#fff', border: 'none', borderRadius: '999px', padding: '10px 22px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+      + Post Event
+    </button>
+  }
+/>
 
       {/* Org bar */}
       <div style={{ background: '#f2f3f5', padding: '8px 20px', textAlign: 'center', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px' }}>
