@@ -6,7 +6,7 @@ import { getEvents } from './events'
 import { supabase } from './supabase'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
-import Header from '@/app/components/Header'
+import Header from './components/Header'
 
 const BRAND = {
   forest:    '#1a3d2b',
@@ -230,21 +230,20 @@ export default function Home() {
       {/* Nav */}
       <Header
   rightSlot={
-    <button onClick={() => router.push('/post-event')}
-      style={{ background: '#C9952A', color: '#fff', border: 'none', borderRadius: '999px', padding: '10px 22px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-      + Post Event
-    </button>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+  <a href="/org/login" style={{ color: 'rgba(255,255,255,0.65)', fontSize: '13px', textDecoration: 'none' }}>
+    Org Login
+  </a>
+  <button onClick={() => router.push('/post-event')}
+    style={{ background: '#C9952A', color: '#fff', border: 'none', borderRadius: '8px', padding: '7px 16px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+    + Post Event
+  </button>
+</div>
   }
 />
 
       {/* Org bar */}
-      <div style={{ background: '#f2f3f5', padding: '8px 20px', textAlign: 'center', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px' }}>
-        <a href="/org/signup" style={{ color: '#3a7d44', fontWeight: 500, textDecoration: 'none' }}>
-          Are you a local organization? Add your events to Townstir →
-        </a>
-        <span style={{ color: '#ccc' }}>|</span>
-        <a href="/org/login" style={{ color: '#555', textDecoration: 'none' }}>Org Login</a>
-      </div>
+      
 
       {/* Hero */}
       <div style={{ background: '#f2f3f5', padding: '20px 20px 18px', textAlign: 'center' }}>

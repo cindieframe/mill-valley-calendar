@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
+import { OrgHeader } from '../../components/Header'
 
 type Event = {
   id: number
@@ -407,41 +408,38 @@ async function handleContactAdmin() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: 'sans-serif' }}>
-      <header style={{ background: '#1a3d2b', padding: '14px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <span style={{ fontWeight: 800, fontSize: '22px', color: 'white', letterSpacing: '-1px' }}>town</span>
-          <span style={{ fontWeight: 800, fontSize: '22px', color: '#e6a020', letterSpacing: '-1px', textTransform: 'uppercase' }}>STIR</span>
-          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginLeft: '12px' }}>{org.name}</span>
-        </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={() => setShowContactModal(true)}
-            style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
-            ✉️ Contact
-          </button>
-          <button onClick={() => router.push('/')}
-            style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
-            ← Calendar
-          </button>
-          <button onClick={handleLogout}
-            style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
-            Log Out
-          </button>
-        </div>
-      </header>
+<OrgHeader
+  rightSlot={
+    <div style={{ display: 'flex', gap: '8px' }}>
+      <button onClick={() => setShowContactModal(true)}
+        style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer' }}>
+        Contact Admin
+      </button>
+      <button onClick={() => router.push('/')}
+        style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer' }}>
+        ← Calendar
+      </button>
+      <button onClick={handleLogout}
+        style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer' }}>
+        Log Out
+      </button>
+    </div>
+  }
+/>
 
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '40px 24px 80px' }}>
-        <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '28px', fontWeight: 900, color: '#1f2937', marginBottom: '4px' }}>
-  Organization Dashboard
-</h1>
-<p style={{ fontSize: '20px', fontWeight: 700, color: '#1a3d2b', marginBottom: '4px' }}>
-  {org.name}
-</p>
-<p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>
-  Manage your profile and connect your events calendar.{' '}
-  <a href="#profile" style={{ color: '#1a3d2b', fontWeight: 600, fontSize: '13px' }}>
-    Edit Profile ↓
-  </a>
-</p>
+        <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '24px 32px 20px', marginBottom: '8px' }}>
+  <p style={{ fontSize: '11px', fontWeight: 600, color: '#767e8a', textTransform: 'uppercase', letterSpacing: '0.8px', margin: '0 0 6px' }}>
+    Organization Dashboard
+  </p>
+  <h1 style={{ fontSize: '24px', fontWeight: 500, color: '#1a1a1a', margin: '0 0 4px' }}>
+    {org.name}
+  </h1>
+  <p style={{ fontSize: '13px', color: '#767e8a', margin: 0 }}>
+    Manage your profile and events.{' '}
+    <a href="#profile" style={{ color: '#1a3d2b', fontWeight: 500 }}>Edit profile ↓</a>
+  </p>
+</div>
 
         {error && (
           <div style={{ background: '#fee2e2', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: '#dc2626' }}>
