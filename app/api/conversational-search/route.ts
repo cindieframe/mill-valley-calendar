@@ -18,7 +18,7 @@ function getDateContext() {
   const sun = new Date(TODAY); sun.setDate(TODAY.getDate() + satOffset + 1)
 
   const nextSat = new Date(sat); nextSat.setDate(sat.getDate() + 7)
-  const nextSun = new Date(sun); sun.setDate(sun.getDate() + 7)
+  const nextSun = new Date(sun); nextSun.setDate(sun.getDate() + 7)
 
   const weekEnd = new Date(TODAY)
   weekEnd.setDate(TODAY.getDate() + (7 - day))
@@ -35,8 +35,10 @@ function getDateContext() {
 }
 
 export async function POST(req: NextRequest) {
+  let query = ''
   try {
-    const { query } = await req.json()
+    const body = await req.json()
+    query = body.query
     if (!query) return NextResponse.json({ error: 'No query' }, { status: 400 })
 
     const dates = getDateContext()
@@ -47,19 +49,19 @@ Today's date is ${dates.today}.
 Given a natural language search query, extract structured search filters as JSON.
 
 Available categories (use the key values only):
-- outdoors (Outdoors, Sports & Movement)
-- arts (Arts & Performances)
-- food (Food, Drink & Social)
-- community (Volunteer & Community)
-- family (Family & Youth)
-- classes (Classes & Lectures)
-- gov (Local Government)
+- outdoors (Outdoors, Sports & Movement — hiking, running, biking, yoga, fitness, swimming, sports, trails, nature, movement, exercise, dance, martial arts, tai chi, pilates)
+- arts (Arts & Performances — music, concerts, bands, live music, theater, theatre, dance performance, art, gallery, film, movies, opera, symphony, choir, singing, poetry, readings, comedy, improv, storytelling, crafts, painting, drawing, sculpture, photography)
+- food (Food, Drink & Social — dinner, lunch, brunch, wine, beer, cocktails, tasting, restaurant, food, cooking, baking, mixology, happy hour, social, networking, meetup, gathering)
+- community (Volunteer & Community — volunteer, cleanup, donation, fundraiser, charity, community service, activism, advocacy, neighborhood, civic, environmental, gardening, stewardship)
+- youth (Family & Youth — kids, children, toddler, baby, infant, family, storytime, youth, teen, teenager, after school, summer camp, field trip, playground)
+- classes (Classes & Lectures — class, workshop, seminar, lecture, course, lesson, training, tutorial, talk, presentation, panel, discussion, demonstration, learn, education, certification)
+- gov (Local Government — city council, town hall, planning commission, board meeting, government, public hearing, zoning, elections, vote, mayor, supervisor)
 
 Available tags (use the key values only):
-- free
-- family
-- wellness
-- reg
+- free (free, no cost, no charge, complimentary)
+- family (family-friendly, all ages, kids welcome, family event)
+- wellness (health, wellness, mental health, meditation, mindfulness, healing, therapy)
+- reg (registration required, RSVP, ticketed, reserve, sign up)
 
 Date reference:
 - today = ${dates.today}
@@ -83,16 +85,26 @@ Respond ONLY with a valid JSON object, no explanation, no markdown. Use this exa
 
 Rules:
 - cats: array of matching category keys, or empty array
-- tags: array of matching tag keys, or empty array
+- tags: array of matching tag keys, or empty array  
 - dateFrom / dateTo: YYYY-MM-DD strings or null
-- keyword: any remaining search term not covered by cats/tags/dates, or empty string
-- "kids", "children", "toddler", "baby" -> add "family" tag and "family" category
+- keyword: any specific remaining search term not covered by cats/tags/dates (e.g. a specific band name, venue, or topic). Keep this SHORT — 1-3 words max. If the category mapping already covers the concept, leave keyword empty.
+- When in doubt about category, include it — it's better to show more results than none
+- If query mentions a specific named event or performer, put that name in keyword
+- "kids", "children", "toddler", "baby" -> add "family" tag AND "youth" category
 - "free" -> add "free" tag
-- "yoga", "meditation", "fitness", "hike", "run", "trail" -> "outdoors" or "wellness" as appropriate
-- "concert", "music", "theater", "art" -> "arts"
-- "dinner", "wine", "beer", "tasting", "restaurant" -> "food"
-- If the query is vague (e.g. "fun things") return all empty filters
-- "tonight", "this evening", "this morning", "this afternoon" -> dateFrom and dateTo should both be ${dates.today}`
+- "music", "concert", "band", "live music", "singer", "musician" -> "arts" category- "music", "concert", "band", "live music", "singer", "musician", "orchestra", "symphony", "choir", "jazz", "opera", "acoustic" -> "arts" category AND keyword should be set to the most specific music term from the query (e.g. "music", "concert", "jazz")- "yoga", "pilates", "tai chi", "meditation" -> "outdoors" category AND "wellness" tag
+- "hike", "hiking", "trail" -> "outdoors" category AND keyword = "hike" or "trail"
+- "yoga", "pilates", "tai chi" -> "outdoors" category AND keyword = the specific activity
+- "painting", "drawing", "sculpture", "pottery", "ceramics" -> "arts" category AND keyword = the specific activity
+- "book club", "book" -> "classes" category AND keyword = "book"
+- "cooking", "baking" -> "food" category AND keyword = "cooking" or "baking"- "hike", "run", "trail", "bike", "swim", "sport" -> "outdoors" category
+- "dinner", "wine", "beer", "tasting", "restaurant", "brunch" -> "food" category
+- "volunteer", "cleanup", "fundraiser" -> "community" category
+- "class", "workshop", "lecture", "seminar", "talk" -> "classes" category
+- "city council", "planning", "government" -> "gov" category
+- If the query is vague (e.g. "fun things", "what's happening") return all empty filters and empty keyword
+- "tonight", "this evening", "this morning", "this afternoon" -> dateFrom and dateTo = ${dates.today}
+- Always return valid JSON even if uncertain — never return an error`
 
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -105,9 +117,28 @@ Rules:
     const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
     const filters = JSON.parse(cleaned)
 
+    // Safety fallback — if cats/tags/keyword all empty and no dates, 
+    // use the original query as keyword so text search still runs
+    const hasFilters = 
+      (filters.cats?.length > 0) || 
+      (filters.tags?.length > 0) || 
+      filters.dateFrom || 
+      filters.keyword
+
+    if (!hasFilters) {
+      filters.keyword = query.trim()
+    }
+
     return NextResponse.json(filters)
   } catch (err) {
     console.error('Conversational search error:', err)
-    return NextResponse.json({ cats: [], tags: [], dateFrom: null, dateTo: null, keyword: '' })
+    // On any error, fall back to treating the whole query as a keyword
+    return NextResponse.json({ 
+      cats: [], 
+      tags: [], 
+      dateFrom: null, 
+      dateTo: null, 
+      keyword: query || '' 
+    })
   }
 }

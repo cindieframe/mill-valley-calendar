@@ -154,9 +154,19 @@ export default function Home() {
     )) return false
     if (orgFilter && ev.organization !== orgFilter) return false
     if (!aiFilters && search &&
-      !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
-      !ev.location?.toLowerCase().includes(search.toLowerCase())
-    ) return false
+  !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
+  !ev.location?.toLowerCase().includes(search.toLowerCase()) &&
+  !ev.description?.toLowerCase().includes(search.toLowerCase())
+) return false
+
+if (aiFilters && aiFilters.keyword) {
+  const kw = aiFilters.keyword.toLowerCase()
+  const musicTerms = ['music', 'musical', 'concert', 'band', 'jazz', 'folk', 'rock', 'acoustic', 'singer', 'song', 'perform', 'ensemble', 'orchestra', 'symphony', 'choir', 'violin', 'guitar', 'flute', 'rhythm', 'melody', 'tune', 'gong', 'drum']
+  const searchTerms = kw === 'music' ? musicTerms : [kw]
+  const haystack = `${ev.title} ${ev.description} ${ev.location}`.toLowerCase()
+  if (!searchTerms.some(term => haystack.includes(term))) return false
+}
+
     return true
   })
 
