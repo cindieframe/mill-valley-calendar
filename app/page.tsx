@@ -55,7 +55,7 @@ const CAT_LABELS: Record<string, string> = {
 const TAG_CARD: Record<string, { bg: string; color: string; label: string }> = {
   free:     { bg: 'rgba(180,130,0,0.06)',  color: '#7a5500', label: 'Free' },
   family:   { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Family-friendly' },
-  wellness: { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Health & Wellness' },
+  wellness: { bg: 'rgba(0,0,0,0.04)', color: '#555', label: 'Wellness' },
   reg:      { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Reg. Required' },
   music:    { bg: 'rgba(100,80,200,0.06)', color: '#4a3fa0', label: 'Live Music' },
 }
@@ -460,7 +460,7 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
               </div>
               {grouped[dateStr].map(ev => {
                 const catKeys: string[] = ev.cats || (ev.category ? ev.category.split(',').map((c: string) => c.trim()) : [])
-                const tagKeys: string[] = ev.tags ? ev.tags.split(',').map((t: string) => t.trim()) : []
+                const tagKeys: string[] = ev.tags ? ev.tags.split(',').map((t: string) => t.trim()).filter((t: string) => !catKeys.includes(t)) : []
                 const desc = ev.description?.trim()
                 return (
                   <div key={ev.id}
@@ -505,37 +505,36 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
                     </div>
  
                     {/* Pills */}
-                    <div className="event-card-pills" style={{ gap: '6px', flexShrink: 0, alignItems: 'flex-start', paddingLeft: '12px', borderLeft: '1px solid #eee' }}>
-                      {catKeys.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          {catKeys.map((c: string) => {
-                            const s = CAT_CARD[c]
-                            const lbl = CAT_LABELS[c]
-                            if (!s || !lbl) return null
-                            return (
-                              <span key={c} style={{ background: s.bg, color: s.color, fontSize: '11px', borderRadius: '5px', padding: '3px 8px', whiteSpace: 'nowrap' }}>
-                                {lbl}
-                              </span>
-                            )
-                          })}
-                        </div>
-                      )}
-                      {tagKeys.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          {tagKeys.map((t: string) => {
-                            const meta = TAG_CARD[t]
-                            if (!meta) return null
-                            return (
-                              <span key={t} style={{ background: meta.bg, color: meta.color, fontSize: '11px', borderRadius: '999px', padding: '3px 8px', whiteSpace: 'nowrap' }}>
-                                {meta.label}
-                              </span>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
- 
-                  </div>
+                    <div className="event-card-pills" style={{ flexShrink: 0, paddingLeft: '12px', borderLeft: '1px solid #eee', display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'flex-start' }}>
+  {catKeys.length > 0 && (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      {catKeys.map((c: string) => {
+        const s = CAT_CARD[c]
+        const lbl = CAT_LABELS[c]
+        if (!s || !lbl) return null
+        return (
+          <span key={c} style={{ background: s.bg, color: s.color, fontSize: '11px', borderRadius: '5px', padding: '3px 8px', whiteSpace: 'nowrap', display: 'inline-block', width: '82px', textAlign: 'center' }}>
+            {lbl}
+          </span>
+        )
+      })}
+    </div>
+  )}
+  {tagKeys.length > 0 && (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '90px' }}>
+  {tagKeys.map((t: string) => {
+        const meta = TAG_CARD[t]
+        if (!meta) return null
+        return (
+          <span key={t} style={{ background: meta.bg, color: meta.color, fontSize: '11px', borderRadius: '999px', padding: '3px 8px', whiteSpace: 'nowrap', display: 'inline-block', width: '88px', textAlign: 'center' }}>
+            {meta.label}
+          </span>
+        )
+      })}
+    </div>
+  )}
+</div>
+</div>
                 )
               })}
             </div>
