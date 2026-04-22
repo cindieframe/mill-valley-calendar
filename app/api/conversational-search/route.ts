@@ -92,7 +92,7 @@ Rules:
 - If query mentions a specific named event or performer, put that name in keyword
 - "kids", "children", "toddler", "baby" -> add "family" tag AND "youth" category
 - "free" -> add "free" tag
-- "music", "concert", "band", "live music", "singer", "musician" -> "arts" category- "music", "concert", "band", "live music", "singer", "musician", "orchestra", "symphony", "choir", "jazz", "opera", "acoustic" -> "arts" category AND keyword should be set to the most specific music term from the query (e.g. "music", "concert", "jazz")- "yoga", "pilates", "tai chi", "meditation" -> "outdoors" category AND "wellness" tag
+- "music", "concert", "band", "live music", "singer", "musician", "orchestra", "symphony", "choir", "jazz", "opera", "acoustic" -> DO NOT set cats. Set keyword = the most specific music term from the query (e.g. "music", "concert", "jazz", "band")
 - "hike", "hiking", "trail" -> "outdoors" category AND keyword = "hike" or "trail"
 - "yoga", "pilates", "tai chi" -> "outdoors" category AND keyword = the specific activity
 - "painting", "drawing", "sculpture", "pottery", "ceramics" -> "arts" category AND keyword = the specific activity

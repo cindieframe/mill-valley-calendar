@@ -7,6 +7,7 @@ export async function getEvents() {
     .eq('status', 'approved')
 .gte('date', new Date().toISOString().split('T')[0])
 .order('date', { ascending: true })
+.order('time', { ascending: true })
 
   if (error) {
     console.error('Error fetching events:', error)
