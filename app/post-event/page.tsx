@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
 import ReCAPTCHA from 'react-google-recaptcha'
+import Header from '../components/Header'
 
 export default function PostEvent() {
   const recaptchaRef = useRef<any>(null)
@@ -241,18 +242,14 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
   return (
     <div style={{minHeight:'100vh',background:'#fafaf8',fontFamily:'sans-serif'}}>
-      <header style={{background:'#1a3d2b',padding:'14px 40px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-        <div>
-          <span style={{fontWeight:800,fontSize:'22px',color:'white',letterSpacing:'-1px'}}>town</span>
-          <span style={{fontWeight:800,fontSize:'22px',color:'#e6a020',letterSpacing:'-1px',textTransform:'uppercase'}}>STIR</span>
-          <div style={{fontSize:'9px',color:'rgba(255,255,255,0.5)',letterSpacing:'2.5px',textTransform:'uppercase',marginTop:'2px'}}>🌲 Mill Valley, CA</div>
-        </div>
-        <button onClick={() => router.push('/')}
-          style={{background:'transparent',color:'rgba(255,255,255,0.7)',border:'1.5px solid rgba(255,255,255,0.3)',padding:'8px 18px',borderRadius:'999px',fontWeight:600,fontSize:'13px',cursor:'pointer'}}>
-          ← Back to Calendar
-        </button>
-      </header>
-
+      <Header
+  rightSlot={
+    <button onClick={() => router.push('/')}
+      style={{background:'transparent',color:'rgba(255,255,255,0.7)',border:'1px solid rgba(255,255,255,0.3)',padding:'6px 14px',borderRadius:'999px',fontSize:'12px',cursor:'pointer'}}>
+      ← Back to Calendar
+    </button>
+  }
+/>
       <div style={{maxWidth:'640px',margin:'0 auto',padding:'40px 24px 80px'}}>
         <h1 style={{fontFamily:'Georgia,serif',fontSize:'32px',fontWeight:900,color:'#1f2937',marginBottom:'6px',letterSpacing:'-0.5px'}}>
           Post a Community Event
