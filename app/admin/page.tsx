@@ -364,7 +364,8 @@ export default function Admin() {
         <input style={inputStyle} value={editingEvent.organization || ''} onChange={e => setEditingEvent({ ...editingEvent, organization: e.target.value })} />
         <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Category</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
-          {['outdoors','arts','food','community','family','classes','gov'].map(cat => {
+          {['outdoors','arts','food','community','youth','classes','gov'].map(cat => {
+
             const active = (editingEvent.category || '').split(',').map((c: string) => c.trim()).includes(cat)
             return (
               <button key={cat} type="button" onClick={() => {
@@ -382,7 +383,7 @@ export default function Admin() {
           {[
             { value: 'free', label: 'Free' },
             { value: 'family', label: 'Family-Friendly' },
-            { value: 'wellness', label: 'Health & Wellness' },
+            { value: 'wellness', label: 'Wellness' },
             { value: 'reg', label: 'Reg. Required' },
             { value: 'music', label: 'Live Music' },
           ].map(({ value: tag, label: tagLabel }) => {

@@ -358,7 +358,7 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
           })}
         </div>
         <div style={{ margin: '0 20px', borderTop: '1px solid #e8eaed' }} />
-        <div style={{ background: '#f2f3f5', padding: '8px 20px 14px', display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <div style={{ background: '#f2f3f5', padding: '8px 20px 14px', display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center' }}>
           {Object.entries(TAG_CARD).map(([key, tag]) => {
             const active = tagFilters.includes(key)
             return (
@@ -369,8 +369,8 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
             )
           })}
         </div>
+        
       </div>
- 
       {/* Mobile filters pill */}
       <div className="mobile-filters">
         <div style={{ background: '#f2f3f5', padding: '6px 20px 12px', display: 'flex', justifyContent: 'center' }}>
@@ -448,6 +448,19 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
  
       {/* Events list */}
       <div style={{ maxWidth: '860px', margin: '0 auto', padding: '4px 16px 40px' }}>
+        {orgList.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-34px', position: 'relative', zIndex: 1 }}>
+            <select
+              value={orgFilter}
+              onChange={e => setOrgFilter(e.target.value)}
+              style={{ borderRadius: '8px', padding: '5px 14px', fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer', outline: 'none', border: `1.5px solid ${orgFilter ? '#1a3d2b' : '#d0d6db'}`, color: '#444', background: '#fff' }}>
+              <option value=''>All Organizations</option>
+              {orgList.map(org => (
+                <option key={org} value={org}>{org}</option>
+              ))}
+            </select>
+          </div>
+        )}
         {filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>
             <p style={{ fontSize: '15px' }}>No events found. Try a different filter or search.</p>

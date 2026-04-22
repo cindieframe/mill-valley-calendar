@@ -20,7 +20,7 @@ function parseICal(text: string) {
     
     const dtstart = get('DTSTART')
     const summary = get('SUMMARY')
-    const description = get('DESCRIPTION').replace(/\\n/g, ' ').replace(/\\,/g, ',').replace(/https?:\/\/\S+/g, '').replace(/#\S+/g, '').replace(/@\S+/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)
+    const description = get('DESCRIPTION').replace(/\\n/g, ' ').replace(/\\,/g, ',').replace(/https?:\/\/\S+/g, '').replace(/#\S+/g, '').replace(/@\S+/g, '').replace(/\s+/g, ' ').trim()
     const location = get('LOCATION').replace(/\\,/g, ',')
     const url = get('URL')
     const image = get('IMAGE') || get('X-IMAGE') || ''
