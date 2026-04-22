@@ -210,11 +210,12 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   ]
 
   const tags = [
-    { value: 'free',     label: '🟢 Free' },
-    { value: 'family',   label: '⭐ Family-Friendly' },
-    { value: 'wellness', label: '🧘 Health & Wellness' },
-    { value: 'reg',      label: '🎟️ Registration Required' },
-  ]
+  { value: 'free',     label: 'Free' },
+  { value: 'family',   label: 'Family-Friendly' },
+  { value: 'wellness', label: 'Health & Wellness' },
+  { value: 'reg',      label: 'Registration Required' },
+  { value: 'music',    label: 'Live Music' },
+]
 
   const timeSlots: string[] = []
   for (let h = 0; h < 24; h++) {

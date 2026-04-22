@@ -379,7 +379,13 @@ export default function Admin() {
         </div>
         <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Tags</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
-          {['free','family','wellness','reg'].map(tag => {
+          {[
+            { value: 'free', label: 'Free' },
+            { value: 'family', label: 'Family-Friendly' },
+            { value: 'wellness', label: 'Health & Wellness' },
+            { value: 'reg', label: 'Reg. Required' },
+            { value: 'music', label: 'Live Music' },
+          ].map(({ value: tag, label: tagLabel }) => {
             const active = (editingEvent.tags || '').split(',').map((t: string) => t.trim()).includes(tag)
             return (
               <button key={tag} type="button" onClick={() => {
@@ -387,7 +393,7 @@ export default function Admin() {
                 const next = active ? current.filter((t: string) => t !== tag) : [...current, tag]
                 setEditingEvent({ ...editingEvent, tags: next.join(',') })
               }} style={{ padding: '7px 14px', borderRadius: '999px', border: '1.5px solid', borderColor: active ? '#10b981' : '#e5e7eb', background: active ? '#10b981' : 'white', color: active ? 'white' : '#6b7280', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
-                {tag}
+                {tagLabel}
               </button>
             )
           })}

@@ -1,5 +1,5 @@
 'use client'
-
+ 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getEvents } from './events'
@@ -7,7 +7,7 @@ import { supabase } from './supabase'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import Header from './components/Header'
-
+ 
 const BRAND = {
   forest:    '#1a3d2b',
   amber:     '#C9952A',
@@ -19,7 +19,7 @@ const BRAND = {
   border:    '#d0d6db',
   borderLight: '#e8eaed',
 }
-
+ 
 const CATS: Record<string, { label: string }> = {
   outdoors:  { label: 'Outdoors, Sports & Movement' },
   arts:      { label: 'Arts & Performances' },
@@ -29,7 +29,7 @@ const CATS: Record<string, { label: string }> = {
   classes:   { label: 'Classes & Lectures' },
   gov:       { label: "Local Gov't" },
 }
-
+ 
 const CAT_CARD: Record<string, { bg: string; color: string }> = {
   outdoors:  { bg: 'rgba(20,100,60,0.05)',   color: '#145a30' },
   arts:      { bg: 'rgba(100,80,200,0.05)',  color: '#4a3fa0' },
@@ -40,7 +40,7 @@ const CAT_CARD: Record<string, { bg: string; color: string }> = {
   classes:   { bg: 'rgba(160,30,30,0.05)',   color: '#7a1a1a' },
   gov:       { bg: 'rgba(60,60,80,0.05)',    color: '#3a3a50' },
 }
-
+ 
 const CAT_LABELS: Record<string, string> = {
   outdoors:  'Outdoors',
   arts:      'Arts',
@@ -51,14 +51,15 @@ const CAT_LABELS: Record<string, string> = {
   classes:   'Classes',
   gov:       "Gov't",
 }
-
+ 
 const TAG_CARD: Record<string, { bg: string; color: string; label: string }> = {
   free:     { bg: 'rgba(180,130,0,0.06)',  color: '#7a5500', label: 'Free' },
   family:   { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Family-friendly' },
   wellness: { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Health & Wellness' },
   reg:      { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Reg. Required' },
+  music:    { bg: 'rgba(100,80,200,0.06)', color: '#4a3fa0', label: 'Live Music' },
 }
-
+ 
 function getDateStrings() {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -81,13 +82,13 @@ function getDateStrings() {
     sunLabel:      fmt(sun),
   }
 }
-
+ 
 function formatDayHeader(dateStr: string) {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   })
 }
-
+ 
 export default function Home() {
   const router = useRouter()
   const [events, setEvents] = useState<any[]>([])
@@ -103,13 +104,19 @@ export default function Home() {
   const [fromDate, setFromDate] = useState<Date | null>(null)
   const [toDate, setToDate] = useState<Date | null>(null)
   const [showFilterDrawer, setShowFilterDrawer] = useState(false)
-
+  const [hasSpeech, setHasSpeech] = useState(false)
+ 
   useEffect(() => {
     if (window.location.hash?.includes('access_token')) {
       router.push('/auth/confirm' + window.location.hash)
     }
   }, [])
-
+ 
+  useEffect(() => {
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+setHasSpeech(!isSafari && !!(( window as any).SpeechRecognition || (window as any).webkitSpeechRecognition))
+  }, [])
+ 
   useEffect(() => {
     async function loadEvents() {
       const data = await getEvents()
@@ -132,12 +139,12 @@ export default function Home() {
     }
     loadOrgList()
   }, [])
-
+ 
   const {
     todayStr, tomorrowStr, satStr, sunStr,
     todayLabel, tomorrowLabel, satLabel, sunLabel,
   } = getDateStrings()
-
+ 
   const filtered = events.filter(ev => {
     if (currentView === 'today'    && ev.date !== todayStr) return false
     if (currentView === 'tomorrow' && ev.date !== tomorrowStr) return false
@@ -154,29 +161,30 @@ export default function Home() {
     )) return false
     if (orgFilter && ev.organization !== orgFilter) return false
     if (!aiFilters && search &&
-  !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
-  !ev.location?.toLowerCase().includes(search.toLowerCase()) &&
-  !ev.description?.toLowerCase().includes(search.toLowerCase())
-) return false
-
-if (aiFilters && aiFilters.keyword) {
+      !ev.title?.toLowerCase().includes(search.toLowerCase()) &&
+      !ev.location?.toLowerCase().includes(search.toLowerCase()) &&
+      !ev.description?.toLowerCase().includes(search.toLowerCase())
+    ) return false
+ 
+    if (aiFilters && aiFilters.keyword) {
   const kw = aiFilters.keyword.toLowerCase()
   const musicTerms = ['music', 'musical', 'concert', 'band', 'jazz', 'folk', 'rock', 'acoustic', 'singer', 'song', 'perform', 'ensemble', 'orchestra', 'symphony', 'choir', 'violin', 'guitar', 'flute', 'rhythm', 'melody', 'tune', 'gong', 'drum']
-  const searchTerms = kw === 'music' ? musicTerms : [kw]
+  const isMusicRelated = musicTerms.some(term => kw.includes(term) || term.includes(kw))
+const searchTerms = isMusicRelated ? musicTerms : [kw]
   const haystack = `${ev.title} ${ev.description} ${ev.location}`.toLowerCase()
   if (!searchTerms.some(term => haystack.includes(term))) return false
 }
-
+ 
     return true
   })
-
+ 
   const grouped: Record<string, any[]> = {}
   filtered.forEach(ev => {
     if (!grouped[ev.date]) grouped[ev.date] = []
     grouped[ev.date].push(ev)
   })
   const sortedDates = Object.keys(grouped).sort()
-
+ 
   async function handleSearch() {
     if (!search.trim()) { setAiFilters(null); return }
     setIsSearching(true)
@@ -207,26 +215,26 @@ if (aiFilters && aiFilters.keyword) {
     } catch (e) { console.error(e) }
     setIsSearching(false)
   }
-
+ 
   function clearSearch() {
     setSearch(''); setAiFilters(null); setCatFilters([]); setTagFilters([])
     setCurrentView('today'); setFromDate(null); setToDate(null)
   }
-
+ 
   function toggleCat(key: string) {
     setCatFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
   }
-
+ 
   function toggleTag(key: string) {
     setTagFilters(prev => prev.includes(key) ? prev.filter(t => t !== key) : [...prev, key])
   }
-
+ 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#1a3d2b', fontSize: '18px' }}>
       Loading Townstir…
     </div>
   )
-
+ 
   const shortcuts = [
     { label: `Today · ${todayLabel}`,                   value: 'today' },
     { label: `Tomorrow · ${tomorrowLabel}`,             value: 'tomorrow' },
@@ -234,38 +242,35 @@ if (aiFilters && aiFilters.keyword) {
     { label: 'All Dates',                               value: 'all' },
     { label: 'Custom Dates',                            value: 'pick' },
   ]
-
+ 
   return (
     <div style={{ fontFamily: "'Helvetica Neue', Arial, sans-serif", minHeight: '100vh', background: '#f2f3f5' }}>
-
+ 
       {/* Nav */}
       <Header
-  rightSlot={
-    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-  <a href="/org/login" style={{ color: 'rgba(255,255,255,0.65)', fontSize: '13px', textDecoration: 'none' }}>
-    Org Login
-  </a>
-  <button onClick={() => router.push('/post-event')}
-    style={{ background: '#C9952A', color: '#fff', border: 'none', borderRadius: '8px', padding: '7px 16px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-    + Post Event
-  </button>
-</div>
-  }
-/>
-
-      {/* Org bar */}
-      
-
+        rightSlot={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <a href="/org/login" style={{ color: 'rgba(255,255,255,0.65)', fontSize: '13px', textDecoration: 'none' }}>
+              Org Login
+            </a>
+            <button onClick={() => router.push('/post-event')}
+              style={{ background: '#C9952A', color: '#fff', border: 'none', borderRadius: '8px', padding: '7px 16px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+              + Post Event
+            </button>
+          </div>
+        }
+      />
+ 
       {/* Hero */}
       <div style={{ background: '#f2f3f5', padding: '20px 20px 18px', textAlign: 'center' }}>
         <div style={{ fontSize: '28px', fontWeight: 400, color: '#1a2530', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
-  What's happening in
-  <span style={{ border: '1.5px solid #c8d0d8', borderRadius: '10px', padding: '4px 16px', fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: '28px', color: '#1a3d2b', background: '#fff', display: 'inline-flex', alignItems: 'center', gap: '7px' }}>
-    Mill Valley
-    <span style={{ fontSize: '13px', color: '#888', fontStyle: 'normal' }}>&#8964;</span>
-  </span>
-</div>
-
+          What's happening in
+          <span style={{ border: '1.5px solid #c8d0d8', borderRadius: '10px', padding: '4px 16px', fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: '28px', color: '#1a3d2b', background: '#fff', display: 'inline-flex', alignItems: 'center', gap: '7px' }}>
+            Mill Valley
+            <span style={{ fontSize: '13px', color: '#888', fontStyle: 'normal' }}>&#8964;</span>
+          </span>
+        </div>
+ 
         {/* Search */}
         <div style={{ maxWidth: '540px', margin: '0 auto 18px', background: '#fff', border: '1px solid #d0d6db', borderRadius: '999px', display: 'flex', alignItems: 'center', padding: '6px 6px 6px 22px' }}>
           <input
@@ -279,27 +284,31 @@ if (aiFilters && aiFilters.keyword) {
           {aiFilters && (
             <button onClick={clearSearch} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '18px', padding: '0 8px', cursor: 'pointer', lineHeight: 1 }}>×</button>
           )}
-          <button
-            onClick={() => {
-              const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-              if (!SR) return
-              const r = new SR(); r.lang = 'en-US'
-              r.onresult = (e: any) => { setSearch(e.results[0][0].transcript); setTimeout(handleSearch, 100) }
-              r.start()
-            }}
-            style={{ background: 'none', border: 'none', padding: '0 10px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-            <svg xmlns="http://www.w3.org/2000/svg" height="18" viewBox="0 0 24 24" width="18" fill="#9ca3af">
-              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-            </svg>
-          </button>
+          {hasSpeech && (
+            <button
+              onClick={() => {
+                const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+                const r = new SR(); r.lang = 'en-US'
+                r.onresult = (e: any) => {
+                  setSearch(e.results[0][0].transcript)
+                  setTimeout(handleSearch, 100)
+                }
+                r.start()
+              }}
+              style={{ background: 'none', border: 'none', padding: '0 10px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+              <svg xmlns="http://www.w3.org/2000/svg" height="18" viewBox="0 0 24 24" width="18" fill="#9ca3af">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+              </svg>
+            </button>
+          )}
           <button
             onClick={handleSearch}
             style={{ background: '#C9952A', color: '#fff', border: 'none', borderRadius: '999px', padding: '10px 26px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit', opacity: isSearching ? 0.7 : 1 }}>
             {isSearching ? '…' : 'Search'}
           </button>
         </div>
-
+ 
         {/* Date shortcuts */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {shortcuts.map(({ label, value, shortLabel }) => (
@@ -313,12 +322,12 @@ if (aiFilters && aiFilters.keyword) {
                 cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
               }}>
               <span className="date-label-full">{label}</span>
-<span className="date-label-short">{shortLabel || label}</span>
+              <span className="date-label-short">{shortLabel || label}</span>
             </button>
           ))}
         </div>
       </div>
-
+ 
       {/* Custom date picker */}
       {currentView === 'pick' && (
         <div style={{ background: '#fff', borderBottom: '1px solid #e8eaed', padding: '12px 40px', display: 'flex', justifyContent: 'center' }}>
@@ -330,114 +339,113 @@ if (aiFilters && aiFilters.keyword) {
           />
         </div>
       )}
-
-      {/* Category filters — rounded rect pills */}
-{/* Desktop filters */}
-<div className="desktop-filters">
-  <div style={{ background: '#f2f3f5', padding: '10px 20px 8px', display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-    <button onClick={() => setCatFilters([])}
-      style={{ border: `1.5px solid ${catFilters.length === 0 ? '#1a3d2b' : '#d0d6db'}`, background: catFilters.length === 0 ? '#1a3d2b' : '#fff', color: catFilters.length === 0 ? '#fff' : '#444', borderRadius: '8px', padding: '5px 14px', fontSize: '13px', fontWeight: catFilters.length === 0 ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
-      All
-    </button>
-    {Object.entries(CATS).map(([key, cat]) => {
-      const active = catFilters.includes(key)
-      return (
-        <button key={key} onClick={() => toggleCat(key)}
-          style={{ border: `1.5px solid ${active ? '#1a3d2b' : '#d0d6db'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#444', borderRadius: '8px', padding: '5px 14px', fontSize: '13px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
-          {cat.label}
-        </button>
-      )
-    })}
-  </div>
-  <div style={{ margin: '0 20px', borderTop: '1px solid #e8eaed' }} />
-  <div style={{ background: '#f2f3f5', padding: '8px 20px 14px', display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
-    {Object.entries(TAG_CARD).map(([key, tag]) => {
-      const active = tagFilters.includes(key)
-      return (
-        <button key={key} onClick={() => toggleTag(key)}
-          style={{ border: `1px solid ${active ? '#1a3d2b' : '#e8eaed'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#666', borderRadius: '999px', padding: '4px 14px', fontSize: '12px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
-          {tag.label}
-        </button>
-      )
-    })}
-  </div>
-</div>
-
-{/* Mobile filters pill */}
-<div className="mobile-filters">
-  <div style={{ background: '#f2f3f5', padding: '6px 20px 12px', display: 'flex', justifyContent: 'center' }}>
-    <button onClick={() => setShowFilterDrawer(true)}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: (catFilters.length + tagFilters.length) > 0 ? '#1a3d2b' : '#fff', border: `1px solid ${(catFilters.length + tagFilters.length) > 0 ? '#1a3d2b' : '#d0d6db'}`, borderRadius: '999px', padding: '7px 18px', cursor: 'pointer', fontFamily: 'inherit' }}>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={(catFilters.length + tagFilters.length) > 0 ? '#fff' : '#555'} strokeWidth="2" strokeLinecap="round">
-        <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
-      </svg>
-      <span style={{ fontSize: '13px', fontWeight: 500, color: (catFilters.length + tagFilters.length) > 0 ? '#fff' : '#444' }}>
-        {(catFilters.length + tagFilters.length) > 0 ? `Filters · ${catFilters.length + tagFilters.length}` : 'Filters'}
-      </span>
-    </button>
-  </div>
-</div>
-
-{/* Mobile filter drawer */}
-{showFilterDrawer && (
-  <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
-    <div onClick={() => setShowFilterDrawer(false)}
-      style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} />
-    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#fff', borderRadius: '16px 16px 0 0', padding: '0 0 40px' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
-        <div style={{ width: '36px', height: '4px', background: '#e0e0e0', borderRadius: '999px' }} />
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 20px 14px' }}>
-        <span style={{ fontSize: '15px', fontWeight: 500, color: '#1a1a1a' }}>
-          {(catFilters.length + tagFilters.length) > 0 ? `Filters · ${catFilters.length + tagFilters.length}` : 'Filters'}
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          {(catFilters.length + tagFilters.length) > 0 && (
-            <button onClick={() => { setCatFilters([]); setTagFilters([]) }}
-              style={{ background: 'none', border: 'none', fontSize: '13px', color: '#3a7d44', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-              Clear all
-            </button>
-          )}
-          <button onClick={() => setShowFilterDrawer(false)}
-            style={{ background: '#1a3d2b', color: '#fff', border: 'none', borderRadius: '999px', padding: '7px 20px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-            Done
+ 
+      {/* Desktop filters */}
+      <div className="desktop-filters">
+        <div style={{ background: '#f2f3f5', padding: '10px 20px 8px', display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <button onClick={() => setCatFilters([])}
+            style={{ border: `1.5px solid ${catFilters.length === 0 ? '#1a3d2b' : '#d0d6db'}`, background: catFilters.length === 0 ? '#1a3d2b' : '#fff', color: catFilters.length === 0 ? '#fff' : '#444', borderRadius: '8px', padding: '5px 14px', fontSize: '13px', fontWeight: catFilters.length === 0 ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
+            All
           </button>
-        </div>
-      </div>
-      <div style={{ height: '1px', background: '#e5e7eb', margin: '0 20px 16px' }} />
-      <div style={{ padding: '0 20px 16px' }}>
-        <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>Category</p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           {Object.entries(CATS).map(([key, cat]) => {
             const active = catFilters.includes(key)
             return (
               <button key={key} onClick={() => toggleCat(key)}
-                style={{ border: `1.5px solid ${active ? '#1a3d2b' : '#d0d6db'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#444', borderRadius: '8px', padding: '6px 14px', fontSize: '13px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+                style={{ border: `1.5px solid ${active ? '#1a3d2b' : '#d0d6db'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#444', borderRadius: '8px', padding: '5px 14px', fontSize: '13px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
                 {cat.label}
               </button>
             )
           })}
         </div>
-      </div>
-      <div style={{ height: '1px', background: '#e5e7eb', margin: '0 20px 16px' }} />
-      <div style={{ padding: '0 20px' }}>
-        <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>Tag</p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+        <div style={{ margin: '0 20px', borderTop: '1px solid #e8eaed' }} />
+        <div style={{ background: '#f2f3f5', padding: '8px 20px 14px', display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
           {Object.entries(TAG_CARD).map(([key, tag]) => {
             const active = tagFilters.includes(key)
             return (
               <button key={key} onClick={() => toggleTag(key)}
-                style={{ border: `1px solid ${active ? '#1a3d2b' : '#e8eaed'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#666', borderRadius: '999px', padding: '6px 16px', fontSize: '13px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+                style={{ border: `1px solid ${active ? '#1a3d2b' : '#e8eaed'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#666', borderRadius: '999px', padding: '4px 14px', fontSize: '12px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
                 {tag.label}
               </button>
             )
           })}
         </div>
       </div>
-    </div>
-  </div>
-)}
-
+ 
+      {/* Mobile filters pill */}
+      <div className="mobile-filters">
+        <div style={{ background: '#f2f3f5', padding: '6px 20px 12px', display: 'flex', justifyContent: 'center' }}>
+          <button onClick={() => setShowFilterDrawer(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: (catFilters.length + tagFilters.length) > 0 ? '#1a3d2b' : '#fff', border: `1px solid ${(catFilters.length + tagFilters.length) > 0 ? '#1a3d2b' : '#d0d6db'}`, borderRadius: '999px', padding: '7px 18px', cursor: 'pointer', fontFamily: 'inherit' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={(catFilters.length + tagFilters.length) > 0 ? '#fff' : '#555'} strokeWidth="2" strokeLinecap="round">
+              <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+            </svg>
+            <span style={{ fontSize: '13px', fontWeight: 500, color: (catFilters.length + tagFilters.length) > 0 ? '#fff' : '#444' }}>
+              {(catFilters.length + tagFilters.length) > 0 ? `Filters · ${catFilters.length + tagFilters.length}` : 'Filters'}
+            </span>
+          </button>
+        </div>
+      </div>
+ 
+      {/* Mobile filter drawer */}
+      {showFilterDrawer && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
+          <div onClick={() => setShowFilterDrawer(false)}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} />
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#fff', borderRadius: '16px 16px 0 0', padding: '0 0 40px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
+              <div style={{ width: '36px', height: '4px', background: '#e0e0e0', borderRadius: '999px' }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 20px 14px' }}>
+              <span style={{ fontSize: '15px', fontWeight: 500, color: '#1a1a1a' }}>
+                {(catFilters.length + tagFilters.length) > 0 ? `Filters · ${catFilters.length + tagFilters.length}` : 'Filters'}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                {(catFilters.length + tagFilters.length) > 0 && (
+                  <button onClick={() => { setCatFilters([]); setTagFilters([]) }}
+                    style={{ background: 'none', border: 'none', fontSize: '13px', color: '#3a7d44', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Clear all
+                  </button>
+                )}
+                <button onClick={() => setShowFilterDrawer(false)}
+                  style={{ background: '#1a3d2b', color: '#fff', border: 'none', borderRadius: '999px', padding: '7px 20px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Done
+                </button>
+              </div>
+            </div>
+            <div style={{ height: '1px', background: '#e5e7eb', margin: '0 20px 16px' }} />
+            <div style={{ padding: '0 20px 16px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>Category</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {Object.entries(CATS).map(([key, cat]) => {
+                  const active = catFilters.includes(key)
+                  return (
+                    <button key={key} onClick={() => toggleCat(key)}
+                      style={{ border: `1.5px solid ${active ? '#1a3d2b' : '#d0d6db'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#444', borderRadius: '8px', padding: '6px 14px', fontSize: '13px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+                      {cat.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div style={{ height: '1px', background: '#e5e7eb', margin: '0 20px 16px' }} />
+            <div style={{ padding: '0 20px' }}>
+              <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>Tag</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {Object.entries(TAG_CARD).map(([key, tag]) => {
+                  const active = tagFilters.includes(key)
+                  return (
+                    <button key={key} onClick={() => toggleTag(key)}
+                      style={{ border: `1px solid ${active ? '#1a3d2b' : '#e8eaed'}`, background: active ? '#1a3d2b' : '#fff', color: active ? '#fff' : '#666', borderRadius: '999px', padding: '6px 16px', fontSize: '13px', fontWeight: active ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+                      {tag.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+ 
       {/* Events list */}
       <div style={{ maxWidth: '860px', margin: '0 auto', padding: '4px 16px 40px' }}>
         {filtered.length === 0 ? (
@@ -460,7 +468,7 @@ if (aiFilters && aiFilters.keyword) {
                     style={{ background: '#fff', borderRadius: '10px', padding: '11px 14px', marginBottom: '6px', display: 'flex', alignItems: 'flex-start', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', cursor: 'pointer' }}
                     onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.11)')}
                     onMouseOut={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.07)')}>
-
+ 
                     {/* Date col */}
                     <div style={{ minWidth: '50px', textAlign: 'center', flexShrink: 0, paddingRight: '14px', borderRight: '1px solid #eee', paddingTop: '1px' }}>
                       <div style={{ fontSize: '10px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -473,7 +481,7 @@ if (aiFilters && aiFilters.keyword) {
                         {ev.time}
                       </div>
                     </div>
-
+ 
                     {/* Body */}
                     <div className="event-card-body" style={{ flex: 1, minWidth: 0, padding: '0 14px' }}>
                       <div style={{ fontSize: '15px', fontWeight: 500, color: '#1a2530', marginBottom: '2px' }}>
@@ -495,7 +503,7 @@ if (aiFilters && aiFilters.keyword) {
                         </div>
                       )}
                     </div>
-
+ 
                     {/* Pills */}
                     <div className="event-card-pills" style={{ gap: '6px', flexShrink: 0, alignItems: 'flex-start', paddingLeft: '12px', borderLeft: '1px solid #eee' }}>
                       {catKeys.length > 0 && (
@@ -526,7 +534,7 @@ if (aiFilters && aiFilters.keyword) {
                         </div>
                       )}
                     </div>
-
+ 
                   </div>
                 )
               })}

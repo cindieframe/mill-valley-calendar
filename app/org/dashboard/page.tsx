@@ -758,10 +758,11 @@ async function handleContactAdmin() {
             <label style={labelStyle}>Tags</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
               {[
-                { value: 'free', label: '🟢 Free' },
-                { value: 'family', label: '⭐ Family-Friendly' },
-                { value: 'wellness', label: '🧘 Health & Wellness' },
-                { value: 'reg', label: '🎟️ Reg. Required' },
+                { value: 'free',     label: 'Free' },
+{ value: 'family',   label: 'Family-Friendly' },
+{ value: 'wellness', label: 'Health & Wellness' },
+{ value: 'reg',      label: 'Reg. Required' },
+{ value: 'music',    label: 'Live Music' },
               ].map(tag => {
                 const selected = (eventForm.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean).includes(tag.value)
                 return (
