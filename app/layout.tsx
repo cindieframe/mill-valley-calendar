@@ -10,10 +10,13 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Mill Valley Townstir — Community Calendar",
   description: "Everything happening in Mill Valley, CA — all in one place.",
+  verification: {
+    google: "kdNDYphQewhkfrLIxkmlo4J9UOnjPirwgu6fL9WEYZU",
+  },
   openGraph: {
     title: "Mill Valley Townstir — Community Calendar",
     description: "Everything happening in Mill Valley, CA — all in one place.",
-    url: "hhttps://www.townstir.com",
+    url: "https://www.townstir.com",
     siteName: "Townstir Mill Valley",
     type: "website",
   },
@@ -23,7 +26,6 @@ export const metadata: Metadata = {
     description: "Everything happening in Mill Valley, CA — all in one place.",
   },
 };
-
 export default function RootLayout({
   children,
 }: Readonly<{

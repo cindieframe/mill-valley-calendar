@@ -103,7 +103,31 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div style={{ fontFamily: "'Helvetica Neue', Arial, sans-serif", minHeight: '100vh', background: '#f2f3f5' }}>
-
+<script
+  type="application/ld+json"
+  dangerouslySetInnerHTML={{ __html: JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "Event",
+    "name": ev.title,
+    "startDate": ev.time ? `${ev.date}T${ev.time}` : ev.date,
+    "endDate": ev.end_time ? `${ev.date}T${ev.end_time}` : undefined,
+    "location": {
+      "@type": "Place",
+      "name": ev.location || "Mill Valley, CA",
+      "address": ev.address || "Mill Valley, CA"
+    },
+    "description": ev.description || "",
+    "organizer": {
+      "@type": "Organization",
+      "name": ev.organization
+    },
+    "url": `https://www.townstir.com/event/${ev.id}`,
+    "eventStatus": "https://schema.org/EventScheduled",
+    "eventAttendanceMode": ev.meeting_link
+      ? "https://schema.org/OnlineEventAttendanceMode"
+      : "https://schema.org/OfflineEventAttendanceMode"
+  })}}
+/>
       <header style={{ background: '#1a3d2b', padding: '0 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '56px', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'baseline' }}>
           <span style={{ color: '#fff', fontSize: '21px', fontWeight: 400 }}>town</span>
