@@ -197,7 +197,7 @@ export default function ImportPage() {
         <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '28px', fontWeight: 900, color: '#1f2937', marginBottom: '6px' }}>
           Import Events
         </h1>
-        <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '28px' }}>
+        <p className="text-muted" style={{ fontSize: '14px', marginBottom: '28px' }}>
           Add events from any org website or iCal feed. Imported events go to the pending queue for your review.
         </p>
 
@@ -230,7 +230,7 @@ export default function ImportPage() {
               <label style={labelStyle}>Events Page URL</label>
               <input style={inputStyle} placeholder="e.g. https://depotbookstore.com/events"
                 value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} />
-              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '5px' }}>
+              <div className="text-muted" style={{ fontSize: '11px', marginTop: '5px' }}>
                 Tip: link directly to their /events or /calendar page for best results
               </div>
             </div>
@@ -264,7 +264,7 @@ export default function ImportPage() {
                     {aiResult.results?.map((r: any, i: number) => (
                       <div key={i} style={{ background: 'white', borderRadius: '8px', padding: '10px 14px', marginBottom: '6px', fontSize: '12px' }}>
                         <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: '2px' }}>{r.title}</div>
-                        <div style={{ color: '#9ca3af' }}>{r.date}{r.time ? ` · ${r.time}` : ''} &nbsp;·&nbsp; 🏷️ {r.categories || 'community'}</div>
+                        <div className="text-muted">{r.date}{r.time ? ` · ${r.time}` : ''} &nbsp;·&nbsp; 🏷️ {r.categories || 'community'}</div>
                       </div>
                     ))}
                     <button onClick={() => router.push('/admin')}
@@ -294,9 +294,9 @@ export default function ImportPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{org.name}</div>
-                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{org.website_url}</div>
+                        <div className="text-muted" style={{ fontSize: '11px', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{org.website_url}</div>
 {org.last_extracted_at && (
-  <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+  <div className="text-muted" style={{ fontSize: '11px', marginTop: '2px' }}>
     Last extracted: {new Date(org.last_extracted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
   </div>
 )}
@@ -349,7 +349,7 @@ export default function ImportPage() {
               <label style={labelStyle}>iCal Feed URL</label>
               <input style={inputStyle} placeholder="https://calendar.google.com/calendar/ical/..."
                 value={feedUrl} onChange={e => setFeedUrl(e.target.value)} />
-              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '5px' }}>
+              <div className="text-muted" style={{ fontSize: '11px', marginTop: '5px' }}>
                 Google Calendar: Settings → your calendar → Integrate calendar → copy the iCal link
               </div>
             </div>
@@ -376,7 +376,7 @@ export default function ImportPage() {
                 {icalResult.results?.map((r: any, i: number) => (
                   <div key={i} style={{ background: 'white', borderRadius: '8px', padding: '10px 14px', marginBottom: '6px', fontSize: '12px' }}>
                     <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: '2px' }}>{r.title}</div>
-                    <div style={{ color: '#9ca3af' }}>{r.date} &nbsp;·&nbsp; 🏷️ {r.categories} &nbsp;·&nbsp; {r.tags || 'no tags'}</div>
+                    <div className="text-muted" style={{ }}>{r.date} &nbsp;·&nbsp; 🏷️ {r.categories} &nbsp;·&nbsp; {r.tags || 'no tags'}</div>
                   </div>
                 ))}
                 <button onClick={() => router.push('/admin')}
@@ -398,7 +398,7 @@ export default function ImportPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{feed.organization}</div>
-                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{feed.url}</div>
+                        <div className="text-muted" style={{ fontSize: '11px', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{feed.url}</div>
                         {feed.last_synced && (
                           <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
                             Last synced: {new Date(feed.last_synced).toLocaleDateString()}

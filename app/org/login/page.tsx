@@ -55,7 +55,7 @@ export default function OrgLogin() {
         <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '28px', fontWeight: 900, color: '#1f2937', marginBottom: '6px' }}>
           Organization Login
         </h1>
-        <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '32px' }}>
+        <p className="text-muted" style={{ fontSize: '14px', marginBottom: '32px' }}>
           Log in to manage your events and profile.
         </p>
         {error && (

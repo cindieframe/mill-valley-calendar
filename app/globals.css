@@ -71,7 +71,21 @@ input, select, textarea {
   .date-label-full { display: none; }
   .date-label-short { display: inline; }
 }
+.text-muted {
+  color: #6b7280;
+}
 
+.text-secondary {
+  color: #4b5563;
+}
+
+.text-primary {
+  color: #1f2937;
+}
+
+.text-brand {
+  color: #3a7d44;
+}
 
 
 

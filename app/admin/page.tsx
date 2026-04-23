@@ -324,7 +324,7 @@ export default function Admin() {
   }
 
   if (authLoading) return (
-    <div style={{ minHeight: '100vh', background: '#fafaf8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#9ca3af' }}>
+    <div className="text-muted" style={{ minHeight: '100vh', background: '#fafaf8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', }}>
       Loading…
     </div>
   )
@@ -510,7 +510,7 @@ export default function Admin() {
             <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>
               ✉️ {messageModal.all ? `Message All Orgs (${orgs.filter(o => o.email).length})` : `Message ${messageModal.name}`}
             </h3>
-            <p style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '16px' }}>
+            <p className="text-muted" style={{ fontSize: '13px', marginBottom: '16px' }}>
               {messageModal.all ? 'Sends to all orgs with an email address.' : `To: ${messageModal.email}`}
             </p>
             {messageSent ? (
@@ -573,7 +573,7 @@ export default function Admin() {
 
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '32px 24px 80px' }}>
         <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '28px', fontWeight: 900, color: '#1f2937', marginBottom: '6px' }}>Admin</h1>
-        <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '24px' }}>Manage events and organizations.</p>
+        <p className="text-muted" style={{ fontSize: '14px', marginBottom: '24px' }}>Manage events and organizations.</p>
 
         <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
           {['pending', 'approved', 'unpublished', 'rejected', 'organizations'].map(s => (
@@ -620,7 +620,7 @@ export default function Admin() {
             {loading ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>Loading…</div>
             ) : orgs.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>
+              <div className="text-muted" style={{ textAlign: 'center', padding: '60px 20px' }}>
                 <div style={{ fontSize: '40px', marginBottom: '12px' }}></div>
                 <p>No organizations have signed up yet.</p>
               </div>
@@ -716,7 +716,7 @@ export default function Admin() {
               </div>
             )}
             {loading ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>Loading…</div>
+              <div className="text-muted" style={{ textAlign: 'center', padding: '40px', }}>Loading…</div>
             ) : events.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>
                 <div style={{ fontSize: '40px', marginBottom: '12px' }}></div>
@@ -750,7 +750,7 @@ export default function Admin() {
                         {ev.cost && <>&nbsp;·&nbsp; {ev.cost}</>}
                       </div>
                     </div>
-                    <div style={{ fontSize: '11px', color: '#9ca3af', flexShrink: 0, marginLeft: '12px' }}>#{ev.id}</div>
+                    <div className="text-muted" style={{ fontSize: '11px', flexShrink: 0, marginLeft: '12px' }}>#{ev.id}</div>
                   </div>
                   <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, marginBottom: '16px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
                     {ev.description}

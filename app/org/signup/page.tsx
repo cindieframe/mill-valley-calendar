@@ -234,7 +234,7 @@ export default function OrgSignup() {
         <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '28px', fontWeight: 900, color: '#1f2937', marginBottom: '6px' }}>
           Create Organization Account
         </h1>
-        <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '32px' }}>
+        <p  className="text-muted" style={{ fontSize: '14px', marginBottom: '32px' }}>
           List your organization's events on the Mill Valley community calendar.
         </p>
         {error && (

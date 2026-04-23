@@ -48,13 +48,13 @@ export default function OrgProfilePage() {
   }, [params.slug])
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#f2f3f5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#9ca3af' }}>
+    <div className="text-muted" style={{ minHeight: '100vh', background: '#f2f3f5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
       Loading…
     </div>
   )
 
   if (notFound) return (
-    <div style={{ minHeight: '100vh', background: '#f2f3f5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#9ca3af' }}>
+    <div className="text-muted" style={{ minHeight: '100vh', background: '#f2f3f5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
       <div style={{ textAlign: 'center' }}>
         <p style={{ marginBottom: '12px' }}>Organization not found.</p>
         <a href="/" style={{ color: '#1a3d2b', fontWeight: 500 }}>← Back to Calendar</a>

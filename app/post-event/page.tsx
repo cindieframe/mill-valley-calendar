@@ -255,7 +255,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         <h1 style={{fontFamily:'Georgia,serif',fontSize:'32px',fontWeight:900,color:'#1f2937',marginBottom:'6px',letterSpacing:'-0.5px'}}>
           Post a Community Event
         </h1>
-        <p style={{color:'#9ca3af',fontSize:'14px',marginBottom:'32px'}}>
+        <p className="text-muted" style={{fontSize:'14px',marginBottom:'32px'}}>
           Events are reviewed before going live — usually within 24 hours.
         </p>
 
