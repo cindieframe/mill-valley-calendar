@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
+import Header from '../../components/Header'
 
 export default function OrgProfilePage() {
   const params = useParams()
+  const router = useRouter()
   const [org, setOrg] = useState<any>(null)
   const [events, setEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -20,7 +22,6 @@ export default function OrgProfilePage() {
         .from('organizations')
         .select('*')
         .ilike('name', name)
-        .eq('verified', true)
         .single()
 
       if (!orgData) {
@@ -30,7 +31,8 @@ export default function OrgProfilePage() {
       }
 
       setOrg(orgData)
-document.title = `${orgData.name} | Townstir Mill Valley`
+      document.title = `${orgData.name} | Townstir Mill Valley`
+
       const { data: eventsData } = await supabase
         .from('events')
         .select('*')
@@ -46,84 +48,158 @@ document.title = `${orgData.name} | Townstir Mill Valley`
   }, [params.slug])
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#fafaf8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#9ca3af' }}>
+    <div style={{ minHeight: '100vh', background: '#f2f3f5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#9ca3af' }}>
       Loading…
     </div>
   )
 
   if (notFound) return (
-    <div style={{ minHeight: '100vh', background: '#fafaf8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#9ca3af' }}>
+    <div style={{ minHeight: '100vh', background: '#f2f3f5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#9ca3af' }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: '40px', marginBottom: '12px' }}>🏢</div>
-        <p>Organization not found.</p>
-        <a href="/" style={{ color: '#1a3d2b', fontWeight: 700 }}>← Back to Calendar</a>
+        <p style={{ marginBottom: '12px' }}>Organization not found.</p>
+        <a href="/" style={{ color: '#1a3d2b', fontWeight: 500 }}>← Back to Calendar</a>
       </div>
     </div>
   )
 
-  return (
-    <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: 'sans-serif' }}>
-      <header style={{ background: '#1a3d2b', padding: '14px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <a href="/" style={{ textDecoration: 'none' }}>
-          <span style={{ fontWeight: 800, fontSize: '22px', color: 'white', letterSpacing: '-1px' }}>town</span>
-          <span style={{ fontWeight: 800, fontSize: '22px', color: '#e6a020', letterSpacing: '-1px', textTransform: 'uppercase' }}>STIR</span>
-        </a>
-        <a href="/" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', textDecoration: 'none' }}>← Back to Calendar</a>
-      </header>
+  function formatWebsite(url: string) {
+    if (!url) return null
+    const clean = url.replace(/^https?:\/\//, '').replace(/\/$/, '')
+    const href = url.startsWith('http') ? url : `https://${url}`
+    const display = clean.startsWith('www.') ? clean : `www.${clean}`
+    return { href, display }
+  }
 
-      <div style={{ maxWidth: '720px', margin: '0 auto', padding: '48px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '32px' }}>
-          <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#f3f4f6', border: '2px solid #e5e7eb', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+  function stripHtml(str: string) {
+    return str ? str.replace(/<[^>]+>/g, '').trim() : ''
+  }
+
+  const website = formatWebsite(org.website)
+  const hasLinks = website || org.instagram || org.facebook
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#f2f3f5', fontFamily: "'Helvetica Neue', Arial, sans-serif" }}>
+      <Header
+        rightSlot={
+          <a href="/" style={{ color: 'rgba(255,255,255,0.65)', fontSize: '13px', textDecoration: 'none' }}>
+            ← Back to Calendar
+          </a>
+        }
+      />
+
+      <div style={{ maxWidth: '720px', margin: '0 auto', padding: '36px 24px 60px' }}>
+
+        {/* Org header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
+          <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#f3f4f6', border: '2px solid #e5e7eb', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {org.logo_url ? (
               <img src={org.logo_url} alt={org.name} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }} />
             ) : (
-              <span style={{ fontSize: '32px' }}>🏢</span>
+              <span style={{ fontSize: '28px', color: '#d1d5db' }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                  <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+              </span>
             )}
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '26px', fontWeight: 900, color: '#1f2937', margin: 0 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+              <h1 style={{ fontSize: '22px', fontWeight: 500, color: '#1f2937', margin: 0 }}>
                 {org.name}
               </h1>
-              <span style={{ background: '#1a3d2b', color: 'white', fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '999px' }}>
-                ✓ Verified
-              </span>
+              {org.verified && (
+                <span style={{ background: '#1a3d2b', color: 'white', fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '999px' }}>
+                  ✓ Verified
+                </span>
+              )}
             </div>
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              {org.website && <a href={org.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: '13px', color: '#1a3d2b', textDecoration: 'none' }}>🌐 Website</a>}
-              {org.phone && <span style={{ fontSize: '13px', color: '#6b7280' }}>📞 {org.phone}</span>}
-              {org.instagram && <a href={`https://instagram.com/${org.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '13px', color: '#1a3d2b', textDecoration: 'none' }}>📸 Instagram</a>}
-              {org.facebook && <a href={org.facebook.startsWith('http') ? org.facebook : `https://${org.facebook}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '13px', color: '#1a3d2b', textDecoration: 'none' }}>👍 Facebook</a>}
-            </div>
+            {hasLinks && (
+              <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginBottom: org.phone ? '4px' : '0' }}>
+                {website && (
+                  <a href={website.href} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize: '12px', color: '#3a7d44', textDecoration: 'none' }}>
+                    {website.display}
+                  </a>
+                )}
+                {org.instagram && (
+  <a href={`https://instagram.com/${org.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer"
+    style={{ fontSize: '11px', color: '#6b7280', textDecoration: 'none' }}>
+    Instagram
+  </a>
+)}
+{org.facebook && (
+  <a href={org.facebook.startsWith('http') ? org.facebook : `https://${org.facebook}`} target="_blank" rel="noopener noreferrer"
+    style={{ fontSize: '11px', color: '#6b7280', textDecoration: 'none' }}>
+    Facebook
+  </a>
+)}
+              </div>
+            )}
+            {org.phone && (
+              <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
+  {org.phone.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3')}
+</div>
+            )}
           </div>
         </div>
 
+        <div style={{ height: '0.5px', background: '#e5e7eb', marginBottom: '20px' }} />
+
         {org.description && (
-          <div style={{ background: 'white', borderRadius: '12px', padding: '24px', marginBottom: '32px', border: '1.5px solid #e5e7eb' }}>
-            <p style={{ color: '#4b5563', fontSize: '15px', lineHeight: 1.7, margin: 0 }}>{org.description}</p>
-          </div>
+          <p style={{ fontSize: '14px', color: '#4b5563', lineHeight: 1.7, marginBottom: '28px' }}>
+            {org.description}
+          </p>
         )}
 
-        <h2 style={{ fontFamily: 'Georgia,serif', fontSize: '20px', fontWeight: 700, color: '#1f2937', marginBottom: '16px' }}>
-          Upcoming Events
-        </h2>
-        {events.length > 0 ? (
-          events.map((ev: any) => (
-            <a href={`/event/${ev.id}`} key={ev.id} style={{ textDecoration: 'none' }}>
-              <div style={{ background: 'white', borderRadius: '12px', padding: '16px 18px', marginBottom: '10px', border: '1.5px solid #e5e7eb', cursor: 'pointer' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', margin: '0 0 4px 0' }}>{ev.title}</h3>
-                <div style={{ fontSize: '13px', color: '#6b7280' }}>
-                  📅 {new Date(ev.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' })}
-                  {ev.time && <> &nbsp;·&nbsp; 🕐 {ev.time}</>}
-                  {ev.location && <> &nbsp;·&nbsp; 📍 {ev.location}</>}
-                </div>
-              </div>
-            </a>
-          ))
-        ) : (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: '1.5px solid #e5e7eb' }}>
+        {/* Events */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '12px' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: '#1f2937' }}>Upcoming events</span>
+          <span style={{ fontSize: '12px', color: '#9ca3af' }}>{events.length} event{events.length !== 1 ? 's' : ''}</span>
+        </div>
+
+        {events.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: '0.5px solid #e5e7eb' }}>
             No upcoming events scheduled.
           </div>
+        ) : (
+          events.map((ev: any) => (
+            <div key={ev.id}
+              onClick={() => router.push(`/event/${ev.id}`)}
+              style={{ background: 'white', borderRadius: '10px', padding: '12px 16px', marginBottom: '8px', border: '0.5px solid #e5e7eb', display: 'flex', alignItems: 'flex-start', gap: '14px', cursor: 'pointer' }}
+              onMouseOver={e => (e.currentTarget.style.borderColor = '#1a3d2b')}
+              onMouseOut={e => (e.currentTarget.style.borderColor = '#e5e7eb')}>
+
+              {/* Date */}
+              <div style={{ minWidth: '40px', textAlign: 'center', flexShrink: 0 }}>
+                <div style={{ fontSize: '10px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {new Date(ev.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' })}
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 500, color: '#2a7a55', lineHeight: 1.1 }}>
+                  {new Date(ev.date + 'T12:00:00').getDate()}
+                </div>
+              </div>
+
+              <div style={{ width: '0.5px', background: '#eee', alignSelf: 'stretch', flexShrink: 0 }} />
+
+              {/* Body */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '14px', fontWeight: 500, color: '#1a2530', marginBottom: '3px' }}>
+                  {ev.title}
+                </div>
+                <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: ev.description ? '3px' : '0' }}>
+                  {ev.time && <span>{ev.time}</span>}
+                  {ev.time && ev.location && <span style={{ color: '#ccc', margin: '0 4px' }}>·</span>}
+                  {ev.location && <span>{stripHtml(ev.location)}</span>}
+                </div>
+                {ev.description && (
+                  <div style={{ fontSize: '12px', color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {stripHtml(ev.description)}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
         )}
       </div>
     </div>
