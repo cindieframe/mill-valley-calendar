@@ -60,11 +60,18 @@ input, select, textarea {
 @media (max-width: 640px) {
   .mobile-filters { display: block; }
   .desktop-filters { display: none; }
-  .event-card-pills { display: none; }
-  .event-card-body { padding-right: 0 !important; }
+  .org-dropdown { display: none !important; }
+  .day-header { display: none !important; }
+  .event-card-outer { display: block !important; }
+  .event-card-date-col { display: none !important; }
+  .event-card-date-top { display: flex !important; }
+  .event-card-body { padding: 0 !important; }
+  .event-card-pills { display: none !important; }
+  .event-card-pills-mobile { display: flex !important; }
   .date-label-full { display: none; }
   .date-label-short { display: inline; }
 }
+
 
 
 

@@ -55,7 +55,7 @@ const CAT_LABELS: Record<string, string> = {
 const TAG_CARD: Record<string, { bg: string; color: string; label: string }> = {
   free:     { bg: 'rgba(180,130,0,0.06)',  color: '#7a5500', label: 'Free' },
   family:   { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Family-friendly' },
-  wellness: { bg: 'rgba(0,0,0,0.04)', color: '#555', label: 'Wellness' },
+  wellness: { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Wellness' },
   reg:      { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Reg. Required' },
   music:    { bg: 'rgba(100,80,200,0.06)', color: '#4a3fa0', label: 'Live Music' },
 }
@@ -114,7 +114,7 @@ export default function Home() {
  
   useEffect(() => {
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-setHasSpeech(!isSafari && !!(( window as any).SpeechRecognition || (window as any).webkitSpeechRecognition))
+    setHasSpeech(!isSafari && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition))
   }, [])
  
   useEffect(() => {
@@ -167,13 +167,13 @@ setHasSpeech(!isSafari && !!(( window as any).SpeechRecognition || (window as an
     ) return false
  
     if (aiFilters && aiFilters.keyword) {
-  const kw = aiFilters.keyword.toLowerCase()
-  const musicTerms = ['music', 'musical', 'concert', 'band', 'jazz', 'folk', 'rock', 'acoustic', 'singer', 'song', 'perform', 'ensemble', 'orchestra', 'symphony', 'choir', 'violin', 'guitar', 'flute', 'rhythm', 'melody', 'tune', 'gong', 'drum']
-  const isMusicRelated = musicTerms.some(term => kw.includes(term) || term.includes(kw))
-const searchTerms = isMusicRelated ? musicTerms : [kw]
-  const haystack = `${ev.title} ${ev.description} ${ev.location}`.toLowerCase()
-  if (!searchTerms.some(term => haystack.includes(term))) return false
-}
+      const kw = aiFilters.keyword.toLowerCase()
+      const musicTerms = ['music', 'musical', 'concert', 'band', 'jazz', 'folk', 'rock', 'acoustic', 'singer', 'song', 'perform', 'ensemble', 'orchestra', 'symphony', 'choir', 'violin', 'guitar', 'flute', 'rhythm', 'melody', 'tune', 'gong', 'drum']
+      const isMusicRelated = musicTerms.some(term => kw.includes(term) || term.includes(kw))
+      const searchTerms = isMusicRelated ? musicTerms : [kw]
+      const haystack = `${ev.title} ${ev.description} ${ev.location}`.toLowerCase()
+      if (!searchTerms.some(term => haystack.includes(term))) return false
+    }
  
     return true
   })
@@ -369,23 +369,23 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
             )
           })}
         </div>
-        
       </div>
-      {/* Mobile filters pill */}
+
+      {/* Mobile filters */}
       <div className="mobile-filters">
-        <div style={{ background: '#f2f3f5', padding: '6px 20px 12px', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ background: '#f2f3f5', padding: '6px 20px 4px', display: 'flex', justifyContent: 'center' }}>
           <button onClick={() => setShowFilterDrawer(true)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: (catFilters.length + tagFilters.length) > 0 ? '#1a3d2b' : '#fff', border: `1px solid ${(catFilters.length + tagFilters.length) > 0 ? '#1a3d2b' : '#d0d6db'}`, borderRadius: '999px', padding: '7px 18px', cursor: 'pointer', fontFamily: 'inherit' }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={(catFilters.length + tagFilters.length) > 0 ? '#fff' : '#555'} strokeWidth="2" strokeLinecap="round">
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: (catFilters.length + tagFilters.length + (orgFilter ? 1 : 0)) > 0 ? '#1a3d2b' : '#fff', border: `1px solid ${(catFilters.length + tagFilters.length + (orgFilter ? 1 : 0)) > 0 ? '#1a3d2b' : '#d0d6db'}`, borderRadius: '999px', padding: '7px 18px', cursor: 'pointer', fontFamily: 'inherit' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={(catFilters.length + tagFilters.length + (orgFilter ? 1 : 0)) > 0 ? '#fff' : '#555'} strokeWidth="2" strokeLinecap="round">
               <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
             </svg>
-            <span style={{ fontSize: '13px', fontWeight: 500, color: (catFilters.length + tagFilters.length) > 0 ? '#fff' : '#444' }}>
-              {(catFilters.length + tagFilters.length) > 0 ? `Filters · ${catFilters.length + tagFilters.length}` : 'Filters'}
+            <span style={{ fontSize: '13px', fontWeight: 500, color: (catFilters.length + tagFilters.length + (orgFilter ? 1 : 0)) > 0 ? '#fff' : '#444' }}>
+              {(catFilters.length + tagFilters.length + (orgFilter ? 1 : 0)) > 0 ? `Filters · ${catFilters.length + tagFilters.length + (orgFilter ? 1 : 0)}` : 'Filters'}
             </span>
           </button>
         </div>
       </div>
- 
+
       {/* Mobile filter drawer */}
       {showFilterDrawer && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
@@ -397,11 +397,11 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 20px 14px' }}>
               <span style={{ fontSize: '15px', fontWeight: 500, color: '#1a1a1a' }}>
-                {(catFilters.length + tagFilters.length) > 0 ? `Filters · ${catFilters.length + tagFilters.length}` : 'Filters'}
+                {(catFilters.length + tagFilters.length + (orgFilter ? 1 : 0)) > 0 ? `Filters · ${catFilters.length + tagFilters.length + (orgFilter ? 1 : 0)}` : 'Filters'}
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                {(catFilters.length + tagFilters.length) > 0 && (
-                  <button onClick={() => { setCatFilters([]); setTagFilters([]) }}
+                {(catFilters.length + tagFilters.length + (orgFilter ? 1 : 0)) > 0 && (
+                  <button onClick={() => { setCatFilters([]); setTagFilters([]); setOrgFilter('') }}
                     style={{ background: 'none', border: 'none', fontSize: '13px', color: '#3a7d44', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
                     Clear all
                   </button>
@@ -413,6 +413,8 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
               </div>
             </div>
             <div style={{ height: '1px', background: '#e5e7eb', margin: '0 20px 16px' }} />
+
+            {/* Category */}
             <div style={{ padding: '0 20px 16px' }}>
               <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>Category</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -428,7 +430,9 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
               </div>
             </div>
             <div style={{ height: '1px', background: '#e5e7eb', margin: '0 20px 16px' }} />
-            <div style={{ padding: '0 20px' }}>
+
+            {/* Tag */}
+            <div style={{ padding: '0 20px 16px' }}>
               <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>Tag</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 {Object.entries(TAG_CARD).map(([key, tag]) => {
@@ -442,14 +446,33 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
                 })}
               </div>
             </div>
+            <div style={{ height: '1px', background: '#e5e7eb', margin: '0 20px 16px' }} />
+
+            {/* Organization */}
+            {orgList.length > 0 && (
+              <div style={{ padding: '0 20px' }}>
+                <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>Organization</p>
+                <select
+                  value={orgFilter}
+                  onChange={e => setOrgFilter(e.target.value)}
+                  style={{ width: '100%', borderRadius: '8px', padding: '9px 14px', fontSize: '13px', fontFamily: 'inherit', cursor: 'pointer', outline: 'none', border: `1.5px solid ${orgFilter ? '#1a3d2b' : '#d0d6db'}`, color: '#444', background: '#fff' }}>
+                  <option value=''>All Organizations</option>
+                  {orgList.map(org => (
+                    <option key={org} value={org}>{org}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
       )}
  
       {/* Events list */}
       <div style={{ maxWidth: '860px', margin: '0 auto', padding: '4px 16px 40px' }}>
+
+        {/* Org dropdown — desktop only */}
         {orgList.length > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-34px', position: 'relative', zIndex: 1 }}>
+          <div className="org-dropdown" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-34px', position: 'relative', zIndex: 1 }}>
             <select
               value={orgFilter}
               onChange={e => setOrgFilter(e.target.value)}
@@ -461,6 +484,7 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
             </select>
           </div>
         )}
+
         {filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>
             <p style={{ fontSize: '15px' }}>No events found. Try a different filter or search.</p>
@@ -468,7 +492,8 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
         ) : (
           sortedDates.map(dateStr => (
             <div key={dateStr}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.7px', padding: '16px 4px 7px', borderBottom: '1px solid #ddd', marginBottom: '6px' }}>
+              {/* Day header — hidden on mobile */}
+              <div className="day-header" style={{ fontSize: '11px', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.7px', padding: '16px 4px 7px', borderBottom: '1px solid #ddd', marginBottom: '6px' }}>
                 {formatDayHeader(dateStr)}
               </div>
               {grouped[dateStr].map(ev => {
@@ -478,23 +503,36 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
                 return (
                   <div key={ev.id}
                     onClick={() => router.push(`/event/${ev.id}`)}
+                    className="event-card-outer"
                     style={{ background: '#fff', borderRadius: '10px', padding: '11px 14px', marginBottom: '6px', display: 'flex', alignItems: 'flex-start', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', cursor: 'pointer' }}
                     onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.11)')}
                     onMouseOut={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.07)')}>
- 
-                    {/* Date col */}
-                    <div style={{ minWidth: '50px', textAlign: 'center', flexShrink: 0, paddingRight: '14px', borderRight: '1px solid #eee', paddingTop: '1px' }}>
+
+                    {/* Date top row — mobile only */}
+                    <div className="event-card-date-top" style={{ display: 'none', alignItems: 'baseline', gap: '4px', marginBottom: '5px' }}>
+                      <span style={{ fontSize: '15px', fontWeight: 500, color: '#2a7a55', lineHeight: 1 }}>
+                        {new Date(dateStr + 'T12:00:00').getDate()}
+                      </span>
+                      <span style={{ fontSize: '10px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        {new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' })}
+                      </span>
+                      <span style={{ color: '#ccc', fontSize: '10px' }}>·</span>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: '#2C3E50' }}>{ev.time}</span>
+                    </div>
+
+                    {/* Date col — desktop only */}
+                    <div className="event-card-date-col" style={{ minWidth: '50px', textAlign: 'center', flexShrink: 0, paddingRight: '14px', borderRight: '1px solid #eee', paddingTop: '1px' }}>
                       <div style={{ fontSize: '10px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                         {new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' })}
                       </div>
-                      <div style={{ fontSize: '22px', fontWeight: 300, color: '#333', lineHeight: 1.1, marginBottom: '3px' }}>
+                      <div style={{ fontSize: '22px', fontWeight: 500, color: '#2a7a55', lineHeight: 1.1, marginBottom: '3px' }}>
                         {new Date(dateStr + 'T12:00:00').getDate()}
                       </div>
                       <div style={{ fontSize: '11px', fontWeight: 600, color: '#2C3E50', whiteSpace: 'nowrap' }}>
                         {ev.time}
                       </div>
                     </div>
- 
+
                     {/* Body */}
                     <div className="event-card-body" style={{ flex: 1, minWidth: 0, padding: '0 14px' }}>
                       <div style={{ fontSize: '15px', fontWeight: 500, color: '#1a2530', marginBottom: '2px' }}>
@@ -515,39 +553,59 @@ const searchTerms = isMusicRelated ? musicTerms : [kw]
                           {desc}
                         </div>
                       )}
+                      {/* Pills — mobile only, below description */}
+                      <div className="event-card-pills-mobile" style={{ display: 'none', flexDirection: 'row', gap: '4px', marginTop: '6px', overflow: 'hidden' }}>
+                        {[...catKeys, ...tagKeys].map((key: string) => {
+                          const catStyle = CAT_CARD[key]
+                          const catLabel = CAT_LABELS[key]
+                          const tagMeta = TAG_CARD[key]
+                          if (catStyle && catLabel) return (
+                            <span key={key} style={{ background: catStyle.bg, color: catStyle.color, fontSize: '10px', borderRadius: '5px', padding: '2px 6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                              {catLabel}
+                            </span>
+                          )
+                          if (tagMeta) return (
+                            <span key={key} style={{ background: tagMeta.bg, color: tagMeta.color, fontSize: '10px', borderRadius: '999px', padding: '2px 6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                              {tagMeta.label}
+                            </span>
+                          )
+                          return null
+                        })}
+                      </div>
                     </div>
- 
-                    {/* Pills */}
+
+                    {/* Pills — desktop only, right column */}
                     <div className="event-card-pills" style={{ flexShrink: 0, paddingLeft: '12px', borderLeft: '1px solid #eee', display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'flex-start' }}>
-  {catKeys.length > 0 && (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      {catKeys.map((c: string) => {
-        const s = CAT_CARD[c]
-        const lbl = CAT_LABELS[c]
-        if (!s || !lbl) return null
-        return (
-          <span key={c} style={{ background: s.bg, color: s.color, fontSize: '11px', borderRadius: '5px', padding: '3px 8px', whiteSpace: 'nowrap', display: 'inline-block', width: '82px', textAlign: 'center' }}>
-            {lbl}
-          </span>
-        )
-      })}
-    </div>
-  )}
-  {tagKeys.length > 0 && (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '90px' }}>
-  {tagKeys.map((t: string) => {
-        const meta = TAG_CARD[t]
-        if (!meta) return null
-        return (
-          <span key={t} style={{ background: meta.bg, color: meta.color, fontSize: '11px', borderRadius: '999px', padding: '3px 8px', whiteSpace: 'nowrap', display: 'inline-block', width: '88px', textAlign: 'center' }}>
-            {meta.label}
-          </span>
-        )
-      })}
-    </div>
-  )}
-</div>
-</div>
+                      {catKeys.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {catKeys.map((c: string) => {
+                            const s = CAT_CARD[c]
+                            const lbl = CAT_LABELS[c]
+                            if (!s || !lbl) return null
+                            return (
+                              <span key={c} style={{ background: s.bg, color: s.color, fontSize: '11px', borderRadius: '5px', padding: '3px 8px', whiteSpace: 'nowrap', display: 'inline-block', width: '82px', textAlign: 'center' }}>
+                                {lbl}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
+                      {tagKeys.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '90px' }}>
+                          {tagKeys.map((t: string) => {
+                            const meta = TAG_CARD[t]
+                            if (!meta) return null
+                            return (
+                              <span key={t} style={{ background: meta.bg, color: meta.color, fontSize: '11px', borderRadius: '999px', padding: '3px 8px', whiteSpace: 'nowrap', display: 'inline-block', width: '88px', textAlign: 'center' }}>
+                                {meta.label}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
                 )
               })}
             </div>
