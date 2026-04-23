@@ -75,6 +75,8 @@ export default function OrgDashboard() {
   const [eventImageUploading, setEventImageUploading] = useState(false)
   const locationInputRef = useRef<any>(null)
   const autocompleteRef = useRef<any>(null)
+  const [csvImporting, setCsvImporting] = useState(false)
+const [csvResult, setCsvResult] = useState<any>(null)
 
   useEffect(() => {
     if (!showEventModal) return
@@ -548,7 +550,46 @@ async function handleContactAdmin() {
             Google Calendar: Settings → your calendar → Integrate calendar → copy iCal link
           </div>
         </div>
-
+{/* CSV Import */}
+<div style={{ background: 'white', borderRadius: '12px', padding: '24px', marginBottom: '24px', border: '1.5px solid #e5e7eb' }}>
+  <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>Import Events from CSV</h2>
+  <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
+    No iCal feed? Export your events from Google Sheets, Squarespace, or any spreadsheet as a CSV file and upload it here. Events will be auto-categorized and sent for review.
+  </p>
+  <label style={{ display: 'inline-block', background: csvImporting ? '#f3f4f6' : '#1a3d2b', color: csvImporting ? '#9ca3af' : 'white', padding: '9px 20px', borderRadius: '999px', fontSize: '13px', fontWeight: 600, cursor: csvImporting ? 'not-allowed' : 'pointer' }}>
+    {csvImporting ? 'Importing…' : '↑ Upload CSV File'}
+    <input type="file" accept=".csv" style={{ display: 'none' }} disabled={csvImporting}
+      onChange={async e => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setCsvImporting(true)
+        setCsvResult(null)
+        const text = await file.text()
+        try {
+          const res = await fetch('/api/import-csv', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ csvText: text, organization: org.name, town: 'mill-valley' })
+          })
+          const data = await res.json()
+          setCsvResult(data)
+        } catch {
+          setCsvResult({ error: 'Upload failed. Please try again.' })
+        }
+        setCsvImporting(false)
+        e.target.value = ''
+      }}
+    />
+  </label>
+  {csvResult && (
+    <div style={{ marginTop: '12px', padding: '12px 16px', borderRadius: '8px', fontSize: '13px', background: csvResult.error ? '#fee2e2' : '#f0fdf4', color: csvResult.error ? '#dc2626' : '#16803c' }}>
+      {csvResult.error ? `⚠️ ${csvResult.error}` : `✅ ${csvResult.imported} events imported, ${csvResult.skipped} skipped, ${csvResult.errors} errors out of ${csvResult.total} rows.`}
+    </div>
+  )}
+  <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '10px' }}>
+    Accepted columns: Title, Date, Time, End Time, Location, Address, Description, Cost, Website, Age. Column names are flexible.
+  </p>
+</div>
         {/* Organization Profile */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '24px', marginBottom: '24px', border: '1.5px solid #e5e7eb' }}>
           <h2 id="profile" style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '16px' }}>Organization Profile</h2>
