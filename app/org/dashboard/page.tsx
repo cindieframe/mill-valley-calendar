@@ -77,6 +77,7 @@ export default function OrgDashboard() {
   const autocompleteRef = useRef<any>(null)
   const [csvImporting, setCsvImporting] = useState(false)
 const [csvResult, setCsvResult] = useState<any>(null)
+const [uploadingBanner, setUploadingBanner] = useState(false)
 
   useEffect(() => {
     if (!showEventModal) return
@@ -309,7 +310,7 @@ async function loadEvents(orgName: string) {
     const { error } = await supabase.from('organizations').update({
       name: org.name, description: org.description, website: org.website,
       phone: org.phone, email: org.email, instagram: org.instagram,
-      facebook: org.facebook, ical_feed_url: org.ical_feed_url,
+      facebook: org.facebook, ical_feed_url: org.ical_feed_url,banner_url: org.banner_url || null,
     }).eq('id', org.id)
     if (error) { setError(error.message); setSaving(false); return }
     if (org.ical_feed_url) {
@@ -344,7 +345,27 @@ async function loadEvents(orgName: string) {
     setEventImageUrl(publicUrl)
     setEventImageUploading(false)
   }
-async function handleContactAdmin() {
+async function handleBannerUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  if (file.size > 5 * 1024 * 1024) { setError('Banner must be under 5MB'); return }
+  setUploadingBanner(true)
+  setError('')
+  const ext = file.name.split('.').pop()
+  const fileName = `banner-${org.id}.${ext}`
+  const { error: uploadError } = await supabase.storage
+    .from('org-logos').upload(fileName, file, { upsert: true })
+  if (uploadError) { setError('Banner upload failed: ' + uploadError.message); setUploadingBanner(false); return }
+  const { data: { publicUrl } } = supabase.storage.from('org-logos').getPublicUrl(fileName)
+  const { error: updateError } = await supabase
+    .from('organizations').update({ banner_url: publicUrl }).eq('id', org.id)
+  if (updateError) { setError('Failed to save banner'); setUploadingBanner(false); return }
+  setOrg({ ...org, banner_url: publicUrl })
+  setUploadingBanner(false)
+  setSuccess('Banner uploaded successfully!')
+  setTimeout(() => setSuccess(''), 3000)
+}
+  async function handleContactAdmin() {
     if (!contactSubject || !contactMessage) return
     setContactSending(true)
     await fetch('/api/send-email', {
@@ -618,7 +639,30 @@ async function handleContactAdmin() {
               <input style={inputStyle} placeholder="facebook.com/yourorg" value={org.facebook || ''} onChange={e => setOrg({ ...org, facebook: e.target.value })} />
             </div>
           </div>
-
+{/* Banner Image */}
+<div style={{ borderTop: '1px solid #f3f4f6', marginTop: '20px', paddingTop: '20px' }}>
+  <label style={labelStyle}>Banner Image <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#6b7280' }}>(optional)</span></label>
+  <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>Wide photo for your org profile page. JPG or PNG, under 5MB.</p>
+  {org.banner_url ? (
+    <div style={{ marginBottom: '12px' }}>
+      <img src={org.banner_url} alt="Banner preview" style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '8px', marginBottom: '8px' }} />
+      <button onClick={() => setOrg({ ...org, banner_url: '' })}
+        style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '5px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+        Remove banner
+      </button>
+    </div>
+  ) : (
+    <label style={{ display: 'block', marginBottom: '12px', cursor: 'pointer' }}>
+      <div style={{ border: '1.5px dashed #e5e7eb', borderRadius: '8px', padding: '20px', textAlign: 'center' as const, background: '#f9fafb' }}>
+        <div style={{ fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '2px' }}>
+          {uploadingBanner ? 'Uploading…' : 'Click to upload a banner photo'}
+        </div>
+        <div style={{ fontSize: '11px', color: '#6b7280' }}>JPG or PNG · Max 5MB · Landscape works best</div>
+      </div>
+      <input type="file" accept="image/*" onChange={handleBannerUpload} style={{ display: 'none' }} disabled={uploadingBanner} />
+    </label>
+  )}
+</div>
           {/* Logo */}
           <div style={{ borderTop: '1px solid #f3f4f6', marginTop: '20px', paddingTop: '20px' }}>
             <label style={labelStyle}>Organization Logo <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#9ca3af' }}>(optional)</span></label>

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
+import Header from '../../components/Header'
 
 export default function OrgSignup() {
   const router = useRouter()
@@ -14,6 +15,8 @@ export default function OrgSignup() {
   const [matchingOrgs, setMatchingOrgs] = useState<string[]>([])
   const [claimedOrg, setClaimedOrg] = useState('')
   const [showClaimWarning, setShowClaimWarning] = useState<string>('')
+  const [logoUrl, setLogoUrl] = useState('')
+  const [logoUploading, setLogoUploading] = useState(false)
   const [form, setForm] = useState({
     name: '', email: '', password: '', confirmPassword: '',
     description: '', website: '', phone: '', instagram: '', facebook: '',
@@ -23,32 +26,42 @@ export default function OrgSignup() {
     setForm(prev => ({ ...prev, [field]: value }))
   }
 
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) { setError('Logo must be under 2MB'); return }
+    setLogoUploading(true)
+    setError('')
+    const ext = file.name.split('.').pop()
+    const fileName = `signup-${Date.now()}.${ext}`
+    const { error: uploadError } = await supabase.storage
+      .from('org-logos').upload(fileName, file, { upsert: true })
+    if (uploadError) { setError('Logo upload failed: ' + uploadError.message); setLogoUploading(false); return }
+    const { data: { publicUrl } } = supabase.storage.from('org-logos').getPublicUrl(fileName)
+    setLogoUrl(publicUrl)
+    setLogoUploading(false)
+  }
+
   async function searchMatchingOrgs(name: string) {
     if (name.length < 3) { setMatchingOrgs([]); return }
-
     const { data: eventData } = await supabase
       .from('events')
       .select('organization')
       .ilike('organization', `%${name}%`)
       .eq('status', 'approved')
     if (!eventData) return
-
     const allNames = [...new Set(eventData.map((e: any) => e.organization).filter(Boolean))] as string[]
-
     const { data: orgData } = await supabase
       .from('organizations')
       .select('name, user_id')
-
     const claimedWithAccount = new Set(
       (orgData || [])
         .filter((o: any) => o.user_id)
         .map((o: any) => o.name?.toLowerCase())
         .filter(Boolean)
     )
-
     const unclaimed = allNames.filter(n => !claimedWithAccount.has(n.toLowerCase()))
     const alreadyClaimed = allNames.filter(n => claimedWithAccount.has(n.toLowerCase()))
-
     const results = [
       ...unclaimed.slice(0, 5).map(n => `UNCLAIMED:${n}`),
       ...alreadyClaimed.slice(0, 3).map(n => `CLAIMED:${n}`),
@@ -129,13 +142,13 @@ export default function OrgSignup() {
         phone: form.phone || '',
         instagram: form.instagram || '',
         facebook: form.facebook || '',
+        logo_url: logoUrl || null,
       }])
 
     if (orgError) {
       console.error('Org creation error:', orgError)
     }
 
-    // If org claimed existing events, rename those events to match the new org name
     if (claimedOrg && claimedOrg !== form.name) {
       await supabase
         .from('events')
@@ -160,16 +173,13 @@ export default function OrgSignup() {
 
   if (emailSent) return (
     <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: 'sans-serif' }}>
-      <header style={{ background: '#1a3d2b', padding: '14px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <span style={{ fontWeight: 800, fontSize: '22px', color: 'white', letterSpacing: '-1px' }}>town</span>
-          <span style={{ fontWeight: 800, fontSize: '22px', color: '#e6a020', letterSpacing: '-1px', textTransform: 'uppercase' }}>STIR</span>
-        </div>
-        <button onClick={() => router.push('/')}
-          style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
-          ← Calendar
-        </button>
-      </header>
+      <Header
+        rightSlot={
+          <a href="/" style={{ color: 'rgba(255,255,255,0.65)', fontSize: '13px', textDecoration: 'none' }}>
+            ← Calendar
+          </a>
+        }
+      />
       <div style={{ maxWidth: '480px', margin: '0 auto', padding: '80px 24px', textAlign: 'center' }}>
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>📬</div>
         <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '26px', fontWeight: 900, color: '#1f2937', marginBottom: '12px' }}>
@@ -218,25 +228,22 @@ export default function OrgSignup() {
         </div>
       )}
 
-      <header style={{ background: '#1a3d2b', padding: '14px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <span style={{ fontWeight: 800, fontSize: '22px', color: 'white', letterSpacing: '-1px' }}>town</span>
-          <span style={{ fontWeight: 800, fontSize: '22px', color: '#e6a020', letterSpacing: '-1px', textTransform: 'uppercase' }}>STIR</span>
-          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginLeft: '12px' }}>Organization Signup</span>
-        </div>
-        <button onClick={() => router.push('/')}
-          style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
-          ← Calendar
-        </button>
-      </header>
+      <Header
+        rightSlot={
+          <a href="/" style={{ color: 'rgba(255,255,255,0.65)', fontSize: '13px', textDecoration: 'none' }}>
+            ← Calendar
+          </a>
+        }
+      />
 
       <div style={{ maxWidth: '560px', margin: '0 auto', padding: '40px 24px 80px' }}>
         <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '28px', fontWeight: 900, color: '#1f2937', marginBottom: '6px' }}>
           Create Organization Account
         </h1>
-        <p  className="text-muted" style={{ fontSize: '14px', marginBottom: '32px' }}>
+        <p className="text-muted" style={{ fontSize: '14px', marginBottom: '32px' }}>
           List your organization's events on the Mill Valley community calendar.
         </p>
+
         {error && (
           <div style={{ background: '#fee2e2', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: '#dc2626' }}>
             ⚠️ {error}
@@ -251,7 +258,7 @@ export default function OrgSignup() {
           <div style={{ marginBottom: '8px' }}>
             {matchingOrgs.some(o => o.startsWith('UNCLAIMED:')) && (
               <div style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', marginBottom: '8px' }}>
-                <div style={{ padding: '8px 14px', fontSize: '11px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' as const, letterSpacing: '0.8px', background: '#f9fafb' }}>
+                <div style={{ padding: '8px 14px', fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.8px', background: '#f9fafb' }}>
                   Is your org already on Townstir? Click to claim it:
                 </div>
                 {matchingOrgs.filter(o => o.startsWith('UNCLAIMED:')).map(entry => {
@@ -266,7 +273,7 @@ export default function OrgSignup() {
                   )
                 })}
                 <div onClick={() => setMatchingOrgs([])}
-                  style={{ padding: '10px 14px', fontSize: '12px', color: '#9ca3af', cursor: 'pointer', borderTop: '1px solid #f3f4f6' }}>
+                  style={{ padding: '10px 14px', fontSize: '12px', color: '#6b7280', cursor: 'pointer', borderTop: '1px solid #f3f4f6' }}>
                   None of these — we're new to Townstir
                 </div>
               </div>
@@ -293,6 +300,7 @@ export default function OrgSignup() {
         <label style={labelStyle}>Email Address *</label>
         <input style={inputStyle} type="email" placeholder="you@yourorg.org"
           value={form.email} onChange={e => set('email', e.target.value)} />
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
             <label style={labelStyle}>Password *</label>
@@ -303,7 +311,7 @@ export default function OrgSignup() {
                 value={form.password}
                 onChange={e => set('password', e.target.value)} />
               <button onClick={() => setShowPassword(!showPassword)}
-                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#9ca3af', padding: '0' }}>
+                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '0' }}>
                 {showPassword ? '🙈' : '👁️'}
               </button>
             </div>
@@ -317,16 +325,18 @@ export default function OrgSignup() {
                 value={form.confirmPassword}
                 onChange={e => set('confirmPassword', e.target.value)} />
               <button onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#9ca3af', padding: '0' }}>
+                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '0' }}>
                 {showConfirmPassword ? '🙈' : '👁️'}
               </button>
             </div>
           </div>
         </div>
+
         <label style={labelStyle}>Description</label>
         <textarea style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }}
           placeholder="Tell the community about your organization..."
           value={form.description} onChange={e => set('description', e.target.value)} />
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
             <label style={labelStyle}>Website</label>
@@ -339,6 +349,7 @@ export default function OrgSignup() {
               value={form.phone} onChange={e => set('phone', e.target.value)} />
           </div>
         </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
             <label style={labelStyle}>Instagram</label>
@@ -351,11 +362,38 @@ export default function OrgSignup() {
               value={form.facebook} onChange={e => set('facebook', e.target.value)} />
           </div>
         </div>
+
+        {/* Logo Upload */}
+        <div style={{ borderTop: '1px solid #f3f4f6', marginTop: '8px', paddingTop: '20px', marginBottom: '8px' }}>
+          <label style={labelStyle}>Organization Logo <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#6b7280' }}>(optional)</span></label>
+          <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>PNG or JPG, under 2MB. You can also add this later from your dashboard.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#f3f4f6', border: '2px solid #e5e7eb', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {logoUrl ? (
+                <img src={logoUrl} alt="Logo preview" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }} />
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                  <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+              )}
+            </div>
+            <div>
+              <label style={{ display: 'inline-block', background: '#f3f4f6', color: '#374151', padding: '7px 16px', borderRadius: '999px', fontSize: '13px', fontWeight: 600, cursor: logoUploading ? 'not-allowed' : 'pointer', border: '1.5px solid #e5e7eb' }}>
+                {logoUploading ? 'Uploading…' : logoUrl ? 'Change Logo' : 'Upload Logo'}
+                <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={logoUploading} />
+              </label>
+              {logoUrl && <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '6px' }}>Logo uploaded ✓</p>}
+            </div>
+          </div>
+        </div>
+
         <button onClick={handleSignup} disabled={loading}
-          style={{ width: '100%', background: '#1a3d2b', color: 'white', border: 'none', padding: '14px', borderRadius: '999px', fontSize: '15px', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, marginTop: '8px' }}>
+          style={{ width: '100%', background: '#1a3d2b', color: 'white', border: 'none', padding: '14px', borderRadius: '999px', fontSize: '15px', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, marginTop: '16px' }}>
           {loading ? 'Creating account…' : 'Create Account →'}
         </button>
-        <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '13px', color: '#9ca3af' }}>
+
+        <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '13px', color: '#6b7280' }}>
           Already have an account?{' '}
           <span onClick={() => router.push('/org/login')}
             style={{ color: '#1a3d2b', fontWeight: 700, cursor: 'pointer' }}>
