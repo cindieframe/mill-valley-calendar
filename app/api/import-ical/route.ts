@@ -19,6 +19,7 @@ function parseICal(text: string) {
     }
     
     const dtstart = get('DTSTART')
+    const dtend = get('DTEND')   // NEW — reads the end time from the iCal block
     const summary = get('SUMMARY')
     const description = get('DESCRIPTION').replace(/\\n/g, ' ').replace(/\\,/g, ',').replace(/https?:\/\/\S+/g, '').replace(/#\S+/g, '').replace(/@\S+/g, '').replace(/\s+/g, ' ').trim()
     const location = get('LOCATION').replace(/\\,/g, ',')
@@ -27,47 +28,56 @@ function parseICal(text: string) {
     
     if (!summary || !dtstart) continue
     
-    // Parse date - handle both UTC (with Z) and local time formats
     let dateStr = ''
     let timeStr = '12:00 PM'
+    let endTimeStr = ''   // NEW — will hold the parsed end time if one exists
 
     if (dtstart.includes('T')) {
-      // If TZID is specified, time is already local — parse without Z suffix
-      // If no TZID, assume UTC and convert to Pacific
       const hasTZID = block.includes('DTSTART;TZID=')
       const fullDate = hasTZID
         ? dtstart.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6')
         : dtstart.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6Z')
       const date = new Date(fullDate)
 
-      // Get Pacific date (may differ from UTC date)
       dateStr = date.toLocaleDateString('en-CA', {
         timeZone: 'America/Los_Angeles'
-      }) // gives YYYY-MM-DD
+      })
 
-      // Get Pacific time
       timeStr = date.toLocaleTimeString('en-US', {
         timeZone: 'America/Los_Angeles',
         hour: 'numeric',
         minute: '2-digit',
         hour12: true
       })
+
+      // NEW — parse the end time using the same timezone logic as the start time
+      if (dtend && dtend.includes('T')) {
+        const fullEndDate = hasTZID
+          ? dtend.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6')
+          : dtend.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6Z')
+        const endDate = new Date(fullEndDate)
+        endTimeStr = endDate.toLocaleTimeString('en-US', {
+          timeZone: 'America/Los_Angeles',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        })
+      }
+
     } else {
-      // All-day event, no time component
       dateStr = dtstart.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')
       timeStr = 'All day'
     }
 
-   // Skip past events
-const today = new Date()
-today.setHours(0, 0, 0, 0)
-const eventDate = new Date(dateStr + 'T12:00:00')
-if (eventDate < today) continue
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const eventDate = new Date(dateStr + 'T12:00:00')
+    if (eventDate < today) continue
 
-   events.push({ summary, description, location, dateStr, timeStr, url, image })
+    // NEW — endTimeStr added to the pushed object
+    events.push({ summary, description, location, dateStr, timeStr, endTimeStr, url, image })
   }
   
-  // Sort by date ascending
   events.sort((a, b) => new Date(a.dateStr).getTime() - new Date(b.dateStr).getTime())
 
   return events
@@ -200,6 +210,7 @@ const displayName = linkedOrg ? linkedOrg.name : organization
   title: ev.summary,
   date: ev.dateStr,
   time: ev.timeStr,
+    end_time: ev.endTimeStr || null, 
   location: ev.location || displayName,
   address: ev.location || '',
   organization: displayName,
