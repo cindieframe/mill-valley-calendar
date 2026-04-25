@@ -556,9 +556,14 @@ export default function Admin() {
           <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginLeft: '12px' }}>Admin</span>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
+          
           <button onClick={() => router.push('/admin/import')}
             style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
             ⬇ iCal Import
+          </button>
+          <button onClick={() => router.push('/admin/discover')}
+            style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
+            Discover Orgs
           </button>
           <button onClick={() => router.push('/')}
             style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.3)', padding: '8px 18px', borderRadius: '999px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
