@@ -181,10 +181,21 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
           </h1>
 
           <div style={{ fontSize: '13px', color: '#888', marginBottom: '24px' }}>
-            Presented by{' '}
-            <Link href={`/org/${orgSlug}`} style={{ color: '#3a7d44', fontWeight: 500, textDecoration: 'none' }}>
-              {ev.organization}
-            </Link>
+            {ev.is_aggregator ? (
+              <>
+                {ev.extracted_organizer && (
+                  <><Link href={`/org/${encodeURIComponent(ev.extracted_organizer.toLowerCase().replace(/ /g, '-'))}`} style={{ color: '#3a7d44', fontWeight: 500, textDecoration: 'none' }}>{ev.extracted_organizer}</Link>{' · '}</>
+                )}
+                via {ev.organization}
+              </>
+            ) : (
+              <>Presented by{' '}
+                <Link href={`/org/${orgSlug}`} style={{ color: '#3a7d44', fontWeight: 500, textDecoration: 'none' }}>
+                  {ev.organization}
+                </Link>
+              </>
+            )}
+
             {ev.verified && (
               <span style={{ marginLeft: '6px', background: '#1a3d2b', color: 'white', fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px' }}>
                 ✓ Verified

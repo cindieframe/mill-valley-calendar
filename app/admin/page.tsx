@@ -25,6 +25,7 @@ export default function Admin() {
   const [noteText, setNoteText] = useState('')
   const [editingOrg, setEditingOrg] = useState<any>(null)
   const [orgSaving, setOrgSaving] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null)
   const [filterOrg, setFilterOrg] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [filterDate, setFilterDate] = useState('')
@@ -177,6 +178,13 @@ export default function Admin() {
       await supabase.from('events').update({ verified: newVerified }).eq('organization', org.name)
       setOrgs(prev => prev.map(o => o.id === org.id ? { ...o, verified: newVerified } : o))
     }
+  }
+
+  async function toggleAggregator(org: any) {
+    const newVal = !org.is_aggregator
+    await supabase.from('organizations').update({ is_aggregator: newVal }).eq('id', org.id)
+    await supabase.from('events').update({ is_aggregator: newVal }).eq('organization', org.name)
+    setOrgs(prev => prev.map(o => o.id === org.id ? { ...o, is_aggregator: newVal } : o))
   }
 
   async function handleSendMessage() {
@@ -505,6 +513,7 @@ export default function Admin() {
                             <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>
                               {org.name}
                               {org.verified && <span style={{ marginLeft: '8px', background: '#16803c', color: 'white', fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px' }}>✓ Verified</span>}
+                              {org.is_aggregator && <span style={{ marginLeft: '4px', background: '#FAC775', color: '#633806', fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px' }}>Aggregator</span>}
                             </h3>
                             <div style={{ fontSize: '13px', color: '#6b7280' }}>{org.email && <>{org.email}</>}{org.website && <>&nbsp;·&nbsp; {org.website}</>}</div>
                             <div style={{ marginTop: '4px' }}>
@@ -513,10 +522,23 @@ export default function Admin() {
                               </span>
                             </div>
                           </div>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => { setMessageModal(org); setMessageSubject(''); setMessageBody('') }} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>✉️ Message</button>
-                            <button onClick={() => setEditingOrg({ ...org })} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
-                            <button onClick={() => toggleVerify(org)} style={{ background: org.verified ? 'white' : '#16803c', color: org.verified ? '#dc2626' : 'white', border: org.verified ? '1.5px solid #dc2626' : 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>{org.verified ? '✕ Unverify' : '✓ Verify'}</button>
+                          <div style={{ display: 'flex', gap: '8px', position: 'relative' }}>
+                            <button onClick={() => setEditingOrg({ ...org })} style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
+                            <button onClick={() => { setMessageModal(org); setMessageSubject(''); setMessageBody('') }} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Message</button>
+                            <button onClick={() => setOpenMenuId(openMenuId === org.id ? null : org.id)} style={{ background: 'white', color: '#6b7280', border: '1px solid #e5e7eb', padding: '9px 14px', borderRadius: '999px', fontWeight: 700, fontSize: '15px', cursor: 'pointer', lineHeight: 1, fontFamily: 'sans-serif' }}>···</button>
+                            {openMenuId === org.id && (
+                              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 4px)', background: 'white', border: '0.5px solid #e5e7eb', borderRadius: '10px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, minWidth: '180px', overflow: 'hidden' }}>
+                                <button onClick={() => { toggleVerify(org); setOpenMenuId(null) }} style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 14px', fontSize: '13px', color: org.verified ? '#dc2626' : '#1f2937', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'sans-serif' }}>
+                                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: org.verified ? '#dc2626' : 'transparent', border: org.verified ? 'none' : '1px solid #d1d5db', display: 'inline-block' }} />
+                                  {org.verified ? 'Remove verification' : 'Verify org'}
+                                </button>
+                                <div style={{ height: '0.5px', background: '#f3f4f6', margin: '2px 0' }} />
+                                <button onClick={() => { toggleAggregator(org); setOpenMenuId(null) }} style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 14px', fontSize: '13px', color: org.is_aggregator ? '#854F0B' : '#1f2937', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'sans-serif' }}>
+                                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: org.is_aggregator ? '#854F0B' : 'transparent', border: org.is_aggregator ? 'none' : '1px solid #d1d5db', display: 'inline-block' }} />
+                                  {org.is_aggregator ? 'Remove Aggregator' : 'Mark as Aggregator'}
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}

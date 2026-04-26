@@ -10,6 +10,7 @@ export default function ImportPage() {
 
   const [websiteUrl, setWebsiteUrl] = useState('')
   const [aiOrg, setAiOrg] = useState('')
+  const [aiIsAggregator, setAiIsAggregator] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState<any>(null)
   const [aiError, setAiError] = useState('')
@@ -31,7 +32,7 @@ export default function ImportPage() {
   async function loadSavedSources() {
     const { data } = await supabase
   .from('organizations')
-  .select('id, name, website_url, last_extracted_at')
+ .select('id, name, website_url, last_extracted_at, is_aggregator')
   .not('website_url', 'is', null)
   .order('name')
     if (data) setSavedSources(data)
@@ -70,7 +71,7 @@ export default function ImportPage() {
       const response = await fetch('/api/extract-events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ websiteUrl, organization: aiOrg }),
+        body: JSON.stringify({ websiteUrl, organization: aiOrg, isAggregator: aiIsAggregator }),
       })
       const data = await response.json()
       if (data.error) {
@@ -140,6 +141,12 @@ export default function ImportPage() {
       console.error('Delete failed')
     }
     setDeletingId(null)
+  }
+  async function toggleAggregator(org: any) {
+    const newVal = !org.is_aggregator
+    await supabase.from('organizations').update({ is_aggregator: newVal }).eq('id', org.id)
+    await supabase.from('events').update({ is_aggregator: newVal }).eq('organization', org.name)
+    setSavedSources(prev => prev.map(s => s.id === org.id ? { ...s, is_aggregator: newVal } : s))
   }
 
   async function handleIcalImport() {
@@ -235,6 +242,20 @@ export default function ImportPage() {
               </div>
             </div>
 
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+              <input
+                type="checkbox"
+                id="aggregator-check"
+                checked={aiIsAggregator}
+                onChange={e => setAiIsAggregator(e.target.checked)}
+                style={{ width: '14px', height: '14px', cursor: 'pointer' }}
+              />
+              <label htmlFor="aggregator-check" style={{ fontSize: '13px', color: '#6b7280', cursor: 'pointer' }}>
+                This is an aggregator (e.g. Patch, Chamber listing) — not the event organizer
+              </label>
+            </div>
+
             {aiError && (
               <div style={{ background: '#fee2e2', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: '#dc2626' }}>
                 ⚠️ {aiError}
@@ -301,18 +322,23 @@ export default function ImportPage() {
   </div>
 )}
                       </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <button
-                          onClick={() => handleReextract(org)}
-                          disabled={reextractingId === org.id}
-                          style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: reextractingId === org.id ? 'not-allowed' : 'pointer', opacity: reextractingId === org.id ? 0.7 : 1, whiteSpace: 'nowrap' as const }}>
-                          {reextractingId === org.id ? 'Reading…' : 'Re-extract'}
+                          onClick={() => toggleAggregator(org)}
+                          style={{ background: 'none', border: 'none', fontSize: '11px', color: org.is_aggregator ? '#854F0B' : '#9ca3af', fontWeight: org.is_aggregator ? 600 : 400, cursor: 'pointer', padding: '0 4px', whiteSpace: 'nowrap' as const }}>
+                          {org.is_aggregator ? 'Aggregator ✓' : 'Aggregator'}
                         </button>
                         <button
                           onClick={() => handleDeleteSource(org)}
                           disabled={deletingId === org.id}
                           style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '8px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: deletingId === org.id ? 'not-allowed' : 'pointer', opacity: deletingId === org.id ? 0.7 : 1, whiteSpace: 'nowrap' as const }}>
                           {deletingId === org.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                        <button
+                          onClick={() => handleReextract(org)}
+                          disabled={reextractingId === org.id}
+                          style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: reextractingId === org.id ? 'not-allowed' : 'pointer', opacity: reextractingId === org.id ? 0.7 : 1, whiteSpace: 'nowrap' as const }}>
+                          {reextractingId === org.id ? 'Reading…' : 'Re-extract'}
                         </button>
                       </div>
                     </div>

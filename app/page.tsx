@@ -542,12 +542,24 @@ export default function Home() {
                         )}
                       </div>
                       <div style={{ fontSize: '12px', marginBottom: '4px' }}>
-                        <a href={`/org/${encodeURIComponent(ev.organization.toLowerCase().replace(/ /g, '-'))}`}
-                          style={{ color: '#3a7d44', textDecoration: 'none' }}
-                          onClick={e => e.stopPropagation()}>
-                          {ev.organization}
-                        </a>
-                      </div>
+  {ev.is_aggregator ? (
+    <span style={{ color: '#9ca3af' }}>
+      {ev.extracted_organizer && (
+        <>
+          <span style={{ color: '#3a7d44' }}>{ev.extracted_organizer}</span>
+          <span style={{ color: '#ccc', margin: '0 4px' }}>·</span>
+        </>
+      )}
+      via {ev.organization}
+    </span>
+  ) : (
+    <a href={`/org/${encodeURIComponent(ev.organization.toLowerCase().replace(/ /g, '-'))}`}
+      style={{ color: '#3a7d44', textDecoration: 'none' }}
+      onClick={e => e.stopPropagation()}>
+      {ev.organization}
+    </a>
+  )}
+</div>
                       {desc && (
                         <div style={{ fontSize: '12px', color: '#767e8a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {desc}
