@@ -7,7 +7,7 @@ const anthropic = new Anthropic({
 })
 
 // Parse iCal text into event objects
-function parseICal(text: string) {
+function parseICal(text: string, feedUrl?: string) {
   const events: any[] = []
   const eventBlocks = text.split('BEGIN:VEVENT')
   
@@ -34,9 +34,10 @@ function parseICal(text: string) {
 
     if (dtstart.includes('T')) {
       const hasTZID = block.includes('DTSTART;TZID=')
-      const fullDate = hasTZID
-        ? dtstart.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6')
-        : dtstart.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6Z')
+      const fullDate = (hasTZID || feedUrl?.includes('ical=1'))
+  ? dtstart.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6')
+  : dtstart.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6Z')
+
       const date = new Date(fullDate)
 
       dateStr = date.toLocaleDateString('en-CA', {
@@ -148,7 +149,7 @@ export async function POST(request: NextRequest) {
     }
     
     const icalText = await response.text()
-const events = parseICal(icalText)
+const events = parseICal(icalText, feedUrl)
 
 if (events.length === 0) {
   return NextResponse.json({ error: 'No upcoming events found in feed' }, { status: 400 })

@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { AdminHeader } from '../../components/Header'
+import { useSearchParams } from 'next/navigation'
+
 
 type OrgResult = {
   name: string
@@ -22,9 +24,11 @@ type OrgResult = {
   dismissed: boolean
 }
 
-export default function DiscoverOrgs() {
+function DiscoverOrgsInner() {
   const router = useRouter()
-  const [town, setTown] = useState('Mill Valley')
+  const searchParams = useSearchParams()
+  const lockedTown = searchParams.get('town')
+  const [town, setTown] = useState(lockedTown || 'Mill Valley')
   const [state, setState] = useState('CA')
   const [loading, setLoading] = useState(false)
   const [orgs, setOrgs] = useState<OrgResult[]>([])
@@ -297,12 +301,13 @@ async function extractWithAI(index: number) {
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
               Town
             </label>
-            <input
-              value={town}
-              onChange={e => setTown(e.target.value)}
-              style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 14px', fontSize: '14px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
-              placeholder="e.g. Mill Valley"
-            />
+<input
+  value={town}
+  onChange={e => !lockedTown && setTown(e.target.value)}
+  readOnly={!!lockedTown}
+  style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 14px', fontSize: '14px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', background: lockedTown ? '#f9fafb' : 'white', cursor: lockedTown ? 'default' : 'text' }}
+  placeholder="e.g. Mill Valley"
+/>
           </div>
           <div style={{ flex: 1 }}>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
@@ -423,5 +428,12 @@ async function extractWithAI(index: number) {
         )}
       </div>
     </div>
+  )
+}
+export default function DiscoverOrgs() {
+  return (
+    <Suspense fallback={<div style={{ padding: '40px', fontFamily: 'sans-serif' }}>Loading…</div>}>
+      <DiscoverOrgsInner />
+    </Suspense>
   )
 }
