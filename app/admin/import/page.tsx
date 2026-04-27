@@ -83,16 +83,16 @@ export default function ImportPage() {
           .select('id')
           .ilike('name', aiOrg)
           .single()
-        if (orgMatch) {
-          await supabase
-            .from('organizations')
-            .update({ website_url: websiteUrl })
-            .eq('id', orgMatch.id)
-        } else {
-          await supabase
-            .from('organizations')
-            .insert([{ name: aiOrg, website_url: websiteUrl }])
-        }
+     if (orgMatch) {
+  await supabase
+    .from('organizations')
+    .update({ website_url: websiteUrl, last_extracted_at: new Date().toISOString() })
+    .eq('id', orgMatch.id)
+} else {
+  await supabase
+    .from('organizations')
+    .insert([{ name: aiOrg, website_url: websiteUrl, last_extracted_at: new Date().toISOString() }])
+}
         loadSavedSources()
       }
     } catch {
@@ -431,9 +431,21 @@ export default function ImportPage() {
                           </div>
                         )}
                       </div>
-                      <div style={{ fontSize: '11px', background: '#f0fdf4', color: '#16803c', border: '1.5px solid #86efac', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
-                        ✓ Active
-                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+  <button
+    onClick={async () => {
+      const newVal = !feed.is_aggregator
+      await supabase.from('ical_feeds').update({ is_aggregator: newVal }).eq('id', feed.id)
+      await supabase.from('events').update({ is_aggregator: newVal }).eq('organization', feed.organization)
+      setSavedFeeds(prev => prev.map(f => f.id === feed.id ? { ...f, is_aggregator: newVal } : f))
+    }}
+    style={{ background: 'none', border: 'none', fontSize: '11px', color: feed.is_aggregator ? '#854F0B' : '#9ca3af', fontWeight: feed.is_aggregator ? 600 : 400, cursor: 'pointer', padding: '0 4px', whiteSpace: 'nowrap' as const }}>
+    {feed.is_aggregator ? 'Aggregator ✓' : 'Aggregator'}
+  </button>
+  <div style={{ fontSize: '11px', background: '#f0fdf4', color: '#16803c', border: '1.5px solid #86efac', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
+    ✓ Active
+  </div>
+</div>
                     </div>
                   </div>
                 ))}

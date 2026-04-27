@@ -191,17 +191,18 @@ const displayName = linkedOrg ? linkedOrg.name : organization
     for (const ev of events) {
       try {
         // Check if event already exists BEFORE calling Claude
-        const { data: existing } = await supabase
-          .from('events')
-          .select('id')
-          .eq('title', ev.summary)
-          .eq('date', ev.dateStr)
-          .single()
+       const { data: existingEvents } = await supabase
+  .from('events')
+  .select('id')
+  .eq('title', ev.summary)
+  .eq('date', ev.dateStr)
+
+if (existingEvents && existingEvents.length > 0) {
+  skipped++
+  continue
+}
         
-        if (existing) {
-          skipped++
-          continue
-        }
+  
 
         // Auto-categorize with Claude (only for new events)
         const { categories, tags } = await categorizeEvent(ev.summary, ev.description)

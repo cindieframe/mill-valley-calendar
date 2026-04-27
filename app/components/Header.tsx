@@ -51,6 +51,19 @@ export default function Header({ rightSlot, variant = 'default' }: HeaderProps) 
       {/* Spacer */}
       <div style={{ flex: 1 }} />
 
+      {/* Community Board link — default variant only */}
+      {variant === 'default' && (
+        <Link href="/community-board" style={{
+          color: 'rgba(255,255,255,0.75)',
+          fontSize: '14px',
+          fontFamily: fonts.sans,
+          textDecoration: 'none',
+          marginRight: '20px',
+        }}>
+          Community Board
+        </Link>
+      )}
+
       {/* Right slot — caller provides page-specific buttons */}
       {rightSlot && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

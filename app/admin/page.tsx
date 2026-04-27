@@ -36,6 +36,7 @@ export default function Admin() {
   const [messageSending, setMessageSending] = useState(false)
   const [messageSent, setMessageSent] = useState(false)
   const [approvedEvents, setApprovedEvents] = useState<any[]>([])
+  const [opportunities, setOpportunities] = useState<any[]>([])
 
   // Role-based state
   const [adminRole, setAdminRole] = useState<'super_admin' | 'regional_admin' | null>(null)
@@ -82,6 +83,7 @@ export default function Admin() {
   useEffect(() => {
     if (!authed) return
     if (filter === 'organizations') loadOrgs()
+    else if (filter === 'opportunities') loadOpportunities()
     else { loadEvents(); setSelected(new Set()) }
   }, [filter, authed, selectedTown])
 
@@ -127,10 +129,33 @@ export default function Admin() {
     )
     if (!error) setEvents(data || [])
     const { data: approved } = await applyTownFilter(
-      supabase.from('events').select('id, title, date').eq('status', 'approved')
+      supabase.from('events').select('id, title, date, time').eq('status', 'approved')
     )
     setApprovedEvents(approved || [])
     setLoading(false)
+  }
+
+  async function loadOpportunities() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('opportunities')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+    if (!error) setOpportunities(data || [])
+    setLoading(false)
+  }
+
+  async function updateOpportunityStatus(id: number, status: string) {
+    const { error } = await supabase
+      .from('opportunities').update({ status }).eq('id', id)
+    if (!error) setOpportunities(prev => prev.filter(o => o.id !== id))
+  }
+
+  async function deleteOpportunity(id: number) {
+    if (!confirm('Permanently delete this opportunity?')) return
+    const { error } = await supabase.from('opportunities').delete().eq('id', id)
+    if (!error) setOpportunities(prev => prev.filter(o => o.id !== id))
   }
 
   async function loadOrgs() {
@@ -437,6 +462,7 @@ export default function Admin() {
         <div style={{ display: 'flex', gap: '10px' }}>
           <button onClick={() => router.push(townUrl('/admin/import'))} style={hdrBtn}>⬇ Import Events</button>
           <button onClick={() => router.push(townUrl('/admin/discover'))} style={hdrBtn}>Discover Orgs</button>
+          <button onClick={() => router.push('/community-board')} style={hdrBtn}>Community Board</button>
           <button onClick={() => router.push('/')} style={hdrBtn}>← Calendar</button>
           <button onClick={handleLogout} style={hdrBtn}>Log Out</button>
         </div>
@@ -448,7 +474,6 @@ export default function Admin() {
           Manage events and organizations{selectedTown ? ` for ${selectedTown}` : adminTowns ? ` for ${adminTowns.join(', ')}` : ''}.
         </p>
 
-        {/* Town switcher for regional admins with multiple towns */}
         {!isSuperAdmin && adminTowns && adminTowns.length > 1 && (
           <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
             <button onClick={() => setSelectedTown(null)} style={{ padding: '6px 16px', borderRadius: '999px', border: '1.5px solid', borderColor: !selectedTown ? '#1a3d2b' : '#e5e7eb', background: !selectedTown ? '#1a3d2b' : 'white', color: !selectedTown ? 'white' : '#6b7280', fontWeight: 600, fontSize: '12px', cursor: 'pointer' }}>All my towns</button>
@@ -459,12 +484,12 @@ export default function Admin() {
         )}
 
         <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
-          {['pending', 'approved', 'unpublished', 'rejected', 'organizations'].map(s => (
+          {['pending', 'approved', 'unpublished', 'rejected', 'organizations', 'opportunities'].map(s => (
             <button key={s} onClick={() => setFilter(s)} style={{ padding: '8px 20px', borderRadius: '999px', border: '1.5px solid', borderColor: filter === s ? '#1a3d2b' : '#e5e7eb', background: filter === s ? '#1a3d2b' : 'white', color: filter === s ? 'white' : '#6b7280', fontWeight: 600, fontSize: '13px', cursor: 'pointer', textTransform: 'capitalize' }}>{s}</button>
           ))}
         </div>
 
-        {filter !== 'organizations' && (
+        {filter !== 'organizations' && filter !== 'opportunities' && (
           <div style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '12px', padding: '12px 20px', marginBottom: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
             <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={{ border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '6px 12px', fontSize: '13px', outline: 'none', color: '#374151' }} />
             <select value={filterOrg} onChange={e => setFilterOrg(e.target.value)} style={{ border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '6px 12px', fontSize: '13px', outline: 'none', color: '#374151', background: 'white' }}>
@@ -485,6 +510,50 @@ export default function Admin() {
               <button onClick={() => { setFilterOrg(''); setFilterCategory(''); setFilterDate('') }} style={{ background: '#f3f4f6', color: '#6b7280', border: 'none', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>✕ Clear filters</button>
             )}
           </div>
+        )}
+
+        {filter === 'opportunities' && (
+          <>
+            {loading
+              ? <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>Loading…</div>
+              : opportunities.length === 0
+              ? <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af' }}>No pending opportunities.</div>
+              : opportunities.map(opp => (
+                <div key={opp.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: '4px solid #e5e7eb' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>{opp.title}</h3>
+                      <div style={{ fontSize: '13px', color: '#6b7280' }}>
+                        {opp.organization || 'Community Member'} &nbsp;·&nbsp; {opp.category}
+                        {opp.is_student_opportunity && <span style={{ marginLeft: '8px', background: '#fef3c7', color: '#92400e', fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px' }}>Student</span>}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af', flexShrink: 0, marginLeft: '12px' }}>#{opp.id}</div>
+                  </div>
+                  <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, marginBottom: '12px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>{opp.description}</p>
+                  <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '16px' }}>
+                    {opp.contact_name && <span>{opp.contact_name}&nbsp;&nbsp;</span>}
+                    {opp.contact_email && <span>{opp.contact_email}&nbsp;&nbsp;</span>}
+                    {opp.contact_phone && <span>{opp.contact_phone}</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button onClick={() => updateOpportunityStatus(opp.id, 'approved')}
+                      style={{ background: '#16803c', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
+                      ✓ Approve
+                    </button>
+                    <button onClick={() => updateOpportunityStatus(opp.id, 'rejected')}
+                      style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
+                      ✕ Reject
+                    </button>
+                    <button onClick={() => deleteOpportunity(opp.id)}
+                      style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))
+            }
+          </>
         )}
 
         {filter === 'organizations' && (
@@ -549,7 +618,7 @@ export default function Admin() {
           </>
         )}
 
-        {filter !== 'organizations' && (
+        {filter !== 'organizations' && filter !== 'opportunities' && (
           <>
             {!loading && events.length > 0 && filter === 'pending' && (
               <div style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '12px', padding: '12px 20px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
@@ -576,7 +645,7 @@ export default function Admin() {
                 <div key={ev.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${selected.has(ev.id) ? '#1a3d2b' : '#e5e7eb'}` }}>
                   {filter === 'pending' && findPossibleDuplicates(ev).length > 0 && (
                     <div style={{ background: '#fef9c3', border: '1.5px solid #fde68a', borderRadius: '8px', padding: '8px 14px', marginBottom: '12px', fontSize: '12px', color: '#92400e', fontWeight: 600 }}>
-                      ⚠️ Possible duplicate of: {findPossibleDuplicates(ev).map(d => `"${d.title}" (already approved)`).join(', ')}
+                      ⚠️ Possible duplicate of: {findPossibleDuplicates(ev).map(d => `"${d.title}" on ${d.date} at ${d.time} (already approved)`).join(', ')}
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
