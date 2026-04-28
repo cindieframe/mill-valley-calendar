@@ -21,20 +21,29 @@ type Opportunity = {
   town: string
 }
 
-export default function OpportunityDetail({ params }: { params: { id: string } }) {
+export default function OpportunityDetail({ params }: { params: Promise<{ id: string }> }) {
+
   const router = useRouter()
   const [opp, setOpp] = useState<Opportunity | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
-  useEffect(() => { loadOpportunity() }, [params.id])
+  const [id, setId] = useState<string | null>(null)
+
+  useEffect(() => {
+    Promise.resolve(params).then(p => setId(p.id))
+  }, [])
+
+  useEffect(() => {
+    if (id) loadOpportunity()
+  }, [id])
 
   async function loadOpportunity() {
     setLoading(true)
     const { data, error } = await supabase
       .from('opportunities')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('status', 'approved')
       .single()
     if (error || !data) setNotFound(true)
@@ -43,7 +52,9 @@ export default function OpportunityDetail({ params }: { params: { id: string } }
   }
 
   const backButton = (
-    <button onClick={() => router.push('/community-board')} style={styles.buttonGhost}>← Back</button>
+    <a href="/org/login" style={{ color: 'rgba(255,255,255,0.65)', fontSize: '13px', textDecoration: 'none' }}>
+      Org Login
+    </a>
   )
 
   if (loading) return (
@@ -58,8 +69,8 @@ export default function OpportunityDetail({ params }: { params: { id: string } }
       <Header rightSlot={backButton} />
       <div style={{ textAlign: 'center', padding: '80px', color: colors.textSecondary }}>
         <p style={{ marginBottom: '16px' }}>Opportunity not found.</p>
-        <button onClick={() => router.push('/community-board')} style={styles.buttonPrimary}>
-          Back to Community Board
+        <button onClick={() => router.push('/volunteering')} style={styles.buttonPrimary}>
+          Back to Volunteering
         </button>
       </div>
     </div>
@@ -155,13 +166,13 @@ export default function OpportunityDetail({ params }: { params: { id: string } }
         {/* Actions */}
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           {opp.contact_email && (
-            <a href={`mailto:${opp.contact_email}`} style={styles.buttonPrimary}>
+            <a href={`mailto:${opp.contact_email}`} style={{ ...styles.buttonPrimary, padding: '12px 24px', borderRadius: radii.tagPill, fontSize: '14px' }}>
               Get in Touch
             </a>
           )}
-          <button onClick={() => router.push('/community-board')}
-            style={{ background: colors.cardBg, color: colors.navBg, border: `1.5px solid ${colors.navBg}`, padding: '12px 24px', borderRadius: radii.tagPill, fontSize: '14px', fontWeight: 600, cursor: 'pointer', fontFamily: fonts.sans }}>
-            ← Back to Board
+          <button onClick={() => router.push('/volunteering')}
+            style={{ background: colors.cardBg, color: colors.navBg, border: `1.5px solid ${colors.navBg}`, padding: '12px 24px', borderRadius: radii.tagPill, fontSize: '14px', fontWeight: 500, cursor: 'pointer', fontFamily: fonts.sans }}>
+            ← Back to Volunteering
           </button>
         </div>
 

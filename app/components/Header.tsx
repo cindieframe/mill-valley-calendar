@@ -2,32 +2,38 @@
 
 // app/components/Header.tsx
 // Shared header imported by ALL Townstir pages.
-// Renders the nav bar with logo + optional right-side slot for page-specific CTAs.
-//
-// Usage examples:
-//   <Header />                            — logo only (org pages, detail pages)
-//   <Header rightSlot={<PostEventButton />} />  — with CTA
-//   <Header variant="admin" />            — admin label next to logo
+// Renders the nav bar with logo + section switcher + optional right-side slot.
 
 import Link from 'next/link';
-import { colors, fonts, styles, spacing } from '@/app/lib/tokens';
+import { usePathname } from 'next/navigation';
+import { colors, fonts, styles } from '@/app/lib/tokens';
 
 type HeaderVariant = 'default' | 'admin' | 'org';
 
 interface HeaderProps {
-  /** Optional content rendered on the right side of the nav (e.g. buttons) */
   rightSlot?: React.ReactNode;
-  /** Visual variant — affects any supplemental label shown next to the logo */
   variant?: HeaderVariant;
 }
 
+const SECTIONS = [
+  { label: 'Events',       href: '/' },
+  { label: 'Volunteering', href: '/volunteering' },
+  { label: 'Local Sports', href: '/local-sports' },
+]
+
 export default function Header({ rightSlot, variant = 'default' }: HeaderProps) {
-  const logoHref = variant === 'admin' ? '/admin' : variant === 'org' ? '/org/dashboard' : '/';
+  const pathname = usePathname()
+  const logoHref = variant === 'admin' ? '/admin' : variant === 'org' ? '/org/dashboard' : '/'
+
+  const isVolunteering = pathname?.startsWith('/volunteering') || pathname?.startsWith('/post-opportunity')
+  const isLocalSports = pathname?.startsWith('/local-sports')
+  const activeHref = isVolunteering ? '/volunteering' : isLocalSports ? '/local-sports' : '/'
 
   return (
     <nav style={styles.nav}>
+
       {/* Logo */}
-      <Link href={logoHref} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0px' }}>
+      <Link href={logoHref} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0px', flexShrink: 0 }}>
         <span style={styles.logoTown}>town</span>
         <span style={styles.logoStir}>stir</span>
       </Link>
@@ -51,32 +57,51 @@ export default function Header({ rightSlot, variant = 'default' }: HeaderProps) 
       {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Community Board link — default variant only */}
+      {/* Section switcher — default variant only */}
       {variant === 'default' && (
-        <Link href="/community-board" style={{
-          color: 'rgba(255,255,255,0.75)',
-          fontSize: '14px',
-          fontFamily: fonts.sans,
-          textDecoration: 'none',
-          marginRight: '20px',
-        }}>
-          Community Board
-        </Link>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          {SECTIONS.map(({ label, href }) => {
+            const isActive = href === activeHref
+            return (
+              <Link key={label} href={href} style={{
+                color: isActive ? colors.textWhite : 'rgba(255,255,255,0.72)',
+                fontSize: '13px',
+                fontFamily: fonts.sans,
+                fontWeight: isActive ? 500 : 400,
+                textDecoration: 'none',
+                padding: '0 14px',
+                height: '52px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                borderBottom: isActive ? `2px solid ${colors.logoAccent}` : '2px solid transparent',
+              }}>
+                {label}
+              </Link>
+            )
+          })}
+
+          {/* Divider */}
+          <span style={{
+            width: '1px',
+            height: '18px',
+            background: 'rgba(255,255,255,0.4)',
+            margin: '0 16px 0 4px',
+            display: 'inline-block',
+            flexShrink: 0,
+          }} />
+        </div>
       )}
 
-      {/* Right slot — caller provides page-specific buttons */}
+      {/* Right slot — Org Login, Post Event/Opportunity etc */}
       {rightSlot && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {rightSlot}
         </div>
       )}
-    </nav>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// Convenience wrappers so call sites don't need to pass variant every time
-// ---------------------------------------------------------------------------
+    </nav>
+  )
+}
 
 export function AdminHeader({ rightSlot }: { rightSlot?: React.ReactNode }) {
   return <Header variant="admin" rightSlot={rightSlot} />;

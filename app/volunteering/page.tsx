@@ -17,9 +17,11 @@ type Opportunity = {
   organization: string | null
   website: string | null
   is_student_opportunity: boolean
+  tags: string | null
   created_at: string
   town: string
 }
+
 
 const FILTER_CATEGORIES = [
   { value: 'all',        label: 'All' },
@@ -68,12 +70,13 @@ function isNew(created_at: string) {
   return Date.now() - new Date(created_at).getTime() < 3 * 24 * 60 * 60 * 1000
 }
 
-export default function CommunityBoard() {
+export default function Volunteering() {
   const router = useRouter()
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState('all')
   const [studentOnly, setStudentOnly] = useState(false)
+  const [scheduledOnly, setScheduledOnly] = useState(false)
 
   useEffect(() => { loadOpportunities() }, [])
 
@@ -92,6 +95,7 @@ export default function CommunityBoard() {
   const filtered = opportunities.filter(o => {
     if (activeCategory !== 'all' && o.category !== activeCategory) return false
     if (studentOnly && !o.is_student_opportunity) return false
+    if (scheduledOnly && !o.tags?.includes('scheduled')) return false
     return true
   })
 
@@ -100,8 +104,12 @@ export default function CommunityBoard() {
       <Header
         rightSlot={
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button onClick={() => router.push('/')} style={styles.buttonGhost}>← Back</button>
-            <button onClick={() => router.push('/post-opportunity')} style={styles.buttonPrimary}>+ Post Opportunity</button>
+            <a href="/org/login" style={{ color: 'rgba(255,255,255,0.65)', fontSize: '13px', textDecoration: 'none' }}>
+              Org Login
+            </a>
+            <button onClick={() => router.push('/post-opportunity')} style={styles.buttonPrimary}>
+              + Post Opportunity
+            </button>
           </div>
         }
       />
@@ -110,7 +118,7 @@ export default function CommunityBoard() {
 
         <div style={{ textAlign: 'center', marginBottom: '20px' }}>
           <h1 style={{ fontSize: '26px', fontWeight: 400, color: colors.textPrimary, margin: 0, fontFamily: fonts.sans }}>
-            Community Board &mdash;{' '}
+            Volunteering &mdash;{' '}
             <em style={{ fontFamily: fonts.serif, fontStyle: 'italic', color: colors.navBg }}>Mill Valley</em>
           </h1>
           <p style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '6px' }}>
@@ -128,11 +136,16 @@ export default function CommunityBoard() {
           ))}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px', paddingTop: '8px', borderTop: `1px solid ${colors.divider}` }}>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '24px', paddingTop: '8px', borderTop: `1px solid ${colors.divider}` }}>
           <button
             style={studentOnly ? { ...styles.tagPill, ...styles.pillActive } : styles.tagPill}
             onClick={() => setStudentOnly(!studentOnly)}>
             Student Opportunities
+          </button>
+          <button
+            style={scheduledOnly ? { ...styles.tagPill, ...styles.pillActive } : styles.tagPill}
+            onClick={() => setScheduledOnly(!scheduledOnly)}>
+            Show Up & Help
           </button>
         </div>
 
@@ -151,7 +164,7 @@ export default function CommunityBoard() {
           const cat = BOARD_CATEGORIES[opp.category]
           return (
             <div key={opp.id}
-              onClick={() => router.push(`/community-board/${opp.id}`)}
+              onClick={() => router.push(`/volunteering/${opp.id}`)}
               style={{ ...styles.card, display: 'flex', alignItems: 'flex-start', gap: '16px', cursor: 'pointer' }}>
 
               <CategoryIcon category={opp.category} />
@@ -181,9 +194,14 @@ export default function CommunityBoard() {
                     {cat.label}
                   </div>
                 )}
-                {opp.is_student_opportunity && (
+               {opp.is_student_opportunity && (
                   <div style={{ background: STUDENT_TAG.bg, color: STUDENT_TAG.text, border: `1px solid ${STUDENT_TAG.border}`, borderRadius: radii.tagPill, padding: '3px 10px', fontSize: '11px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                    Student Opportunities
+                    Student Opp.
+                  </div>
+                )}
+                {opp.tags?.includes('scheduled') && (
+                  <div style={{ background: '#f0fdf4', color: colors.navBg, border: `1px solid #bbf7d0`, borderRadius: radii.tagPill, padding: '3px 10px', fontSize: '11px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    Show Up
                   </div>
                 )}
               </div>

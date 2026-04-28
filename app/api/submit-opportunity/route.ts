@@ -78,7 +78,7 @@ export async function POST(req: Request) {
       to: 'townstir.admin@gmail.com',
       subject: `New opportunity submitted: ${title}`,
       html: `
-        <p>A new community board opportunity has been submitted for review.</p>
+        <p>A new Volunteering opportunity has been submitted for review.</p>
         <p><strong>Title:</strong> ${title}</p>
         <p><strong>Category:</strong> ${category}</p>
         <p><strong>Organization:</strong> ${organization || 'Community member'}</p>
@@ -94,8 +94,8 @@ export async function POST(req: Request) {
         subject: `We received your opportunity: ${title}`,
         html: `
           <p>Hi ${contact_name || 'there'},</p>
-          <p>Thanks for submitting <strong>${title}</strong> to the Townstir Community Board. We'll review it within 24 hours.</p>
-          <p>Once approved it will appear on the Mill Valley Community Board and will stay live for 30 days. You'll receive an email before it expires giving you the option to keep it live.</p>
+          <p>Thanks for submitting <strong>${title}</strong> to the Townstir Volunteering. We'll review it within 24 hours.</p>
+          <p>Once approved it will appear on the Mill Valley Volunteering and will stay live for 30 days. You'll receive an email before it expires giving you the option to keep it live.</p>
           <p>— The Townstir Team</p>
         `,
       })

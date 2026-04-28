@@ -462,7 +462,7 @@ export default function Admin() {
         <div style={{ display: 'flex', gap: '10px' }}>
           <button onClick={() => router.push(townUrl('/admin/import'))} style={hdrBtn}>⬇ Import Events</button>
           <button onClick={() => router.push(townUrl('/admin/discover'))} style={hdrBtn}>Discover Orgs</button>
-          <button onClick={() => router.push('/community-board')} style={hdrBtn}>Community Board</button>
+          <button onClick={() => router.push('/volunteering')} style={hdrBtn}>Volunteering</button>
           <button onClick={() => router.push('/')} style={hdrBtn}>← Calendar</button>
           <button onClick={handleLogout} style={hdrBtn}>Log Out</button>
         </div>

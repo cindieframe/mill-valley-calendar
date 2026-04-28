@@ -27,7 +27,7 @@ export const colors = {
   // New badge
   newBadge: '#C9952A',       // Amber — same as primary
 
-  // Community Board category colors
+  // Volunteering category colors
   // Each has bg (fill), text (foreground), border
   boardVolunteers: {
     bg: '#dbeafe', text: '#1e40af', border: '#bfdbfe',
@@ -42,7 +42,7 @@ export const colors = {
     bg: '#fef3c7', text: '#92400e', border: '#fde68a',
   },
 
-  // Community Board icon backgrounds (circle behind SVG)
+  // Volunteering icon backgrounds (circle behind SVG)
   boardVolunteersIconBg: '#dbeafe',
   boardDonationsIconBg: '#fce7f3',
   boardICanHelpIconBg: '#d1fae5',
@@ -206,7 +206,7 @@ export const styles = {
   },
 } as const
 
-// Community Board category config — maps db value to display label + colors
+// Volunteering category config — maps db value to display label + colors
 export const BOARD_CATEGORIES: Record<string, { label: string; bg: string; text: string; border: string; iconBg: string; iconColor: string }> = {
   volunteers: {
     label: 'Volunteers Needed',
