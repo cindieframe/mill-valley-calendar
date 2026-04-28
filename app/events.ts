@@ -5,7 +5,7 @@ export async function getEvents() {
     .from('events')
     .select('*')
     .eq('status', 'approved')
-.eq('town', 'mill-valley')
+.or('town.ilike.mill valley,town.ilike.mill-valley')
 .gte('date', new Date().toISOString().split('T')[0])
 .order('date', { ascending: true })
 .order('time', { ascending: true })
