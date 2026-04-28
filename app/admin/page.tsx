@@ -740,6 +740,9 @@ export default function Admin() {
                       </div>
                       <div style={{ display: 'flex', gap: '8px', position: 'relative' }}>
                         <button onClick={() => setEditingOrg({ ...org })} style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
+{org.name === 'Sweetwater Music Hall' && (
+  <button onClick={() => router.push('/admin/sweetwater-import')} style={{ background: '#f0fdf4', color: '#16803c', border: '1.5px solid #16803c', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>⬇ Import</button>
+)}
                         <button onClick={() => { setMessageModal(org); setMessageSubject(''); setMessageBody('') }} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Message</button>
                         <button onClick={() => setOpenMenuId(openMenuId === org.id ? null : org.id)} style={{ background: 'white', color: '#6b7280', border: '1px solid #e5e7eb', padding: '9px 14px', borderRadius: '999px', fontWeight: 700, fontSize: '15px', cursor: 'pointer', lineHeight: 1, fontFamily: 'sans-serif' }}>···</button>
                         {openMenuId === org.id && (
