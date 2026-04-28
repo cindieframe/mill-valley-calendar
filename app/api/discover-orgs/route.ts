@@ -57,6 +57,7 @@ async function pathExists(base: string, path: string): Promise<boolean> {
   }
 }
  
+
 async function findPublicEventPage(website: string): Promise<boolean> {
   if (!website) return false
   const base = getBaseDomain(website)
@@ -148,6 +149,8 @@ Say NO for:
 - Wedding venues or private event rental spaces
 - Organizations headquartered in the town but serving a global audience with no local public events
 - Medical offices, law firms, retail stores, gas stations
+- Restaurants or bars whose "events" page is powered by Toast or similar reservation systems showing only private dining bookings
+- Any venue where the events page requires a reservation or is clearly for private parties only
  
 Respond in this exact format with no extra text:
 LIKELY_EVENTS: yes/no
@@ -205,7 +208,9 @@ export async function POST(request: NextRequest) {
       'chamber of commerce', 'museum', 'nonprofit organization', 'school district',
       'city government', 'church community events', 'restaurant', 'bar music venue',
       'music venue', 'bookstore', 'café', 'beer garden', 'winery', 'civic center',
-      'cultural center', 'art club', 'arts association', 'art studio', 'yoga studio',
+      'cultural center', 'art club', 'arts association', 'art studio', 'yoga studio','hiking club', 'nature club', 'outdoor club', 'trails association',
+'friends of', 'garden club', 'historical society', 'rotary club',
+'lions club', 'volunteer fire', 'neighborhood association',
     ]
  
     const allPlaces: any[] = []
@@ -213,7 +218,7 @@ export async function POST(request: NextRequest) {
  
     for (const query of searchQueries) {
       const results = await searchPlaces(query, location, apiKey)
-      for (const place of results.slice(0, 5)) {
+      for (const place of results.slice(0, 3)) {
         if (!seenIds.has(place.place_id)) {
           const address = place.formatted_address || ''
           if (address.toLowerCase().includes(town.toLowerCase())) {
