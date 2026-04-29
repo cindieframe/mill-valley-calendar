@@ -776,10 +776,14 @@ async function toggleVerify(org: any) {
                               {org.is_aggregator ? 'Remove Aggregator' : 'Mark as Aggregator'}
                             </button>
                             <div style={{ height: '0.5px', background: '#f3f4f6', margin: '2px 0' }} />
-                            <button onClick={async () => {
+                         <button onClick={async () => {
                               if (!confirm(`Permanently delete ${org.name}? This cannot be undone.`)) return
-                              const { error } = await supabase.from('organizations').delete().eq('id', org.id)
-                              if (!error) { setOrgs(prev => prev.filter(o => o.id !== org.id)); setOpenMenuId(null) }
+                              const res = await fetch('/api/delete-org', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ id: org.id })
+                              })
+                              if (res.ok) { setOrgs(prev => prev.filter(o => o.id !== org.id)); setOpenMenuId(null) }
                             }} style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 14px', fontSize: '13px', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'sans-serif' }}>
                               Delete org
                             </button>

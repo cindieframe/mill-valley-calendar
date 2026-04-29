@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
     status: "pending",
     source: "sweetwater-email",
     town: "Mill Valley",
-    cost: e.ticketStatus === "No Cover" ? "Free" : e.ticketStatus === "Sold Out" ? "Sold Out" : "",
+   cost: e.ticketStatus === "No Cover" ? "Free" : e.ticketStatus === "Sold Out" ? "Sold Out" : "",
+    tags: e.ticketStatus === "No Cover" ? "free,music" : "music",
     website: "https://sweetwatermusichall.org",
   }));
 
