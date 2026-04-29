@@ -239,6 +239,11 @@ if (existingEvents && existingEvents.length > 0) {
     await supabase
       .from('ical_feeds')
       .upsert([{ url: feedUrl, organization, last_synced: new Date().toISOString() }])
+
+    // Ensure org exists in organizations table so discovery can find it
+    await supabase
+      .from('organizations')
+      .upsert([{ name: organization, website_url: feedUrl }], { onConflict: 'name', ignoreDuplicates: true })
     
     return NextResponse.json({ 
       success: true, 

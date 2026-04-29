@@ -198,8 +198,10 @@ export async function POST(request: NextRequest) {
     const existingFeedUrls = new Set((existingFeeds || []).map((f: any) => f.url))
     const existingOrgNames = new Set((existingOrgs || []).map((o: any) => o.name?.toLowerCase()))
     const existingOrgWebsites = new Set(
-      (existingOrgs || []).map((o: any) => o.website_url).filter(Boolean)
-    )
+  (existingOrgs || []).map((o: any) => {
+    try { return getBaseDomain(o.website_url) } catch { return null }
+  }).filter(Boolean)
+)
  
     const location = `${town}, ${state || 'CA'}`
  
@@ -249,10 +251,10 @@ export async function POST(request: NextRequest) {
         const { likely, reason } = await assessOrg(name, types, website)
         if (!likely) continue
  
-        // Check if already imported
+        const normalizedWebsite = website ? getBaseDomain(website) : null
         const alreadyImported =
           existingOrgNames.has(name.toLowerCase()) ||
-          (website && existingOrgWebsites.has(website))
+          (normalizedWebsite !== null && existingOrgWebsites.has(normalizedWebsite))
  
         // Try to detect iCal feed
         const feedUrl = await detectIcalFeed(website)

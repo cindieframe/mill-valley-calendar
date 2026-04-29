@@ -47,6 +47,7 @@ export default function Admin() {
   const isSuperAdmin = adminRole === 'super_admin'
   const [selectedTown, setSelectedTown] = useState<string | null>(null)
   const [allTowns, setAllTowns] = useState<string[]>([])
+  const [unverifiedOrgs, setUnverifiedOrgs] = useState<any[]>([])
 
   function similarityScore(a: string, b: string): number {
     a = a.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
@@ -190,6 +191,10 @@ export default function Admin() {
 
   async function loadOrgs() {
     setLoading(true)
+    const { data: unverified } = await applyTownFilter(
+      supabase.from('organizations').select('name').eq('verified', false).not('user_id', 'is', null)
+    )
+    setUnverifiedOrgs(unverified || [])
     const { data, error } = await applyTownFilter(
       supabase.from('organizations').select('*').order('name', { ascending: true })
     )
@@ -226,12 +231,16 @@ export default function Admin() {
     setOrgSaving(false)
   }
 
-  async function toggleVerify(org: any) {
+async function toggleVerify(org: any) {
     const newVerified = !org.verified
-    const { error } = await supabase.from('organizations').update({ verified: newVerified }).eq('id', org.id)
-    if (!error) {
-      await supabase.from('events').update({ verified: newVerified }).eq('organization', org.name)
+    const res = await fetch('/api/verify-org', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: org.id, verified: newVerified, orgName: org.name })
+    })
+    if (res.ok) {
       setOrgs(prev => prev.map(o => o.id === org.id ? { ...o, verified: newVerified } : o))
+      setUnverifiedOrgs(prev => prev.filter(o => o.name !== org.name))
     }
   }
 
@@ -528,7 +537,10 @@ export default function Admin() {
             Volunteering
             {pendingVolCount > 0 && <span style={{ background: '#1a3d2b', color: 'white', fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '999px', border: '1px solid rgba(255,255,255,0.3)' }}>{pendingVolCount}</span>}
           </button>
-          <button style={secTabStyle(section === 'organizations')} onClick={() => setSection('organizations')}>Organizations</button>
+          <button style={secTabStyle(section === 'organizations')} onClick={() => setSection('organizations')}>
+            Organizations
+            {unverifiedOrgs.length > 0 && <span style={{ background: '#C9952A', color: 'white', fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '999px' }}>{unverifiedOrgs.length} unverified</span>}
+          </button>
           <button style={{ ...secTabStyle(false), color: '#c4c9d1', cursor: 'default' }}>Local Sports</button>
         </div>
 
@@ -710,6 +722,12 @@ export default function Admin() {
               <button onClick={() => router.push('/admin/discover')} style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Discover Orgs</button>
               <button onClick={() => setMessageModal({ all: true })} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Message All Orgs</button>
             </div>
+            {unverifiedOrgs.length > 0 && (
+              <div style={{ background: '#fef9c3', border: '1.5px solid #fde68a', borderRadius: '8px', padding: '10px 16px', marginBottom: '16px', fontSize: '13px', color: '#854F0B' }}>
+                ⚑ {unverifiedOrgs.map((o: any) => o.name).join(' and ')} need{unverifiedOrgs.length === 1 ? 's' : ''} verification.
+              </div>
+            )}
+           
             {loading ? <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>Loading…</div>
               : orgs.length === 0 ? <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>No organizations found.</div>
               : orgs.map(org => (
@@ -739,10 +757,11 @@ export default function Admin() {
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '8px', position: 'relative' }}>
-                        <button onClick={() => setEditingOrg({ ...org })} style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
 {org.name === 'Sweetwater Music Hall' && (
   <button onClick={() => router.push('/admin/sweetwater-import')} style={{ background: '#f0fdf4', color: '#16803c', border: '1.5px solid #16803c', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>⬇ Import</button>
 )}
+                        <button onClick={() => window.open(`/org/${encodeURIComponent(org.name.toLowerCase().replace(/ /g, '-'))}`, '_blank')} style={{ background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Preview</button>
+                        <button onClick={() => setEditingOrg({ ...org })} style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
                         <button onClick={() => { setMessageModal(org); setMessageSubject(''); setMessageBody('') }} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Message</button>
                         <button onClick={() => setOpenMenuId(openMenuId === org.id ? null : org.id)} style={{ background: 'white', color: '#6b7280', border: '1px solid #e5e7eb', padding: '9px 14px', borderRadius: '999px', fontWeight: 700, fontSize: '15px', cursor: 'pointer', lineHeight: 1, fontFamily: 'sans-serif' }}>···</button>
                         {openMenuId === org.id && (
@@ -755,6 +774,14 @@ export default function Admin() {
                             <button onClick={() => { toggleAggregator(org); setOpenMenuId(null) }} style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 14px', fontSize: '13px', color: org.is_aggregator ? '#854F0B' : '#1f2937', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'sans-serif' }}>
                               <span style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: org.is_aggregator ? '#854F0B' : 'transparent', border: org.is_aggregator ? 'none' : '1px solid #d1d5db', display: 'inline-block' }} />
                               {org.is_aggregator ? 'Remove Aggregator' : 'Mark as Aggregator'}
+                            </button>
+                            <div style={{ height: '0.5px', background: '#f3f4f6', margin: '2px 0' }} />
+                            <button onClick={async () => {
+                              if (!confirm(`Permanently delete ${org.name}? This cannot be undone.`)) return
+                              const { error } = await supabase.from('organizations').delete().eq('id', org.id)
+                              if (!error) { setOrgs(prev => prev.filter(o => o.id !== org.id)); setOpenMenuId(null) }
+                            }} style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 14px', fontSize: '13px', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'sans-serif' }}>
+                              Delete org
                             </button>
                           </div>
                         )}
