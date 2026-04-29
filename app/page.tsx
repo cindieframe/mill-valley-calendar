@@ -529,8 +529,8 @@ export default function Home() {
                         {new Date(dateStr + 'T12:00:00').getDate()}
                       </div>
                       <div style={{ fontSize: '11px', fontWeight: 600, color: '#2C3E50', whiteSpace: 'nowrap' }}>
-                        {ev.time}
-                      </div>
+  {ev.time}
+</div>
                     </div>
 
                     {/* Body */}

@@ -96,12 +96,12 @@ export default function Admin() {
 
   useEffect(() => {
     if (!authed) return
-    if (section === 'events') { loadEvents(); setSelected(new Set()) }
+    if (section === 'events') { loadEvents(); setSelected(new Set()); setFilterDate(''); setFilterOrg(''); setFilterCategory('') }
     else if (section === 'volunteering') loadOpportunities()
     else if (section === 'organizations') loadOrgs()
   }, [section, authed, selectedTown])
 
-  useEffect(() => { if (authed && section === 'events') { loadEvents(); setSelected(new Set()) } }, [eventFilter])
+  useEffect(() => { if (authed && section === 'events') { loadEvents(); setSelected(new Set()); setFilterDate(''); setFilterOrg(''); setFilterCategory('') } }, [eventFilter])
   useEffect(() => { if (authed && section === 'volunteering') loadOpportunities() }, [volFilter])
 
   async function loadPendingCounts() {

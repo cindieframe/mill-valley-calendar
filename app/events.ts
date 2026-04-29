@@ -16,10 +16,27 @@ export async function getEvents() {
   }
 
   // Parse category string into array so components always get a clean array
-  return data.map((ev: any) => ({
+  function timeTo24(t: string): string {
+  if (!t) return '99:99'
+  const m = t.match(/(\d+):(\d+)\s*(AM|PM)/i)
+  if (!m) return '99:99'
+  let h = parseInt(m[1])
+  const min = m[2]
+  const ampm = m[3].toUpperCase()
+  if (ampm === 'PM' && h !== 12) h += 12
+  if (ampm === 'AM' && h === 12) h = 0
+  return `${h.toString().padStart(2, '0')}:${min}`
+}
+
+return data
+  .map((ev: any) => ({
     ...ev,
     cats: ev.category ? ev.category.split(',').map((c: string) => c.trim()) : [],
   }))
+  .sort((a: any, b: any) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date)
+    return timeTo24(a.time).localeCompare(timeTo24(b.time))
+  })
 }
 
 export async function submitEvent(event: any) {
