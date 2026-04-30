@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     location: "Sweetwater Music Hall",
     address: "19 Corte Madera Avenue, Mill Valley, CA 94941",
     organization: "Sweetwater Music Hall",
-    category: e.genre,
+    category: 'arts',
     status: "pending",
     source: "sweetwater-email",
     town: "Mill Valley",
