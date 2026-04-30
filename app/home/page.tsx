@@ -12,11 +12,11 @@ const CATEGORY_IMAGES: Record<string, string> = {
   outdoors:  `${SUPABASE_ASSETS}/category-outdoors.jpg`,
   arts:      `${SUPABASE_ASSETS}/category-arts.jpg`,
   food:      `${SUPABASE_ASSETS}/category-food.jpg`,
-  community: `${SUPABASE_ASSETS}/category-community.jpg`,
+  community: `${SUPABASE_ASSETS}/category-community-2.jpg`,
   classes:   `${SUPABASE_ASSETS}/category-classes.jpg`,
   gov:       `${SUPABASE_ASSETS}/category-gov.jpg`,
-  family:    `${SUPABASE_ASSETS}/category-family.jpg`,
-  youth:     `${SUPABASE_ASSETS}/category-family.jpg`,
+  family:    `${SUPABASE_ASSETS}/category-family-2.jpg`,
+  youth:     `${SUPABASE_ASSETS}/category-family-2.jpg`,
 }
 
 // Priority order for no-image events
@@ -116,7 +116,7 @@ const [townOpen, setTownOpen] = useState(false)
     <div style={{ fontFamily: fonts.sans, minHeight: '100vh', background: colors.pageBg }}>
 
       {/* Hero */}
-      <div style={{ position: 'relative', height: 'clamp(420px, 62vh, 580px)', overflow: 'hidden' }}>
+      <div style={{ position: 'relative', height: 'clamp(280px, 48vh, 580px)', overflow: 'hidden' }}>
         <img src={HERO_IMAGE} alt="Community events"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 40%' }} />
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.22) 0%, rgba(0,0,0,0.6) 100%)' }} />
@@ -200,7 +200,7 @@ const [townOpen, setTownOpen] = useState(false)
                 onMouseOver={e => (e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.12)')}
                 onMouseOut={e => (e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)')}>
                 <img src={getCardImage(ev)} alt={ev.title}
-                  style={{ width: '100%', height: '160px', objectFit: 'cover', display: 'block' }} />
+  style={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', display: 'block' }} />
                 <div style={{ padding: '12px 14px 16px' }}>
                   <div style={{ fontSize: '11px', color: colors.navBg, fontWeight: 500, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     {formatEventDate(ev.date)} · {ev.time}
