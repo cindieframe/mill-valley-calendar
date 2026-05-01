@@ -1,5 +1,5 @@
 'use client'
- 
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getEvents } from './events'
@@ -7,19 +7,8 @@ import { supabase } from './supabase'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import Header from './components/Header'
- 
-const BRAND = {
-  forest:    '#1a3d2b',
-  amber:     '#C9952A',
-  green:     '#7EC8A4',
-  darkGreen: '#3a7d44',
-  navy:      '#2C3E50',
-  bg:        '#f2f3f5',
-  white:     '#ffffff',
-  border:    '#d0d6db',
-  borderLight: '#e8eaed',
-}
- 
+import { Suspense } from 'react'
+
 const CATS: Record<string, { label: string }> = {
   outdoors:  { label: 'Outdoors, Sports & Movement' },
   arts:      { label: 'Arts & Performances' },
@@ -29,7 +18,7 @@ const CATS: Record<string, { label: string }> = {
   classes:   { label: 'Classes & Lectures' },
   gov:       { label: "Local Gov't" },
 }
- 
+
 const CAT_CARD: Record<string, { bg: string; color: string }> = {
   outdoors:  { bg: 'rgba(20,100,60,0.05)',   color: '#145a30' },
   arts:      { bg: 'rgba(100,80,200,0.05)',  color: '#4a3fa0' },
@@ -40,7 +29,7 @@ const CAT_CARD: Record<string, { bg: string; color: string }> = {
   classes:   { bg: 'rgba(160,30,30,0.05)',   color: '#7a1a1a' },
   gov:       { bg: 'rgba(60,60,80,0.05)',    color: '#3a3a50' },
 }
- 
+
 const CAT_LABELS: Record<string, string> = {
   outdoors:  'Outdoors',
   arts:      'Arts',
@@ -51,7 +40,7 @@ const CAT_LABELS: Record<string, string> = {
   classes:   'Classes',
   gov:       "Gov't",
 }
- 
+
 const TAG_CARD: Record<string, { bg: string; color: string; label: string }> = {
   free:     { bg: 'rgba(180,130,0,0.06)',  color: '#7a5500', label: 'Free' },
   family:   { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Family-friendly' },
@@ -59,7 +48,7 @@ const TAG_CARD: Record<string, { bg: string; color: string; label: string }> = {
   reg:      { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Reg. Required' },
   music:    { bg: 'rgba(100,80,200,0.06)', color: '#4a3fa0', label: 'Live Music' },
 }
- 
+
 function getDateStrings() {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -82,41 +71,81 @@ function getDateStrings() {
     sunLabel:      fmt(sun),
   }
 }
- 
+
 function formatDayHeader(dateStr: string) {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   })
 }
- 
-export default function Home() {
+
+const SESSION_KEY = 'townstir_filters'
+
+function saveSession(data: object) {
+  try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(data)) } catch {}
+}
+
+function loadSession() {
+  try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null') } catch { return null }
+}
+
+function HomeInner() {
   const router = useRouter()
   const [events, setEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [catFilters, setCatFilters] = useState<string[]>([])
   const [tagFilters, setTagFilters] = useState<string[]>([])
   const [orgFilter, setOrgFilter] = useState('')
-  const [orgList, setOrgList] = useState<string[]>([])
   const [search, setSearch] = useState('')
   const [isSearching, setIsSearching] = useState(false)
   const [aiFilters, setAiFilters] = useState<any>(null)
   const [currentView, setCurrentView] = useState('today')
   const [fromDate, setFromDate] = useState<Date | null>(null)
   const [toDate, setToDate] = useState<Date | null>(null)
+  const [orgList, setOrgList] = useState<string[]>([])
   const [showFilterDrawer, setShowFilterDrawer] = useState(false)
   const [hasSpeech, setHasSpeech] = useState(false)
- 
+  const [sessionLoaded, setSessionLoaded] = useState(false)
+
+  // Restore filters from sessionStorage on back navigation
   useEffect(() => {
     if (window.location.hash?.includes('access_token')) {
       router.push('/auth/confirm' + window.location.hash)
+      return
     }
+    // Only restore if navigating back (session exists and was set this session)
+    const saved = loadSession()
+    if (saved && saved._navigatedAway) {
+      setCatFilters(saved.catFilters || [])
+      setTagFilters(saved.tagFilters || [])
+      setOrgFilter(saved.orgFilter || '')
+      setSearch(saved.search || '')
+      setCurrentView(saved.currentView || 'today')
+      setFromDate(saved.fromDate ? new Date(saved.fromDate) : null)
+      setToDate(saved.toDate ? new Date(saved.toDate) : null)
+      setAiFilters(saved.aiFilters || null)
+      // Clear the flag so a fresh load won't restore
+      saveSession({ ...saved, _navigatedAway: false })
+    }
+    setSessionLoaded(true)
   }, [])
- 
+
+  // Save filters to sessionStorage whenever they change
+  useEffect(() => {
+    if (!sessionLoaded) return
+    saveSession({
+      catFilters, tagFilters, orgFilter, search,
+      currentView, aiFilters,
+      fromDate: fromDate?.toISOString() || null,
+      toDate: toDate?.toISOString() || null,
+      _navigatedAway: false,
+    })
+  }, [catFilters, tagFilters, orgFilter, search, currentView, fromDate, toDate, aiFilters, sessionLoaded])
+
   useEffect(() => {
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
     setHasSpeech(!isSafari && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition))
   }, [])
- 
+
   useEffect(() => {
     async function loadEvents() {
       const data = await getEvents()
@@ -139,12 +168,12 @@ export default function Home() {
     }
     loadOrgList()
   }, [])
- 
+
   const {
     todayStr, tomorrowStr, satStr, sunStr,
     todayLabel, tomorrowLabel, satLabel, sunLabel,
   } = getDateStrings()
- 
+
   const filtered = events.filter(ev => {
     if (currentView === 'today'    && ev.date !== todayStr) return false
     if (currentView === 'tomorrow' && ev.date !== tomorrowStr) return false
@@ -165,7 +194,7 @@ export default function Home() {
       !ev.location?.toLowerCase().includes(search.toLowerCase()) &&
       !ev.description?.toLowerCase().includes(search.toLowerCase())
     ) return false
- 
+
     if (aiFilters && aiFilters.keyword) {
       const kw = aiFilters.keyword.toLowerCase()
       const musicTerms = ['music', 'musical', 'concert', 'band', 'jazz', 'folk', 'rock', 'acoustic', 'singer', 'song', 'perform', 'ensemble', 'orchestra', 'symphony', 'choir', 'violin', 'guitar', 'flute', 'rhythm', 'melody', 'tune', 'gong', 'drum']
@@ -174,17 +203,24 @@ export default function Home() {
       const haystack = `${ev.title} ${ev.description} ${ev.location}`.toLowerCase()
       if (!searchTerms.some(term => haystack.includes(term))) return false
     }
- 
+
     return true
   })
- 
+
   const grouped: Record<string, any[]> = {}
   filtered.forEach(ev => {
     if (!grouped[ev.date]) grouped[ev.date] = []
     grouped[ev.date].push(ev)
   })
   const sortedDates = Object.keys(grouped).sort()
- 
+
+  function navigateToEvent(id: string) {
+    // Mark that user navigated away so filters restore on back
+    const saved = loadSession()
+    if (saved) saveSession({ ...saved, _navigatedAway: true })
+    router.push(`/event/${id}`)
+  }
+
   async function handleSearch() {
     if (!search.trim()) { setAiFilters(null); return }
     setIsSearching(true)
@@ -215,26 +251,26 @@ export default function Home() {
     } catch (e) { console.error(e) }
     setIsSearching(false)
   }
- 
+
   function clearSearch() {
     setSearch(''); setAiFilters(null); setCatFilters([]); setTagFilters([])
     setCurrentView('today'); setFromDate(null); setToDate(null)
   }
- 
+
   function toggleCat(key: string) {
     setCatFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
   }
- 
+
   function toggleTag(key: string) {
     setTagFilters(prev => prev.includes(key) ? prev.filter(t => t !== key) : [...prev, key])
   }
- 
+
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: '#1a3d2b', fontSize: '18px' }}>
       Loading Townstir…
     </div>
   )
- 
+
   const shortcuts = [
     { label: `Today · ${todayLabel}`,                   value: 'today' },
     { label: `Tomorrow · ${tomorrowLabel}`,             value: 'tomorrow' },
@@ -242,10 +278,10 @@ export default function Home() {
     { label: 'All Dates',                               value: 'all' },
     { label: 'Custom Dates',                            value: 'pick' },
   ]
- 
+
   return (
     <div style={{ fontFamily: "'Helvetica Neue', Arial, sans-serif", minHeight: '100vh', background: '#f2f3f5' }}>
- 
+
       {/* Nav */}
       <Header
         rightSlot={
@@ -260,7 +296,7 @@ export default function Home() {
           </div>
         }
       />
- 
+
       {/* Hero */}
       <div style={{ background: '#f2f3f5', padding: '20px 20px 18px', textAlign: 'center' }}>
         <div style={{ fontSize: '28px', fontWeight: 400, color: '#1a2530', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -270,7 +306,7 @@ export default function Home() {
             <span style={{ fontSize: '13px', color: '#888', fontStyle: 'normal' }}>&#8964;</span>
           </span>
         </div>
- 
+
         {/* Search */}
         <div style={{ maxWidth: '540px', margin: '0 auto 18px', background: '#fff', border: '1px solid #d0d6db', borderRadius: '999px', display: 'flex', alignItems: 'center', padding: '6px 6px 6px 22px' }}>
           <input
@@ -308,7 +344,7 @@ export default function Home() {
             {isSearching ? '…' : 'Search'}
           </button>
         </div>
- 
+
         {/* Date shortcuts */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {shortcuts.map(({ label, value, shortLabel }) => (
@@ -327,7 +363,7 @@ export default function Home() {
           ))}
         </div>
       </div>
- 
+
       {/* Custom date picker */}
       {currentView === 'pick' && (
         <div style={{ background: '#fff', borderBottom: '1px solid #e8eaed', padding: '12px 40px', display: 'flex', justifyContent: 'center' }}>
@@ -339,7 +375,7 @@ export default function Home() {
           />
         </div>
       )}
- 
+
       {/* Desktop filters */}
       <div className="desktop-filters">
         <div style={{ background: '#f2f3f5', padding: '10px 20px 8px', display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -466,7 +502,7 @@ export default function Home() {
           </div>
         </div>
       )}
- 
+
       {/* Events list */}
       <div style={{ maxWidth: '860px', margin: '0 auto', padding: '4px 16px 40px' }}>
 
@@ -492,7 +528,6 @@ export default function Home() {
         ) : (
           sortedDates.map(dateStr => (
             <div key={dateStr}>
-              {/* Day header — hidden on mobile */}
               <div className="day-header" style={{ fontSize: '11px', fontWeight: 600, color: '#999', textTransform: 'uppercase', letterSpacing: '0.7px', padding: '16px 4px 7px', borderBottom: '1px solid #ddd', marginBottom: '6px' }}>
                 {formatDayHeader(dateStr)}
               </div>
@@ -502,13 +537,12 @@ export default function Home() {
                 const desc = ev.description?.trim()
                 return (
                   <div key={ev.id}
-                    onClick={() => router.push(`/event/${ev.id}`)}
+                    onClick={() => navigateToEvent(ev.id)}
                     className="event-card-outer"
                     style={{ background: '#fff', borderRadius: '10px', padding: '11px 14px', marginBottom: '6px', display: 'flex', alignItems: 'flex-start', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', cursor: 'pointer' }}
                     onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.11)')}
                     onMouseOut={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.07)')}>
 
-                    {/* Date top row — mobile only */}
                     <div className="event-card-date-top" style={{ display: 'none', alignItems: 'baseline', gap: '4px', marginBottom: '5px' }}>
                       <span style={{ fontSize: '15px', fontWeight: 500, color: '#2a7a55', lineHeight: 1 }}>
                         {new Date(dateStr + 'T12:00:00').getDate()}
@@ -520,7 +554,6 @@ export default function Home() {
                       <span style={{ fontSize: '11px', fontWeight: 600, color: '#2C3E50' }}>{ev.time}</span>
                     </div>
 
-                    {/* Date col — desktop only */}
                     <div className="event-card-date-col" style={{ minWidth: '50px', textAlign: 'center', flexShrink: 0, paddingRight: '14px', borderRight: '1px solid #eee', paddingTop: '1px' }}>
                       <div style={{ fontSize: '10px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                         {new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' })}
@@ -529,11 +562,10 @@ export default function Home() {
                         {new Date(dateStr + 'T12:00:00').getDate()}
                       </div>
                       <div style={{ fontSize: '11px', fontWeight: 600, color: '#2C3E50', whiteSpace: 'nowrap' }}>
-  {ev.time}
-</div>
+                        {ev.time}
+                      </div>
                     </div>
 
-                    {/* Body */}
                     <div className="event-card-body" style={{ flex: 1, minWidth: 0, padding: '0 14px' }}>
                       <div style={{ fontSize: '15px', fontWeight: 500, color: '#1a2530', marginBottom: '2px' }}>
                         {ev.title}
@@ -542,30 +574,29 @@ export default function Home() {
                         )}
                       </div>
                       <div style={{ fontSize: '12px', marginBottom: '4px' }}>
-  {ev.is_aggregator ? (
-  <span style={{ color: '#9ca3af' }}>
-    {(ev.extracted_organizer || ev.location) && (
-      <>
-        <span style={{ color: '#3a7d44' }}>{ev.extracted_organizer || ev.location}</span>
-        <span style={{ color: '#ccc', margin: '0 4px' }}>·</span>
-      </>
-    )}
-    via {ev.organization}
-  </span>
-  ) : (
-    <a href={`/org/${encodeURIComponent(ev.organization.toLowerCase().replace(/ /g, '-'))}`}
-      style={{ color: '#3a7d44', textDecoration: 'none' }}
-      onClick={e => e.stopPropagation()}>
-      {ev.organization}
-    </a>
-  )}
-</div>
+                        {ev.is_aggregator ? (
+                          <span style={{ color: '#9ca3af' }}>
+                            {(ev.extracted_organizer || ev.location) && (
+                              <>
+                                <span style={{ color: '#3a7d44' }}>{ev.extracted_organizer || ev.location}</span>
+                                <span style={{ color: '#ccc', margin: '0 4px' }}>·</span>
+                              </>
+                            )}
+                            via {ev.organization}
+                          </span>
+                        ) : (
+                          <a href={`/org/${encodeURIComponent(ev.organization.toLowerCase().replace(/ /g, '-'))}`}
+                            style={{ color: '#3a7d44', textDecoration: 'none' }}
+                            onClick={e => e.stopPropagation()}>
+                            {ev.organization}
+                          </a>
+                        )}
+                      </div>
                       {desc && (
                         <div style={{ fontSize: '12px', color: '#767e8a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {desc}
                         </div>
                       )}
-                      {/* Pills — mobile only, below description */}
                       <div className="event-card-pills-mobile" style={{ display: 'none', flexDirection: 'row', gap: '4px', marginTop: '6px', overflow: 'hidden' }}>
                         {[...catKeys, ...tagKeys].map((key: string) => {
                           const catStyle = CAT_CARD[key]
@@ -586,7 +617,6 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Pills — desktop only, right column */}
                     <div className="event-card-pills" style={{ flexShrink: 0, paddingLeft: '12px', borderLeft: '1px solid #eee', display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'flex-start' }}>
                       {catKeys.length > 0 && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -625,5 +655,13 @@ export default function Home() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense>
+      <HomeInner />
+    </Suspense>
   )
 }

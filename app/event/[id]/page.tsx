@@ -211,7 +211,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
               {infoCell('Time', ev.time ? (ev.end_time ? `${ev.time} – ${ev.end_time}` : ev.time) : 'See organizer')}
             </div>
             <div style={{ borderRight: '1px solid #e8eaed' }}>
-              {infoCell('Location', ev.location, ev.address)}
+              {infoCell('Location', ev.location, ev.address && ev.address !== ev.location ? ev.address : undefined)}
             </div>
             <div>
               {infoCell('Cost', ev.cost || 'See organizer')}
