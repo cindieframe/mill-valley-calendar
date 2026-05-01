@@ -152,8 +152,8 @@ export default function Admin() {
     )
     if (!error) setEvents(data || [])
     const { data: approved } = await applyTownFilter(
-      supabase.from('events').select('id, title, date, time').eq('status', 'approved')
-    )
+  supabase.from('events').select('id, title, date, time, organization, website').eq('status', 'approved')
+)
     setApprovedEvents(approved || [])
     setLoading(false)
   }
@@ -326,7 +326,33 @@ async function toggleVerify(org: any) {
     if (selected.size === events.length) setSelected(new Set())
     else setSelected(new Set(events.map(ev => ev.id)))
   }
-
+async function duplicateEvent(ev: any) {
+  const { data, error } = await supabase.from('events').insert([{
+    title: ev.title + ' (Copy)',
+    date: ev.date,
+    time: ev.time,
+    end_time: ev.end_time || null,
+    location: ev.location,
+    address: ev.address || '',
+    organization: ev.organization,
+    category: ev.category || '',
+    tags: ev.tags || '',
+    cost: ev.cost || '',
+    age: ev.age || '',
+    description: ev.description || '',
+    email: ev.email || '',
+    website: ev.website || '',
+    image_url: ev.image_url || null,
+    town: ev.town || 'Mill Valley',
+    status: 'approved',
+  }]).select().single()
+  if (!error && data) {
+    setEvents(prev => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)))
+    setEditingEvent(data)
+  } else {
+    console.error('Duplicate failed:', error)
+  }
+}
   async function bulkApprove() {
     if (selected.size === 0 || !confirm(`Approve ${selected.size} events?`)) return
     setBulkWorking(true)
@@ -598,7 +624,7 @@ async function toggleVerify(org: any) {
                 <div key={ev.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${selected.has(ev.id) ? '#1a3d2b' : '#e5e7eb'}` }}>
                   {eventFilter === 'pending' && findPossibleDuplicates(ev).length > 0 && (
                     <div style={{ background: '#fef9c3', border: '1.5px solid #fde68a', borderRadius: '8px', padding: '8px 14px', marginBottom: '12px', fontSize: '12px', color: '#92400e', fontWeight: 600 }}>
-                      ⚠️ Possible duplicate of: {findPossibleDuplicates(ev).map(d => `"${d.title}" on ${d.date} at ${d.time} (already approved)`).join(', ')}
+                     ⚠️ Possible duplicate of: {findPossibleDuplicates(ev).map(d => `"${d.title}" on ${d.date} at ${d.time} · ${d.organization}`).join(', ')}
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -637,6 +663,7 @@ async function toggleVerify(org: any) {
                       <button onClick={() => deleteEvent(ev.id)} style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>🗑 Delete permanently</button>
                     </>}
                     <button onClick={() => setEditingEvent(ev)} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
+                    <button onClick={() => duplicateEvent(ev)} style={{ background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Duplicate</button>
                   </div>
                 </div>
               ))}
@@ -706,6 +733,7 @@ async function toggleVerify(org: any) {
                           <button onClick={() => updateOpportunityStatus(opp.id, 'approved')} style={{ background: '#16803c', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>✓ Approve anyway</button>
                         )}
                         <button onClick={() => setEditingOpp({ ...opp })} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
+                       
                         <button onClick={() => deleteOpportunity(opp.id)} style={{ background: 'white', color: '#dc2626', border: '1.5px solid #e5e7eb', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Delete</button>
                       </div>
                     </>
@@ -762,6 +790,7 @@ async function toggleVerify(org: any) {
 )}
                         <button onClick={() => window.open(`/org/${encodeURIComponent(org.name.toLowerCase().replace(/ /g, '-'))}`, '_blank')} style={{ background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Preview</button>
                         <button onClick={() => setEditingOrg({ ...org })} style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
+                        
                         <button onClick={() => { setMessageModal(org); setMessageSubject(''); setMessageBody('') }} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Message</button>
                         <button onClick={() => setOpenMenuId(openMenuId === org.id ? null : org.id)} style={{ background: 'white', color: '#6b7280', border: '1px solid #e5e7eb', padding: '9px 14px', borderRadius: '999px', fontWeight: 700, fontSize: '15px', cursor: 'pointer', lineHeight: 1, fontFamily: 'sans-serif' }}>···</button>
                         {openMenuId === org.id && (

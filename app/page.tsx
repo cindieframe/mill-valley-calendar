@@ -543,15 +543,15 @@ export default function Home() {
                       </div>
                       <div style={{ fontSize: '12px', marginBottom: '4px' }}>
   {ev.is_aggregator ? (
-    <span style={{ color: '#9ca3af' }}>
-      {ev.extracted_organizer && (
-        <>
-          <span style={{ color: '#3a7d44' }}>{ev.extracted_organizer}</span>
-          <span style={{ color: '#ccc', margin: '0 4px' }}>·</span>
-        </>
-      )}
-      via {ev.organization}
-    </span>
+  <span style={{ color: '#9ca3af' }}>
+    {(ev.extracted_organizer || ev.location) && (
+      <>
+        <span style={{ color: '#3a7d44' }}>{ev.extracted_organizer || ev.location}</span>
+        <span style={{ color: '#ccc', margin: '0 4px' }}>·</span>
+      </>
+    )}
+    via {ev.organization}
+  </span>
   ) : (
     <a href={`/org/${encodeURIComponent(ev.organization.toLowerCase().replace(/ /g, '-'))}`}
       style={{ color: '#3a7d44', textDecoration: 'none' }}

@@ -27,11 +27,20 @@ export async function getEvents() {
   if (ampm === 'AM' && h === 12) h = 0
   return `${h.toString().padStart(2, '0')}:${min}`
 }
-
+function normalizeTime(t: string): string {
+  if (!t) return t
+  const m = t.match(/(\d+)(?::(\d+))?\s*(AM|PM)/i)
+  if (!m) return t
+  const h = m[1]
+  const min = m[2] || '00'
+  const ampm = m[3].toUpperCase()
+  return `${h}:${min} ${ampm}`
+}
 return data
   .map((ev: any) => ({
     ...ev,
     cats: ev.category ? ev.category.split(',').map((c: string) => c.trim()) : [],
+    time: normalizeTime(ev.time),
   }))
   .sort((a: any, b: any) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date)
