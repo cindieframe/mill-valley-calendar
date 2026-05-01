@@ -21,12 +21,13 @@ function parseICal(text: string, feedUrl?: string) {
     const dtstart = get('DTSTART')
     const dtend = get('DTEND')   // NEW — reads the end time from the iCal block
     const summary = get('SUMMARY')
-    const rawDesc = get('DESCRIPTION')
-  .replace(/\\n/g, '\n')
-  .replace(/\\,/g, ',')
-  .replace(/https?:\/\/\S+/g, '')
-  .replace(/#\S+/g, '')
-  .replace(/@\S+/g, '')
+    const rawDescField = get('DESCRIPTION').replace(/\\n/g, '\n').replace(/\\,/g, ',')
+    const descIsUrl = /^https?:\/\/\S+$/.test(rawDescField.trim())
+    const url = descIsUrl ? rawDescField.trim() : (get('URL').startsWith('http') ? get('URL') : '')
+    const rawDesc = descIsUrl ? '' : rawDescField
+      .replace(/https?:\/\/\S+/g, '')
+      .replace(/#\S+/g, '')
+      .replace(/@\S+/g, '')
 
 const junkPatterns = /add to cart|choose an option|sign up today|enroll|quantity|price range|materials fee|non-member|ohca member|see organizer|\$\d+\.\d+/i
 
@@ -38,8 +39,8 @@ for (const line of lines) {
 }
 
 const description = cleanLines.join(' ').replace(/\s+/g, ' ').trim()
-    const location = get('LOCATION').replace(/\\,/g, ',')
-    const url = get('URL')
+    const location = get('LOCATION').replace(/\\,/g, ',').replace(/<[^>]+>/g, '').trim()
+    
     const image = get('IMAGE') || get('X-IMAGE') || ''
     
     if (!summary || !dtstart) continue
