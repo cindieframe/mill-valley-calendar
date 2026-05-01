@@ -21,7 +21,23 @@ function parseICal(text: string, feedUrl?: string) {
     const dtstart = get('DTSTART')
     const dtend = get('DTEND')   // NEW — reads the end time from the iCal block
     const summary = get('SUMMARY')
-    const description = get('DESCRIPTION').replace(/\\n/g, ' ').replace(/\\,/g, ',').replace(/https?:\/\/\S+/g, '').replace(/#\S+/g, '').replace(/@\S+/g, '').replace(/\s+/g, ' ').trim()
+    const rawDesc = get('DESCRIPTION')
+  .replace(/\\n/g, '\n')
+  .replace(/\\,/g, ',')
+  .replace(/https?:\/\/\S+/g, '')
+  .replace(/#\S+/g, '')
+  .replace(/@\S+/g, '')
+
+const junkPatterns = /add to cart|choose an option|sign up today|enroll|quantity|price range|materials fee|non-member|ohca member|see organizer|\$\d+\.\d+/i
+
+const lines = rawDesc.split('\n').map((l: string) => l.trim()).filter(Boolean)
+const cleanLines: string[] = []
+for (const line of lines) {
+  if (junkPatterns.test(line)) break
+  cleanLines.push(line)
+}
+
+const description = cleanLines.join(' ').replace(/\s+/g, ' ').trim()
     const location = get('LOCATION').replace(/\\,/g, ',')
     const url = get('URL')
     const image = get('IMAGE') || get('X-IMAGE') || ''
