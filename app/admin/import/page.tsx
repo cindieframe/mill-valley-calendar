@@ -108,7 +108,7 @@ export default function ImportPage() {
     const response = await fetch('/api/extract-events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ websiteUrl: org.website_url, organization: org.name }),
+      body: JSON.stringify({ websiteUrl: org.website_url, organization: org.name, isAggregator: org.is_aggregator }),
     })
     const data = await response.json()
     setReextractResult({ orgId: org.id, ...data })
@@ -142,11 +142,15 @@ export default function ImportPage() {
     }
     setDeletingId(null)
   }
-  async function toggleAggregator(org: any) {
+async function toggleAggregator(org: any) {
     const newVal = !org.is_aggregator
-    await supabase.from('organizations').update({ is_aggregator: newVal }).eq('id', org.id)
-    await supabase.from('events').update({ is_aggregator: newVal }).eq('organization', org.name)
-    setSavedSources(prev => prev.map(s => s.id === org.id ? { ...s, is_aggregator: newVal } : s))
+    const { error: orgError } = await supabase.from('organizations').update({ is_aggregator: newVal }).eq('id', org.id)
+    const { error: evError } = await supabase.from('events').update({ is_aggregator: newVal }).eq('organization', org.name)
+    if (orgError || evError) {
+      alert('Failed to update aggregator status. Please try again.')
+      return
+    }
+    await loadSavedSources()
   }
 
   async function handleIcalImport() {

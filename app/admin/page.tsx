@@ -14,6 +14,8 @@ export default function Admin() {
   const [volFilter, setVolFilter] = useState('pending')
   const [editingEvent, setEditingEvent] = useState<any>(null)
   const [saving, setSaving] = useState(false)
+  const [editImageUrl, setEditImageUrl] = useState<string>('')
+  const [imageUploading, setImageUploading] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [bulkWorking, setBulkWorking] = useState(false)
   const [authed, setAuthed] = useState(false)
@@ -372,7 +374,19 @@ export default function Admin() {
     if (!error) { setEvents(prev => prev.filter(ev => !selected.has(ev.id))); setSelected(new Set()); loadPendingCounts() }
     setBulkWorking(false)
   }
-
+async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB'); return }
+    setImageUploading(true)
+    const ext = file.name.split('.').pop()
+    const fileName = `${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('event-images').upload(fileName, file, { upsert: true })
+    if (error) { alert('Upload failed. Please try again.'); setImageUploading(false); return }
+    const { data: { publicUrl } } = supabase.storage.from('event-images').getPublicUrl(fileName)
+    setEditImageUrl(publicUrl)
+    setImageUploading(false)
+  }
   async function saveEdit() {
     setSaving(true)
     const { error } = await supabase.from('events').update({
@@ -381,6 +395,7 @@ export default function Admin() {
       organization: editingEvent.organization, category: editingEvent.category,
       tags: editingEvent.tags, cost: editingEvent.cost, age: editingEvent.age,
       description: editingEvent.description, email: editingEvent.email, website: editingEvent.website,
+      image_url: editImageUrl || null,
     }).eq('id', editingEvent.id)
     setSaving(false)
     if (!error) { setEvents(prev => prev.map(ev => ev.id === editingEvent.id ? editingEvent : ev)); setEditingEvent(null) }
@@ -473,6 +488,21 @@ export default function Admin() {
         </div>
         <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Description</label>
         <textarea style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }} value={editingEvent.description || ''} onChange={e => setEditingEvent({ ...editingEvent, description: e.target.value })} />
+        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px', marginTop: '8px' }}>Event Photo</label>
+        {editImageUrl ? (
+          <div style={{ marginBottom: '8px' }}>
+            <img src={editImageUrl} alt="Event" style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '8px' }} />
+            <button onClick={() => setEditImageUrl('')} style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', fontWeight: 500, cursor: 'pointer' }}>Remove photo</button>
+          </div>
+        ) : (
+          <label style={{ display: 'block', cursor: 'pointer', marginBottom: '8px' }}>
+            <div style={{ border: '1.5px dashed #e5e7eb', borderRadius: '8px', padding: '20px', textAlign: 'center' as const, background: '#f9fafb' }}>
+              <div style={{ fontSize: '13px', fontWeight: 500, color: '#374151' }}>{imageUploading ? 'Uploading…' : 'Click to upload a photo'}</div>
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>JPG, PNG or WebP · Max 5MB</div>
+            </div>
+            <input type="file" accept="image/*" onChange={handleEditImageUpload} style={{ display: 'none' }} disabled={imageUploading} />
+          </label>
+        )}
         <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
           <button onClick={saveEdit} disabled={saving} style={{ flex: 1, background: '#1a3d2b', color: 'white', border: 'none', padding: '12px', borderRadius: '999px', fontSize: '14px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : '✓ Save Changes'}</button>
           <button onClick={() => setEditingEvent(null)} style={{ padding: '12px 24px', background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', borderRadius: '999px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
@@ -677,7 +707,7 @@ export default function Admin() {
                       <button onClick={() => updateStatus(ev.id, 'approved')} style={{ background: '#16803c', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>✓ Approve anyway</button>
                       <button onClick={() => deleteEvent(ev.id)} style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>🗑 Delete permanently</button>
                     </>}
-                    <button onClick={() => setEditingEvent(ev)} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
+                    <button onClick={() => { setEditingEvent(ev); setEditImageUrl(ev.image_url || '') }} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
                     <button onClick={() => duplicateEvent(ev)} style={{ background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Duplicate</button>
                   </div>
                 </div>
