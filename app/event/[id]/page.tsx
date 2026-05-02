@@ -141,17 +141,22 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         </Link>
       </header>
 
-      {ev.image_url && (
-        <div style={{ width: '100%', maxHeight: '320px', overflow: 'hidden' }}>
-          <img
-            src={ev.image_url}
-            alt={ev.title}
-            style={{ width: '100%', height: '320px', objectFit: 'cover', display: 'block' }}
-          />
-        </div>
-      )}
-
       <div style={{ maxWidth: '720px', margin: '0 auto', padding: '0 16px 60px' }}>
+
+        {ev.image_url && (
+          <div style={{ position: 'relative', height: '260px', background: '#1a2530', borderRadius: '12px 12px 0 0', overflow: 'hidden', marginTop: '24px' }}>
+    <img
+      src={ev.image_url}
+      alt=""
+      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(20px) brightness(0.4)', transform: 'scale(1.15)' }}
+    />
+    <img
+      src={ev.image_url}
+      alt={ev.title}
+      style={{ position: 'absolute', zIndex: 1, top: '50%', left: '50%', transform: 'translate(-50%, -50%)', maxHeight: '220px', maxWidth: '100%', objectFit: 'contain' }}
+    />
+  </div>
+        )}
 
         <div style={{
           background: '#fff',
