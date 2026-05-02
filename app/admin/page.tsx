@@ -49,6 +49,8 @@ export default function Admin() {
   const [allTowns, setAllTowns] = useState<string[]>([])
   const [unverifiedOrgs, setUnverifiedOrgs] = useState<any[]>([])
 
+  const TIME_OPTIONS = ['12:00 AM','12:30 AM','1:00 AM','1:30 AM','2:00 AM','2:30 AM','3:00 AM','3:30 AM','4:00 AM','4:30 AM','5:00 AM','5:30 AM','6:00 AM','6:30 AM','7:00 AM','7:30 AM','8:00 AM','8:30 AM','9:00 AM','9:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','12:00 PM','12:30 PM','1:00 PM','1:30 PM','2:00 PM','2:30 PM','3:00 PM','3:30 PM','4:00 PM','4:30 PM','5:00 PM','5:30 PM','6:00 PM','6:30 PM','7:00 PM','7:30 PM','8:00 PM','8:30 PM','9:00 PM','9:30 PM','10:00 PM','10:30 PM','11:00 PM','11:30 PM']
+
   function similarityScore(a: string, b: string): number {
     a = a.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
     b = b.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
@@ -152,8 +154,8 @@ export default function Admin() {
     )
     if (!error) setEvents(data || [])
     const { data: approved } = await applyTownFilter(
-  supabase.from('events').select('id, title, date, time, organization, website').eq('status', 'approved')
-)
+      supabase.from('events').select('id, title, date, time, organization, website').eq('status', 'approved')
+    )
     setApprovedEvents(approved || [])
     setLoading(false)
   }
@@ -231,7 +233,7 @@ export default function Admin() {
     setOrgSaving(false)
   }
 
-async function toggleVerify(org: any) {
+  async function toggleVerify(org: any) {
     const newVerified = !org.verified
     const res = await fetch('/api/verify-org', {
       method: 'POST',
@@ -326,33 +328,35 @@ async function toggleVerify(org: any) {
     if (selected.size === events.length) setSelected(new Set())
     else setSelected(new Set(events.map(ev => ev.id)))
   }
-async function duplicateEvent(ev: any) {
-  const { data, error } = await supabase.from('events').insert([{
-    title: ev.title + ' (Copy)',
-    date: ev.date,
-    time: ev.time,
-    end_time: ev.end_time || null,
-    location: ev.location,
-    address: ev.address || '',
-    organization: ev.organization,
-    category: ev.category || '',
-    tags: ev.tags || '',
-    cost: ev.cost || '',
-    age: ev.age || '',
-    description: ev.description || '',
-    email: ev.email || '',
-    website: ev.website || '',
-    image_url: ev.image_url || null,
-    town: ev.town || 'Mill Valley',
-    status: 'approved',
-  }]).select().single()
-  if (!error && data) {
-    setEvents(prev => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)))
-    setEditingEvent(data)
-  } else {
-    console.error('Duplicate failed:', error)
+
+  async function duplicateEvent(ev: any) {
+    const { data, error } = await supabase.from('events').insert([{
+      title: ev.title + ' (Copy)',
+      date: ev.date,
+      time: ev.time,
+      end_time: ev.end_time || null,
+      location: ev.location,
+      address: ev.address || '',
+      organization: ev.organization,
+      category: ev.category || '',
+      tags: ev.tags || '',
+      cost: ev.cost || '',
+      age: ev.age || '',
+      description: ev.description || '',
+      email: ev.email || '',
+      website: ev.website || '',
+      image_url: ev.image_url || null,
+      town: ev.town || 'Mill Valley',
+      status: 'approved',
+    }]).select().single()
+    if (!error && data) {
+      setEvents(prev => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)))
+      setEditingEvent(data)
+    } else {
+      console.error('Duplicate failed:', error)
+    }
   }
-}
+
   async function bulkApprove() {
     if (selected.size === 0 || !confirm(`Approve ${selected.size} events?`)) return
     setBulkWorking(true)
@@ -435,7 +439,18 @@ async function duplicateEvent(ev: any) {
           </div>
         ))}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          {[{ label: 'Date', key: 'date', type: 'date' }, { label: 'Time', key: 'time', type: 'text' }, { label: 'Cost', key: 'cost', type: 'text' }, { label: 'Age', key: 'age', type: 'text' }, { label: 'Email', key: 'email', type: 'text' }, { label: 'Website', key: 'website', type: 'text' }].map(({ label, key, type }) => (
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Date</label>
+            <input style={inputStyle} type="date" value={editingEvent.date || ''} onChange={e => setEditingEvent({ ...editingEvent, date: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Time</label>
+            <select style={inputStyle} value={editingEvent.time || ''} onChange={e => setEditingEvent({ ...editingEvent, time: e.target.value })}>
+              <option value=''>Select time</option>
+              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          {[{ label: 'Cost', key: 'cost', type: 'text' }, { label: 'Age', key: 'age', type: 'text' }, { label: 'Email', key: 'email', type: 'text' }, { label: 'Website', key: 'website', type: 'text' }].map(({ label, key, type }) => (
             <div key={key}>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{label}</label>
               <input style={inputStyle} type={type} value={editingEvent[key] || ''} onChange={e => setEditingEvent({ ...editingEvent, [key]: e.target.value })} />
@@ -624,7 +639,7 @@ async function duplicateEvent(ev: any) {
                 <div key={ev.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${selected.has(ev.id) ? '#1a3d2b' : '#e5e7eb'}` }}>
                   {eventFilter === 'pending' && findPossibleDuplicates(ev).length > 0 && (
                     <div style={{ background: '#fef9c3', border: '1.5px solid #fde68a', borderRadius: '8px', padding: '8px 14px', marginBottom: '12px', fontSize: '12px', color: '#92400e', fontWeight: 600 }}>
-                     ⚠️ Possible duplicate of: {findPossibleDuplicates(ev).map(d => `"${d.title}" on ${d.date} at ${d.time} · ${d.organization}`).join(', ')}
+                      ⚠️ Possible duplicate of: {findPossibleDuplicates(ev).map(d => `"${d.title}" on ${d.date} at ${d.time} · ${d.organization}`).join(', ')}
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -733,7 +748,6 @@ async function duplicateEvent(ev: any) {
                           <button onClick={() => updateOpportunityStatus(opp.id, 'approved')} style={{ background: '#16803c', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>✓ Approve anyway</button>
                         )}
                         <button onClick={() => setEditingOpp({ ...opp })} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
-                       
                         <button onClick={() => deleteOpportunity(opp.id)} style={{ background: 'white', color: '#dc2626', border: '1.5px solid #e5e7eb', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Delete</button>
                       </div>
                     </>
@@ -755,7 +769,6 @@ async function duplicateEvent(ev: any) {
                 ⚑ {unverifiedOrgs.map((o: any) => o.name).join(' and ')} need{unverifiedOrgs.length === 1 ? 's' : ''} verification.
               </div>
             )}
-           
             {loading ? <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>Loading…</div>
               : orgs.length === 0 ? <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>No organizations found.</div>
               : orgs.map(org => (
@@ -785,12 +798,11 @@ async function duplicateEvent(ev: any) {
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '8px', position: 'relative' }}>
-{org.name === 'Sweetwater Music Hall' && (
-  <button onClick={() => router.push('/admin/sweetwater-import')} style={{ background: '#f0fdf4', color: '#16803c', border: '1.5px solid #16803c', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>⬇ Import</button>
-)}
+                        {org.name === 'Sweetwater Music Hall' && (
+                          <button onClick={() => router.push('/admin/sweetwater-import')} style={{ background: '#f0fdf4', color: '#16803c', border: '1.5px solid #16803c', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>⬇ Import</button>
+                        )}
                         <button onClick={() => window.open(`/org/${encodeURIComponent(org.name.toLowerCase().replace(/ /g, '-'))}`, '_blank')} style={{ background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Preview</button>
                         <button onClick={() => setEditingOrg({ ...org })} style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
-                        
                         <button onClick={() => { setMessageModal(org); setMessageSubject(''); setMessageBody('') }} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Message</button>
                         <button onClick={() => setOpenMenuId(openMenuId === org.id ? null : org.id)} style={{ background: 'white', color: '#6b7280', border: '1px solid #e5e7eb', padding: '9px 14px', borderRadius: '999px', fontWeight: 700, fontSize: '15px', cursor: 'pointer', lineHeight: 1, fontFamily: 'sans-serif' }}>···</button>
                         {openMenuId === org.id && (
@@ -805,7 +817,7 @@ async function duplicateEvent(ev: any) {
                               {org.is_aggregator ? 'Remove Aggregator' : 'Mark as Aggregator'}
                             </button>
                             <div style={{ height: '0.5px', background: '#f3f4f6', margin: '2px 0' }} />
-                         <button onClick={async () => {
+                            <button onClick={async () => {
                               if (!confirm(`Permanently delete ${org.name}? This cannot be undone.`)) return
                               const res = await fetch('/api/delete-org', {
                                 method: 'POST',
