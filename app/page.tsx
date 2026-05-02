@@ -56,10 +56,9 @@ function getDateStrings() {
   const tomorrow = new Date(today)
   tomorrow.setDate(tomorrow.getDate() + 1)
   const day = today.getDay()
-  const satOffset = ((6 - day + 7) % 7) || 7
-  const sat = new Date(today); sat.setDate(today.getDate() + satOffset)
-  const sun = new Date(today); sun.setDate(today.getDate() + satOffset + 1)
-  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const satOffset = day === 0 ? -1 : (6 - day + 7) % 7
+const sat = new Date(today); sat.setDate(today.getDate() + satOffset)
+const sun = new Date(today); sun.setDate(today.getDate() + satOffset + 1)
   return {
     todayStr,
     tomorrowStr: tomorrow.toISOString().split('T')[0],
