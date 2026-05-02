@@ -149,6 +149,7 @@ export async function POST(request: NextRequest) {
  
     // Step 2 — no feed found, fall back to Claude extraction
     let pageText = ''
+    let imageContext = ''
     try {
       const response = await fetch(websiteUrl, {
         headers: {
@@ -160,6 +161,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `Could not fetch that URL (HTTP ${response.status}). Check the address and try again.` }, { status: 400 })
       }
       const html = await response.text()
+      const imgMatches = [...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)]
+      const imageUrls = imgMatches
+        .map(m => m[1])
+        .filter(src => src.startsWith('http') && !src.includes('logo') && !src.includes('icon') && !src.includes('avatar'))
+        .slice(0, 20)
+       imageContext = imageUrls.length ? `\nAVAILABLE IMAGE URLS:\n${imageUrls.join('\n')}` : ''
       pageText = html
         .replace(/<script[\s\S]*?<\/script>/gi, '')
         .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -191,7 +198,7 @@ WEBSITE URL: ${websiteUrl}
 ORGANIZATION: ${organization}
 ${aggregatorInstructions}
 PAGE TEXT:
-${pageText}
+${pageText}${imageContext ?? ''}
  
 Extract every event you can find. For each event return a JSON object.
  
