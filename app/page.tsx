@@ -13,7 +13,7 @@ const CATS: Record<string, { label: string }> = {
   outdoors:  { label: 'Outdoors, Sports & Movement' },
   arts:      { label: 'Arts & Performances' },
   food:      { label: 'Food, Drink & Social' },
-  community: { label: 'Volunteer & Community' },
+  community: { label: 'Community' },
   youth:     { label: 'Youth' },
   classes:   { label: 'Classes & Lectures' },
   gov:       { label: "Local Gov't" },
@@ -34,7 +34,7 @@ const CAT_LABELS: Record<string, string> = {
   outdoors:  'Outdoors',
   arts:      'Arts',
   food:      'Food & Drink',
-  community: 'Vol. & Comm.',
+  community: 'Commmunity',
   youth:     'Youth',
   family:    'Youth',
   classes:   'Classes',
@@ -46,7 +46,8 @@ const TAG_CARD: Record<string, { bg: string; color: string; label: string }> = {
   family:   { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Family-friendly' },
   wellness: { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Wellness' },
   reg:      { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Reg. Required' },
-  music:    { bg: 'rgba(100,80,200,0.06)', color: '#4a3fa0', label: 'Live Music' },
+music:    { bg: 'rgba(100,80,200,0.06)', color: '#4a3fa0', label: 'Live Music' },
+  volunteer: { bg: 'rgba(30,80,160,0.05)', color: '#1a4f8a', label: 'Volunteer' },
 }
 
 function fmt(d: Date) {

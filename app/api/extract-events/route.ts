@@ -216,6 +216,7 @@ And tags (pick all that apply):
 - family (if family-friendly)
 - wellness (if health or wellness focused)
 - reg (if registration required)
+- volunteer (if it's a volunteering opportunity)
  
 Return ONLY valid JSON, no markdown, no explanation. Use this exact shape:
 {

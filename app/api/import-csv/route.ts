@@ -25,6 +25,7 @@ Also choose applicable tags (comma-separated, or leave blank):
 - family (if family-friendly)
 - wellness (if health or wellness focused)
 - reg (if registration required)
+- volunteer (if it's a volunteering opportunity)
 - music (if live music)
 
 Respond in this exact format:

@@ -125,6 +125,7 @@ Also choose applicable tags (comma-separated, or leave blank):
 - wellness (if health or wellness focused)
 - volunteer (if volunteer opportunity)
 - reg (if registration required)
+- volunteer (if it's a volunteering opportunity)
 
 Respond in this exact format:
 CATEGORIES: category1,category2
