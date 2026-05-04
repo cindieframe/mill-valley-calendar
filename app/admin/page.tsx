@@ -968,7 +968,7 @@ export default function Admin() {
                 <button onClick={() => { setFilterOrg(''); setFilterCategory(''); setFilterDate('') }} style={{ background: '#f3f4f6', color: '#6b7280', border: 'none', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>✕ Clear</button>
               )}
             </div>
-            {!loading && events.length > 0 && eventFilter === 'pending' && (
+             {!loading && events.length > 0 && (eventFilter === 'pending' || eventFilter === 'rejected') && (
               <div style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '12px', padding: '12px 20px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#374151' }}>
                   <input type="checkbox" checked={selected.size === events.length && events.length > 0} onChange={toggleSelectAll} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
@@ -976,8 +976,21 @@ export default function Admin() {
                 </label>
                 {selected.size > 0 && (
                   <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
-                    <button onClick={bulkApprove} disabled={bulkWorking} style={{ background: '#16803c', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: bulkWorking ? 'not-allowed' : 'pointer', opacity: bulkWorking ? 0.7 : 1 }}>{bulkWorking ? 'Working…' : `✓ Approve ${selected.size}`}</button>
-                    <button onClick={bulkReject} disabled={bulkWorking} style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '8px 20px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: bulkWorking ? 'not-allowed' : 'pointer', opacity: bulkWorking ? 0.7 : 1 }}>{bulkWorking ? 'Working…' : `✕ Reject ${selected.size}`}</button>
+                    {eventFilter === 'pending' && <>
+                      <button onClick={bulkApprove} disabled={bulkWorking} style={{ background: '#16803c', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: bulkWorking ? 'not-allowed' : 'pointer', opacity: bulkWorking ? 0.7 : 1 }}>{bulkWorking ? 'Working…' : `✓ Approve ${selected.size}`}</button>
+                      <button onClick={bulkReject} disabled={bulkWorking} style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '8px 20px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: bulkWorking ? 'not-allowed' : 'pointer', opacity: bulkWorking ? 0.7 : 1 }}>{bulkWorking ? 'Working…' : `✕ Reject ${selected.size}`}</button>
+                    </>}
+                    {eventFilter === 'rejected' && (
+                      <button onClick={async () => {
+                        if (selected.size === 0 || !confirm(`Permanently delete ${selected.size} events?`)) return
+                        setBulkWorking(true)
+                        const { error } = await supabase.from('events').delete().in('id', Array.from(selected))
+                        if (!error) { setEvents(prev => prev.filter(ev => !selected.has(ev.id))); setSelected(new Set()) }
+                        setBulkWorking(false)
+                      }} disabled={bulkWorking} style={{ background: '#dc2626', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: bulkWorking ? 'not-allowed' : 'pointer', opacity: bulkWorking ? 0.7 : 1 }}>
+                        {bulkWorking ? 'Deleting…' : `🗑 Delete ${selected.size}`}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -997,7 +1010,7 @@ export default function Admin() {
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                    {eventFilter === 'pending' && <input type="checkbox" checked={selected.has(ev.id)} onChange={() => toggleSelect(ev.id)} style={{ width: '16px', height: '16px', cursor: 'pointer', marginRight: '12px', marginTop: '3px', flexShrink: 0 }} />}
+                   {(eventFilter === 'pending' || eventFilter === 'rejected') && <input type="checkbox" checked={selected.has(ev.id)} onChange={() => toggleSelect(ev.id)} style={{ width: '16px', height: '16px', cursor: 'pointer', marginRight: '12px', marginTop: '3px', flexShrink: 0 }} />}
                     <div style={{ flex: 1 }}>
                       <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>
                         {ev.title}
