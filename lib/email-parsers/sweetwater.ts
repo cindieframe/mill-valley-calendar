@@ -35,7 +35,7 @@ export function parseSweetwater(text: string): ParsedEvent[] {
     }
 
     // Event title line: ends with "(Genre-LIVE MUSIC)" or "(OPEN MIC)"
-    const titleMatch = line.match(/\((.+?)(?:-LIVE MUSIC|OPEN MIC)\)\s*$/i);
+    const titleMatch = line.match(/\((.+?)(?:[-—–]LIVE MUSIC|OPEN MIC)\)\s*$/i);
     if (titleMatch && currentDate) {
       const genre = titleMatch[1];
       const title = line.replace(/\s*\(.*\)\s*$/, "").trim();

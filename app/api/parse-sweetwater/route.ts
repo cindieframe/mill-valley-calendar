@@ -16,7 +16,12 @@ export async function POST(req: NextRequest) {
 
   const parsed = parseSweetwater(text);
 
+  if (parsed.length === 0) {
+    return NextResponse.json({ inserted: 0, events: [] });
+  }
+
   const events = parsed.map((e) => ({
+
     title: e.title,
     date: parseDate(e.date),
     time: e.time,
@@ -32,16 +37,25 @@ export async function POST(req: NextRequest) {
     website: "https://sweetwatermusichall.org",
   }));
 
-  const { data, error } = await supabase
-  .from("events")
-  .upsert(events, { onConflict: "title,date", ignoreDuplicates: true })
-  .select();
+let inserted = 0
+  let skipped = 0
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  for (const event of events) {
+    const { data: existing } = await supabase
+      .from('events')
+      .select('id')
+      .eq('title', event.title)
+      .eq('date', event.date)
+      .limit(1)
+
+    if (existing && existing.length > 0) { skipped++; continue }
+
+    const { error } = await supabase.from('events').insert([event])
+    if (!error) inserted++
+    else skipped++
   }
 
-  return NextResponse.json({ inserted: data.length, events: data });
+  return NextResponse.json({ inserted, skipped });
 }
 
 // Converts "Tuesday, April 28" → "2026-04-28"

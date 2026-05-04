@@ -40,7 +40,9 @@ export default function SweetwaterImportPage() {
           {result.errors?.length > 0 && (
             <pre style={{ color: "red" }}>{JSON.stringify(result.errors, null, 2)}</pre>
           )}
-          <pre style={{ fontSize: 12 }}>{JSON.stringify(result.events, null, 2)}</pre>
+          {result.skipped > 0 && (
+            <p style={{ color: '#6b7280', fontSize: 13 }}>{result.skipped} skipped (already exist).</p>
+          )}
         </div>
       )}
     </div>
