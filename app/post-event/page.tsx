@@ -7,6 +7,54 @@ import ReCAPTCHA from 'react-google-recaptcha'
 import Header from '../components/Header'
 import { colors, fonts, radii } from '@/app/lib/tokens'
 
+function generateRecurringDates(
+  startDate: string,
+  recurrence: string,
+  endsOn: string,
+  recurrenceEnd: string,
+  recurrenceCount: string
+): string[] {
+  const dates: string[] = []
+  if (!startDate || recurrence === 'none') return [startDate]
+
+  const start = new Date(startDate + 'T12:00:00')
+  // Cap by frequency: daily=365, weekly=52, monthly=12
+  const freqCap = recurrence === 'daily' ? 365 : recurrence === 'weekly' ? 52 : 12
+  let count = 0
+
+  // Default end = 1 year from start
+  const oneYearOut = new Date(start)
+  oneYearOut.setFullYear(oneYearOut.getFullYear() + 1)
+
+  const endDate = endsOn === 'on' && recurrenceEnd
+    ? new Date(recurrenceEnd + 'T12:00:00')
+    : oneYearOut
+
+  const maxCount = endsOn === 'after' && recurrenceCount
+    ? Math.min(parseInt(recurrenceCount), freqCap)
+    : freqCap
+
+  let current = new Date(start)
+
+  while (true) {
+    dates.push(current.toISOString().split('T')[0])
+    count++
+
+    if (count >= maxCount) break
+
+    const next = new Date(current)
+    if (recurrence === 'daily') next.setDate(next.getDate() + 1)
+    else if (recurrence === 'weekly') next.setDate(next.getDate() + 7)
+    else if (recurrence === 'monthly') next.setMonth(next.getMonth() + 1)
+    else break
+
+    if (next > endDate) break
+    current = next
+  }
+
+  return dates
+}
+
 export default function PostEvent() {
   const recaptchaRef = useRef<any>(null)
   const locationInputRef = useRef<any>(null)
@@ -45,6 +93,8 @@ export default function PostEvent() {
   const [submitted, setSubmitted] = useState(false)
   const [recurrence, setRecurrence] = useState('none')
   const [endsOn, setEndsOn] = useState('never')
+  const [customInterval, setCustomInterval] = useState(1)
+  const [customUnit, setCustomUnit] = useState('weeks')
   const [form, setForm] = useState({
     title: '',
     date: '',
@@ -117,13 +167,34 @@ export default function PostEvent() {
       recaptchaRef.current?.reset()
       return
     }
+
     setSubmitting(true)
-    const { error } = await supabase.from('events').insert([{
+
+    // Generate all dates for recurring events
+    const effectiveRecurrence = recurrence === 'custom'
+      ? (customUnit === 'days' ? 'daily' : customUnit === 'weeks' ? 'weekly' : 'monthly')
+      : recurrence
+
+    const dates = generateRecurringDates(
+      form.date,
+      effectiveRecurrence,
+      endsOn,
+      form.recurrence_end,
+      form.recurrence_count
+    )
+
+    // Generate a shared recurrence_id UUID for all instances (only if recurring)
+    const recurrenceId = dates.length > 1
+      ? crypto.randomUUID()
+      : null
+
+    const baseEvent = {
       title: form.title,
-      date: form.date,
       time: formatTime(form.time),
+      end_time: form.end_time ? formatTime(form.end_time) : null,
       location: form.location,
       address: form.address,
+      meeting_link: form.meeting_link || null,
       organization: form.organization,
       category: form.category.join(','),
       tags: form.tags.join(','),
@@ -134,7 +205,22 @@ export default function PostEvent() {
       website: form.website,
       image_url: imageUrl || null,
       status: 'pending',
-    }])
+      recurrence: recurrence === 'none' ? 'none' : effectiveRecurrence,
+      recurrence_end: (endsOn === 'on' && form.recurrence_end) ? form.recurrence_end : null,
+      recurrence_count: (endsOn === 'after' && form.recurrence_count) ? parseInt(form.recurrence_count) : null,
+      recurrence_id: recurrenceId,
+    }
+
+    // Only the first date shows in the admin pending queue.
+    // The rest are stored as 'pending_series' and activated when admin approves.
+    const rows = dates.map((date, i) => ({
+      ...baseEvent,
+      date,
+      status: i === 0 ? 'pending' : 'pending_series',
+    }))
+
+    const { error } = await supabase.from('events').insert(rows)
+
     setSubmitting(false)
     if (error) {
       alert('Something went wrong. Please try again.')
@@ -149,7 +235,7 @@ export default function PostEvent() {
           html: `
             <p>A new event has been submitted for review.</p>
             <p><strong>Title:</strong> ${form.title}</p>
-            <p><strong>Date:</strong> ${form.date}</p>
+            <p><strong>Date:</strong> ${form.date}${dates.length > 1 ? ` (+ ${dates.length - 1} recurring dates)` : ''}</p>
             <p><strong>Organization:</strong> ${form.organization}</p>
             <p><a href="https://www.townstir.com/admin">Review it in the admin dashboard →</a></p>
           `,
@@ -165,7 +251,7 @@ export default function PostEvent() {
             html: `
               <p>Hi there,</p>
               <p>Thanks for submitting <strong>${form.title}</strong> to Townstir! We'll review it within 24 hours and you'll hear from us once it's approved.</p>
-              <p><strong>Date:</strong> ${form.date}</p>
+              <p><strong>First date:</strong> ${form.date}${dates.length > 1 ? `<br><strong>Recurs:</strong> ${effectiveRecurrence} (${dates.length} total dates submitted)` : ''}</p>
               <p>Thanks for helping make Mill Valley's community calendar great!</p>
               <p>— The Townstir Team</p>
             `,
@@ -235,6 +321,14 @@ export default function PostEvent() {
   }
   const selectStyle = { ...inputStyle, cursor: 'pointer' }
 
+  // Preview recurring dates
+  const effectiveRecurrencePreview = recurrence === 'custom'
+    ? (customUnit === 'days' ? 'daily' : customUnit === 'weeks' ? 'weekly' : 'monthly')
+    : recurrence
+  const previewDates = form.date && recurrence !== 'none'
+    ? generateRecurringDates(form.date, effectiveRecurrencePreview, endsOn, form.recurrence_end, form.recurrence_count)
+    : []
+
   return (
     <div style={{ minHeight: '100vh', background: colors.pageBg, fontFamily: fonts.sans }}>
       <Header
@@ -302,38 +396,70 @@ export default function PostEvent() {
           </select>
         </div>
 
-        {recurrence === 'custom' && (
+        {recurrence !== 'none' && (
           <div style={{ background: colors.pageBg, borderRadius: radii.card, padding: '16px', marginBottom: '16px', border: `1.5px solid ${colors.borderLight}` }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-              <div>
-                <label style={labelStyle}>Repeat every</label>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input style={{ ...inputStyle, width: '60px' }} type="number" min={1} max={30} defaultValue={1} />
-                  <select style={{ ...selectStyle, flex: 1 }}>
-                    <option>days</option><option>weeks</option><option>months</option>
+            {recurrence === 'custom' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={labelStyle}>Repeat every</label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      style={{ ...inputStyle, width: '60px' }}
+                      type="number" min={1} max={30}
+                      value={customInterval}
+                      onChange={e => setCustomInterval(parseInt(e.target.value) || 1)}
+                    />
+                    <select style={{ ...selectStyle, flex: 1 }} value={customUnit} onChange={e => setCustomUnit(e.target.value)}>
+                      <option value='days'>days</option>
+                      <option value='weeks'>weeks</option>
+                      <option value='months'>months</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Ends</label>
+                  <select style={selectStyle} value={endsOn} onChange={e => setEndsOn(e.target.value)}>
+                    <option value='never'>Never</option>
+                    <option value='on'>On a date</option>
+                    <option value='after'>After occurrences</option>
                   </select>
                 </div>
               </div>
-              <div>
+            )}
+
+            {recurrence !== 'custom' && (
+              <div style={{ marginBottom: '12px' }}>
                 <label style={labelStyle}>Ends</label>
                 <select style={selectStyle} value={endsOn} onChange={e => setEndsOn(e.target.value)}>
-                  <option value='never'>Never</option>
+                  <option value='never'>Never (up to 1 year)</option>
                   <option value='on'>On a date</option>
                   <option value='after'>After occurrences</option>
                 </select>
               </div>
-            </div>
+            )}
+
             {endsOn === 'on' && (
-              <div>
+              <div style={{ marginBottom: '12px' }}>
                 <label style={labelStyle}>End Date</label>
                 <input style={inputStyle} type="date" value={form.recurrence_end} onChange={e => update('recurrence_end', e.target.value)} />
               </div>
             )}
             {endsOn === 'after' && (
-              <div>
+              <div style={{ marginBottom: '12px' }}>
                 <label style={labelStyle}>Number of occurrences</label>
                 <input style={{ ...inputStyle, width: '80px' }} type="number" min={1} max={365}
                   value={form.recurrence_count} onChange={e => update('recurrence_count', e.target.value)} />
+              </div>
+            )}
+
+            {/* Date preview */}
+            {previewDates.length > 0 && (
+              <div style={{ background: '#f0fdf4', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', color: colors.navBg }}>
+                <strong>{previewDates.length} date{previewDates.length !== 1 ? 's' : ''} will be created:</strong>
+                <div style={{ marginTop: '4px', color: '#374151' }}>
+                  {previewDates.slice(0, 5).join(', ')}
+                  {previewDates.length > 5 && ` … and ${previewDates.length - 5} more`}
+                </div>
               </div>
             )}
           </div>

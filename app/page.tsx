@@ -49,6 +49,10 @@ const TAG_CARD: Record<string, { bg: string; color: string; label: string }> = {
   music:    { bg: 'rgba(100,80,200,0.06)', color: '#4a3fa0', label: 'Live Music' },
 }
 
+function fmt(d: Date) {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 function getDateStrings() {
   const today = new Date()
   today.setHours(0, 0, 0, 0)

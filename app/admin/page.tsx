@@ -4,6 +4,42 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
 
+// ─── Recurrence helpers ───────────────────────────────────────────────────────
+
+function generateRecurringDates(
+  startDate: string,
+  recurrence: string,
+  endsOn: string,
+  recurrenceEnd: string,
+  recurrenceCount: string
+): string[] {
+  const dates: string[] = []
+  if (!startDate || recurrence === 'none') return [startDate]
+  const start = new Date(startDate + 'T12:00:00')
+  const freqCap = recurrence === 'daily' ? 365 : recurrence === 'weekly' ? 52 : 12
+  let count = 0
+  const oneYearOut = new Date(start)
+  oneYearOut.setFullYear(oneYearOut.getFullYear() + 1)
+  const endDate = endsOn === 'on' && recurrenceEnd ? new Date(recurrenceEnd + 'T12:00:00') : oneYearOut
+  const maxCount = endsOn === 'after' && recurrenceCount ? Math.min(parseInt(recurrenceCount), freqCap) : freqCap
+  let current = new Date(start)
+  while (true) {
+    dates.push(current.toISOString().split('T')[0])
+    count++
+    if (count >= maxCount) break
+    const next = new Date(current)
+    if (recurrence === 'daily') next.setDate(next.getDate() + 1)
+    else if (recurrence === 'weekly') next.setDate(next.getDate() + 7)
+    else if (recurrence === 'monthly') next.setMonth(next.getMonth() + 1)
+    else break
+    if (next > endDate) break
+    current = next
+  }
+  return dates
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function Admin() {
   const router = useRouter()
   const [events, setEvents] = useState<any[]>([])
@@ -50,6 +86,16 @@ export default function Admin() {
   const [selectedTown, setSelectedTown] = useState<string | null>(null)
   const [allTowns, setAllTowns] = useState<string[]>([])
   const [unverifiedOrgs, setUnverifiedOrgs] = useState<any[]>([])
+
+  // Recurrence edit state
+  const [editRecurrence, setEditRecurrence] = useState('none')
+  const [editEndsOn, setEditEndsOn] = useState('never')
+  const [editRecurrenceEnd, setEditRecurrenceEnd] = useState('')
+  const [editRecurrenceCount, setEditRecurrenceCount] = useState('')
+
+  // Save scope modal: 'this' | 'all' | null
+  const [saveScopeModal, setSaveScopeModal] = useState<null | 'save' | 'delete'>(null)
+  const [pendingSavePayload, setPendingSavePayload] = useState<any>(null)
 
   const TIME_OPTIONS = ['12:00 AM','12:30 AM','1:00 AM','1:30 AM','2:00 AM','2:30 AM','3:00 AM','3:30 AM','4:00 AM','4:30 AM','5:00 AM','5:30 AM','6:00 AM','6:30 AM','7:00 AM','7:30 AM','8:00 AM','8:30 AM','9:00 AM','9:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','12:00 PM','12:30 PM','1:00 PM','1:30 PM','2:00 PM','2:30 PM','3:00 PM','3:30 PM','4:00 PM','4:30 PM','5:00 PM','5:30 PM','6:00 PM','6:30 PM','7:00 PM','7:30 PM','8:00 PM','8:30 PM','9:00 PM','9:30 PM','10:00 PM','10:30 PM','11:00 PM','11:30 PM']
 
@@ -279,6 +325,16 @@ export default function Admin() {
     if (status === 'rejected') updatePayload.rejected_note = note || null
     const { error } = await supabase.from('events').update(updatePayload).eq('id', id)
     if (!error) {
+      // If approving a recurring event, also approve all pending_series siblings
+      if (status === 'approved') {
+        const ev = events.find(e => e.id === id)
+        if (ev?.recurrence_id) {
+          await supabase.from('events')
+            .update({ status: 'approved' })
+            .eq('recurrence_id', ev.recurrence_id)
+            .eq('status', 'pending_series')
+        }
+      }
       const ev = events.find(e => e.id === id)
       if (ev?.email || ev?.organization) {
         let recipientEmail = ev.email
@@ -316,10 +372,146 @@ export default function Admin() {
     setNoteText(''); setNoteModal({ eventId, action })
   }
 
+  // ─── Delete with series support ───────────────────────────────────────────
+
   async function deleteEvent(id: number) {
-    if (!confirm('Are you sure you want to permanently delete this event?')) return
+    const ev = events.find(e => e.id === id)
+    if (ev?.recurrence_id) {
+      // Has a series — ask which scope
+      setPendingSavePayload({ id, recurrence_id: ev.recurrence_id })
+      setSaveScopeModal('delete')
+      return
+    }
+    // No series — delete immediately
+    if (!confirm('Permanently delete this event?')) return
     const { error } = await supabase.from('events').delete().eq('id', id)
     if (!error) setEvents(prev => prev.filter(ev => ev.id !== id))
+  }
+
+  async function executeDelete(scope: 'this' | 'all') {
+    if (!pendingSavePayload) return
+    const { id, recurrence_id } = pendingSavePayload
+    if (scope === 'all' && recurrence_id) {
+      const { error } = await supabase.from('events').delete().eq('recurrence_id', recurrence_id)
+      if (!error) setEvents(prev => prev.filter(ev => ev.recurrence_id !== recurrence_id))
+    } else {
+      const { error } = await supabase.from('events').delete().eq('id', id)
+      if (!error) setEvents(prev => prev.filter(ev => ev.id !== id))
+    }
+    setSaveScopeModal(null)
+    setPendingSavePayload(null)
+  }
+
+  // ─── Save edit with series support ───────────────────────────────────────
+
+  function buildEditPayload() {
+    const effectiveRecurrence = editRecurrence === 'none' ? 'none' : editRecurrence
+    return {
+      title: editingEvent.title,
+      date: editingEvent.date,
+      time: editingEvent.time,
+      end_time: editingEvent.end_time || null,
+      location: editingEvent.location,
+      address: editingEvent.address,
+      organization: editingEvent.organization,
+      category: editingEvent.category,
+      tags: editingEvent.tags,
+      cost: editingEvent.cost,
+      age: editingEvent.age,
+      description: editingEvent.description,
+      email: editingEvent.email,
+      website: editingEvent.website,
+      image_url: editImageUrl || null,
+      recurrence: effectiveRecurrence,
+      recurrence_end: (editEndsOn === 'on' && editRecurrenceEnd) ? editRecurrenceEnd : null,
+      recurrence_count: (editEndsOn === 'after' && editRecurrenceCount) ? parseInt(editRecurrenceCount) : null,
+    }
+  }
+
+  async function handleSaveEdit() {
+    if (editingEvent.recurrence_id) {
+      // Part of a series — ask scope
+      setPendingSavePayload(buildEditPayload())
+      setSaveScopeModal('save')
+      return
+    }
+    // No series — save and handle recurrence expansion if needed
+    await executeSave('this')
+  }
+
+  async function executeSave(scope: 'this' | 'all') {
+    setSaving(true)
+    const payload = pendingSavePayload || buildEditPayload()
+
+    if (scope === 'all' && editingEvent.recurrence_id) {
+      // Update all events in this series (non-date fields only — each keeps its own date)
+      const { title, time, end_time, location, address, organization, category, tags, cost, age, description, email, website, image_url, recurrence, recurrence_end, recurrence_count } = payload
+      const { error } = await supabase.from('events').update({
+        title, time, end_time, location, address, organization, category, tags, cost, age, description, email, website, image_url, recurrence, recurrence_end, recurrence_count
+      }).eq('recurrence_id', editingEvent.recurrence_id)
+      if (!error) {
+        setEvents(prev => prev.map(ev =>
+          ev.recurrence_id === editingEvent.recurrence_id
+            ? { ...ev, title, time, end_time, location, address, organization, category, tags, cost, age, description, email, website, image_url, recurrence, recurrence_end, recurrence_count }
+            : ev
+        ))
+      }
+    } else {
+      // Update just this one event
+      const { error } = await supabase.from('events').update(payload).eq('id', editingEvent.id)
+      if (!error) {
+        setEvents(prev => prev.map(ev => ev.id === editingEvent.id ? { ...ev, ...payload } : ev))
+        // If this event is approved and has siblings still in pending_series, approve them too
+        if (editingEvent.status === 'approved' && editingEvent.recurrence_id) {
+          await supabase.from('events')
+            .update({ status: 'approved' })
+            .eq('recurrence_id', editingEvent.recurrence_id)
+            .eq('status', 'pending_series')
+        }
+
+        // If recurrence was added for the first time, generate future instances
+        if (editRecurrence !== 'none' && !editingEvent.recurrence_id) {
+          const recurrenceId = crypto.randomUUID()
+          // Tag this event with the new recurrence_id
+          await supabase.from('events').update({ recurrence_id: recurrenceId }).eq('id', editingEvent.id)
+
+          // Generate future dates (skip the first which is the event we just saved)
+          const futureDates = generateRecurringDates(
+            editingEvent.date,
+            editRecurrence,
+            editEndsOn,
+            editRecurrenceEnd,
+            editRecurrenceCount
+          ).slice(1)
+
+          if (futureDates.length > 0) {
+            const newRows = futureDates.map(date => ({
+              ...payload,
+              date,
+              recurrence_id: recurrenceId,
+              status: editingEvent.status,
+              town: editingEvent.town || 'Mill Valley',
+            }))
+            await supabase.from('events').insert(newRows)
+            await loadEvents() // reload to show all new instances
+          }
+        }
+      }
+    }
+
+    setSaving(false)
+    setSaveScopeModal(null)
+    setPendingSavePayload(null)
+    setEditingEvent(null)
+  }
+
+  function openEditEvent(ev: any) {
+    setEditingEvent(ev)
+    setEditImageUrl(ev.image_url || '')
+    setEditRecurrence(ev.recurrence || 'none')
+    setEditEndsOn(ev.recurrence_end ? 'on' : ev.recurrence_count ? 'after' : 'never')
+    setEditRecurrenceEnd(ev.recurrence_end || '')
+    setEditRecurrenceCount(ev.recurrence_count ? String(ev.recurrence_count) : '')
   }
 
   function toggleSelect(id: number) {
@@ -350,10 +542,11 @@ export default function Admin() {
       image_url: ev.image_url || null,
       town: ev.town || 'Mill Valley',
       status: 'approved',
+      // Intentionally omit recurrence_id — duplicate is a standalone event
     }]).select().single()
     if (!error && data) {
       setEvents(prev => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)))
-      setEditingEvent(data)
+      openEditEvent(data)
     } else {
       console.error('Duplicate failed:', error)
     }
@@ -374,7 +567,8 @@ export default function Admin() {
     if (!error) { setEvents(prev => prev.filter(ev => !selected.has(ev.id))); setSelected(new Set()); loadPendingCounts() }
     setBulkWorking(false)
   }
-async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+
+  async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB'); return }
@@ -387,19 +581,8 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     setEditImageUrl(publicUrl)
     setImageUploading(false)
   }
-  async function saveEdit() {
-    setSaving(true)
-    const { error } = await supabase.from('events').update({
-      title: editingEvent.title, date: editingEvent.date, time: editingEvent.time,
-      location: editingEvent.location, address: editingEvent.address,
-      organization: editingEvent.organization, category: editingEvent.category,
-      tags: editingEvent.tags, cost: editingEvent.cost, age: editingEvent.age,
-      description: editingEvent.description, email: editingEvent.email, website: editingEvent.website,
-      image_url: editImageUrl || null,
-    }).eq('id', editingEvent.id)
-    setSaving(false)
-    if (!error) { setEvents(prev => prev.map(ev => ev.id === editingEvent.id ? editingEvent : ev)); setEditingEvent(null) }
-  }
+
+  // ─── Styles ───────────────────────────────────────────────────────────────
 
   const inputStyle = {
     width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px',
@@ -426,12 +609,51 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     fontSize: '13px', cursor: 'pointer', fontFamily: 'sans-serif'
   })
 
+  const labelStyle: React.CSSProperties = {
+    display: 'block', fontSize: '11px', fontWeight: 700,
+    color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px'
+  }
+
+  // ─── Preview dates in edit form ───────────────────────────────────────────
+  const editPreviewDates = editingEvent?.date && editRecurrence !== 'none'
+    ? generateRecurringDates(editingEvent.date, editRecurrence, editEndsOn, editRecurrenceEnd, editRecurrenceCount)
+    : []
+
+  // ─── Auth loading ─────────────────────────────────────────────────────────
+
   if (authLoading) return (
     <div style={{ minHeight: '100vh', background: '#fafaf8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>Loading…</div>
   )
 
+  // ─── Edit event view ──────────────────────────────────────────────────────
+
   if (editingEvent) return (
     <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: 'sans-serif' }}>
+
+      {/* Scope modal (save) */}
+      {saveScopeModal === 'save' && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '6px' }}>Save recurring event</h3>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '20px' }}>This event is part of a series. Which events do you want to update?</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button onClick={() => executeSave('this')} disabled={saving}
+                style={{ background: 'white', color: '#1f2937', border: '1.5px solid #e5e7eb', padding: '12px 16px', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+                This event only
+              </button>
+              <button onClick={() => executeSave('all')} disabled={saving}
+                style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '12px 16px', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+                All events in this series
+              </button>
+              <button onClick={() => { setSaveScopeModal(null); setPendingSavePayload(null) }}
+                style={{ background: '#f3f4f6', color: '#374151', border: 'none', padding: '11px', borderRadius: '999px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header style={{ background: '#1a3d2b', padding: '14px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <span style={{ fontWeight: 800, fontSize: '22px', color: 'white', letterSpacing: '-1px' }}>town</span>
@@ -440,8 +662,15 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
         </div>
         <button onClick={() => setEditingEvent(null)} style={hdrBtn}>← Back</button>
       </header>
+
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '32px 24px 80px' }}>
-        <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '24px', fontWeight: 900, color: '#1f2937', marginBottom: '24px' }}>Edit Event</h1>
+        <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '24px', fontWeight: 900, color: '#1f2937', marginBottom: '8px' }}>Edit Event</h1>
+        {editingEvent.recurrence_id && (
+          <div style={{ background: '#fef9c3', border: '1.5px solid #fde68a', borderRadius: '8px', padding: '8px 14px', marginBottom: '20px', fontSize: '12px', color: '#92400e' }}>
+            🔁 This event is part of a recurring series. You'll be asked whether to update just this event or all events in the series.
+          </div>
+        )}
+
         {[
           { label: 'Title', key: 'title', type: 'text' },
           { label: 'Location', key: 'location', type: 'text' },
@@ -449,46 +678,106 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
           { label: 'Organization', key: 'organization', type: 'text' },
         ].map(({ label, key, type }) => (
           <div key={key}>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{label}</label>
+            <label style={labelStyle}>{label}</label>
             <input style={inputStyle} type={type} value={editingEvent[key] || ''} onChange={e => setEditingEvent({ ...editingEvent, [key]: e.target.value })} />
           </div>
         ))}
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Date</label>
+            <label style={labelStyle}>Date</label>
             <input style={inputStyle} type="date" value={editingEvent.date || ''} onChange={e => setEditingEvent({ ...editingEvent, date: e.target.value })} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Time</label>
+            <label style={labelStyle}>Start Time</label>
             <select style={inputStyle} value={editingEvent.time || ''} onChange={e => setEditingEvent({ ...editingEvent, time: e.target.value })}>
               <option value=''>Select time</option>
               {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
+          <div>
+            <label style={labelStyle}>End Time</label>
+            <select style={inputStyle} value={editingEvent.end_time || ''} onChange={e => setEditingEvent({ ...editingEvent, end_time: e.target.value })}>
+              <option value=''>No end time</option>
+              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Recurrence section */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={labelStyle}>Repeats</label>
+          <select style={{ ...inputStyle, cursor: 'pointer' }} value={editRecurrence} onChange={e => setEditRecurrence(e.target.value)}>
+            <option value='none'>Does not repeat</option>
+            <option value='daily'>Every day</option>
+            <option value='weekly'>Every week</option>
+            <option value='monthly'>Every month</option>
+          </select>
+
+          {editRecurrence !== 'none' && (
+            <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '14px', marginTop: '8px', border: '1.5px solid #e5e7eb' }}>
+              <div style={{ marginBottom: '10px' }}>
+                <label style={labelStyle}>Ends</label>
+                <select style={{ ...inputStyle, marginBottom: '0' }} value={editEndsOn} onChange={e => setEditEndsOn(e.target.value)}>
+                  <option value='never'>Never (up to 1 year)</option>
+                  <option value='on'>On a date</option>
+                  <option value='after'>After occurrences</option>
+                </select>
+              </div>
+              {editEndsOn === 'on' && (
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={labelStyle}>End Date</label>
+                  <input style={{ ...inputStyle, marginBottom: '0' }} type="date" value={editRecurrenceEnd} onChange={e => setEditRecurrenceEnd(e.target.value)} />
+                </div>
+              )}
+              {editEndsOn === 'after' && (
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={labelStyle}>Number of occurrences</label>
+                  <input style={{ ...inputStyle, width: '80px', marginBottom: '0' }} type="number" min={1} max={365} value={editRecurrenceCount} onChange={e => setEditRecurrenceCount(e.target.value)} />
+                </div>
+              )}
+              {editPreviewDates.length > 0 && (
+                <div style={{ background: '#f0fdf4', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', color: '#1a3d2b' }}>
+                  <strong>{editPreviewDates.length} date{editPreviewDates.length !== 1 ? 's' : ''} in series:</strong>
+                  <div style={{ marginTop: '4px', color: '#374151' }}>
+                    {editPreviewDates.slice(0, 5).join(', ')}
+                    {editPreviewDates.length > 5 && ` … and ${editPreviewDates.length - 5} more`}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           {[{ label: 'Cost', key: 'cost', type: 'text' }, { label: 'Age', key: 'age', type: 'text' }, { label: 'Email', key: 'email', type: 'text' }, { label: 'Website', key: 'website', type: 'text' }].map(({ label, key, type }) => (
             <div key={key}>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{label}</label>
+              <label style={labelStyle}>{label}</label>
               <input style={inputStyle} type={type} value={editingEvent[key] || ''} onChange={e => setEditingEvent({ ...editingEvent, [key]: e.target.value })} />
             </div>
           ))}
         </div>
-        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Category</label>
+
+        <label style={labelStyle}>Category</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
           {['outdoors','arts','food','community','family','classes','gov'].map(cat => {
             const active = (editingEvent.category || '').split(',').map((c: string) => c.trim()).includes(cat)
             return <button key={cat} type="button" onClick={() => { const cur = (editingEvent.category || '').split(',').map((c: string) => c.trim()).filter(Boolean); setEditingEvent({ ...editingEvent, category: (active ? cur.filter((c: string) => c !== cat) : [...cur, cat]).join(',') }) }} style={{ padding: '7px 14px', borderRadius: '999px', border: '1.5px solid', borderColor: active ? '#1a3d2b' : '#e5e7eb', background: active ? '#1a3d2b' : 'white', color: active ? 'white' : '#6b7280', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>{cat}</button>
           })}
         </div>
-        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Tags</label>
+
+        <label style={labelStyle}>Tags</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
           {[{ value: 'free', label: 'Free' }, { value: 'family', label: 'Family-Friendly' }, { value: 'wellness', label: 'Wellness' }, { value: 'reg', label: 'Reg. Required' }, { value: 'music', label: 'Live Music' }, { value: 'volunteer', label: 'Volunteer' }].map(({ value: tag, label: tagLabel }) => {
             const active = (editingEvent.tags || '').split(',').map((t: string) => t.trim()).includes(tag)
             return <button key={tag} type="button" onClick={() => { const cur = (editingEvent.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean); setEditingEvent({ ...editingEvent, tags: (active ? cur.filter((t: string) => t !== tag) : [...cur, tag]).join(',') }) }} style={{ padding: '7px 14px', borderRadius: '999px', border: '1.5px solid', borderColor: active ? '#10b981' : '#e5e7eb', background: active ? '#10b981' : 'white', color: active ? 'white' : '#6b7280', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>{tagLabel}</button>
           })}
         </div>
-        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Description</label>
+
+        <label style={labelStyle}>Description</label>
         <textarea style={{ ...inputStyle, minHeight: '100px', resize: 'vertical' }} value={editingEvent.description || ''} onChange={e => setEditingEvent({ ...editingEvent, description: e.target.value })} />
-        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px', marginTop: '8px' }}>Event Photo</label>
+
+        <label style={{ ...labelStyle, marginTop: '8px' }}>Event Photo</label>
         {editImageUrl ? (
           <div style={{ marginBottom: '8px' }}>
             <img src={editImageUrl} alt="Event" style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '8px' }} />
@@ -503,13 +792,22 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
             <input type="file" accept="image/*" onChange={handleEditImageUpload} style={{ display: 'none' }} disabled={imageUploading} />
           </label>
         )}
+
         <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-          <button onClick={saveEdit} disabled={saving} style={{ flex: 1, background: '#1a3d2b', color: 'white', border: 'none', padding: '12px', borderRadius: '999px', fontSize: '14px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : '✓ Save Changes'}</button>
-          <button onClick={() => setEditingEvent(null)} style={{ padding: '12px 24px', background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', borderRadius: '999px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={handleSaveEdit} disabled={saving}
+            style={{ flex: 1, background: '#1a3d2b', color: 'white', border: 'none', padding: '12px', borderRadius: '999px', fontSize: '14px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+            {saving ? 'Saving…' : '✓ Save Changes'}
+          </button>
+          <button onClick={() => setEditingEvent(null)}
+            style={{ padding: '12px 24px', background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', borderRadius: '999px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+            Cancel
+          </button>
         </div>
       </div>
     </div>
   )
+
+  // ─── Login view ───────────────────────────────────────────────────────────
 
   if (!authed) return (
     <div style={{ minHeight: '100vh', background: '#fafaf8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
@@ -520,10 +818,10 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
           <p style={{ color: '#6b7280', fontSize: '14px', marginTop: '8px' }}>Admin Access</p>
         </div>
         {loginError && <div style={{ background: '#fee2e2', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#dc2626' }}>⚠️ {loginError}</div>}
-        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Email</label>
+        <label style={labelStyle}>Email</label>
         <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com"
           style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 14px', fontSize: '14px', outline: 'none', marginBottom: '12px', boxSizing: 'border-box' as const }} />
-        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Password</label>
+        <label style={labelStyle}>Password</label>
         <div style={{ position: 'relative', marginBottom: '16px' }}>
           <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} placeholder="Password"
             style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 44px 10px 14px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' as const }} />
@@ -534,8 +832,34 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     </div>
   )
 
+  // ─── Main admin view ──────────────────────────────────────────────────────
+
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: 'sans-serif' }}>
+
+      {/* Delete scope modal */}
+      {saveScopeModal === 'delete' && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '6px' }}>Delete recurring event</h3>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '20px' }}>This event is part of a series. Which events do you want to delete?</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button onClick={() => executeDelete('this')}
+                style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '12px 16px', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+                This event only
+              </button>
+              <button onClick={() => executeDelete('all')}
+                style={{ background: '#dc2626', color: 'white', border: 'none', padding: '12px 16px', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+                All events in this series
+              </button>
+              <button onClick={() => { setSaveScopeModal(null); setPendingSavePayload(null) }}
+                style={{ background: '#f3f4f6', color: '#374151', border: 'none', padding: '11px', borderRadius: '999px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {noteModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
@@ -559,9 +883,9 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
             <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>{messageModal.all ? 'Sends to all orgs with an email address.' : `To: ${messageModal.email}`}</p>
             {messageSent ? <div style={{ textAlign: 'center', padding: '20px', fontSize: '15px', color: '#16803c', fontWeight: 700 }}>✅ Message sent!</div> : (
               <>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>Subject</label>
+                <label style={labelStyle}>Subject</label>
                 <input style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', outline: 'none', marginBottom: '12px', boxSizing: 'border-box' as const }} placeholder="e.g. Welcome to Townstir!" value={messageSubject} onChange={e => setMessageSubject(e.target.value)} />
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>Message</label>
+                <label style={labelStyle}>Message</label>
                 <textarea placeholder="Write your message here…" value={messageBody} onChange={e => setMessageBody(e.target.value)} style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', fontFamily: 'sans-serif', outline: 'none', minHeight: '120px', resize: 'vertical', boxSizing: 'border-box' as const, marginBottom: '16px' }} />
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button onClick={() => { setMessageModal(null); setMessageSubject(''); setMessageBody('') }} style={{ flex: 1, background: '#f3f4f6', color: '#374151', border: 'none', padding: '11px', borderRadius: '999px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
@@ -666,7 +990,7 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
                 if (filterCategory && !ev.category?.split(',').map((c: string) => c.trim()).includes(filterCategory)) return false
                 return true
               }).map(ev => (
-                <div key={ev.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${selected.has(ev.id) ? '#1a3d2b' : '#e5e7eb'}` }}>
+                <div key={ev.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${selected.has(ev.id) ? '#1a3d2b' : ev.recurrence_id ? '#7EC8A4' : '#e5e7eb'}` }}>
                   {eventFilter === 'pending' && findPossibleDuplicates(ev).length > 0 && (
                     <div style={{ background: '#fef9c3', border: '1.5px solid #fde68a', borderRadius: '8px', padding: '8px 14px', marginBottom: '12px', fontSize: '12px', color: '#92400e', fontWeight: 600 }}>
                       ⚠️ Possible duplicate of: {findPossibleDuplicates(ev).map(d => `"${d.title}" on ${d.date} at ${d.time} · ${d.organization}`).join(', ')}
@@ -675,7 +999,10 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                     {eventFilter === 'pending' && <input type="checkbox" checked={selected.has(ev.id)} onChange={() => toggleSelect(ev.id)} style={{ width: '16px', height: '16px', cursor: 'pointer', marginRight: '12px', marginTop: '3px', flexShrink: 0 }} />}
                     <div style={{ flex: 1 }}>
-                      <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>{ev.title}</h3>
+                      <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>
+                        {ev.title}
+                        {ev.recurrence_id && <span style={{ marginLeft: '8px', background: '#f0fdf4', color: '#1a3d2b', fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px', border: '1px solid #7EC8A4' }}>🔁 {ev.recurrence || 'recurring'}</span>}
+                      </h3>
                       <div style={{ fontSize: '13px', color: '#6b7280' }}>{ev.date} &nbsp;·&nbsp; {ev.time} &nbsp;·&nbsp; {ev.location}</div>
                       <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '2px' }}>{ev.organization} &nbsp;·&nbsp; {ev.category}{ev.cost && <>&nbsp;·&nbsp; {ev.cost}</>}</div>
                     </div>
@@ -707,7 +1034,7 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
                       <button onClick={() => updateStatus(ev.id, 'approved')} style={{ background: '#16803c', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>✓ Approve anyway</button>
                       <button onClick={() => deleteEvent(ev.id)} style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>🗑 Delete permanently</button>
                     </>}
-                    <button onClick={() => { setEditingEvent(ev); setEditImageUrl(ev.image_url || '') }} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
+                    <button onClick={() => openEditEvent(ev)} style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Edit</button>
                     <button onClick={() => duplicateEvent(ev)} style={{ background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Duplicate</button>
                   </div>
                 </div>
@@ -737,11 +1064,11 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
                         { label: 'Contact Phone', key: 'contact_phone' }, { label: 'Website', key: 'website' },
                       ].map(({ label, key }) => (
                         <div key={key}>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{label}</label>
+                          <label style={labelStyle}>{label}</label>
                           <input style={inputStyle} value={(editingOpp as any)[key] || ''} onChange={e => setEditingOpp({ ...editingOpp, [key]: e.target.value })} />
                         </div>
                       ))}
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Description</label>
+                      <label style={labelStyle}>Description</label>
                       <textarea style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }} value={editingOpp.description || ''} onChange={e => setEditingOpp({ ...editingOpp, description: e.target.value })} />
                       <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                         <button onClick={saveOppEdit} style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>✓ Save</button>
@@ -805,7 +1132,7 @@ async function handleEditImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
                 <div key={org.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${org.verified ? '#16803c' : '#e5e7eb'}` }}>
                   {editingOrg?.id === org.id ? (
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>Org Name</label>
+                      <label style={labelStyle}>Org Name</label>
                       <input style={{ ...inputStyle, marginBottom: '8px' }} value={editingOrg.name || ''} onChange={e => setEditingOrg({ ...editingOrg, name: e.target.value })} />
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button onClick={saveOrgEdit} disabled={orgSaving} style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>{orgSaving ? 'Saving…' : '✓ Save'}</button>
