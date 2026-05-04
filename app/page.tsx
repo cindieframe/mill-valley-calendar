@@ -78,7 +78,7 @@ const sun = new Date(today); sun.setDate(today.getDate() + satOffset + 1)
 
 function formatDayHeader(dateStr: string) {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric',
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   })
 }
 

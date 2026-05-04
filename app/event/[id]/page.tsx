@@ -48,7 +48,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   if (!ev) return { title: 'Event Not Found' }
 
   const date = new Date(ev.date + 'T12:00:00').toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric'
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
   })
   const description = `${date}${ev.time ? ' · ' + ev.time : ''}${ev.location ? ' · ' + ev.location : ''}. ${ev.description || ''}`
 
@@ -84,7 +84,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
     ? ev.category.split(',').map((c: string) => c.trim())
     : (ev.cats || [])
   const date = new Date(ev.date + 'T12:00:00').toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric'
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
   })
   const orgSlug = ev.organization?.toLowerCase().replace(/ /g, '-')
   const tags = ev.tags ? ev.tags.split(',').map((t: string) => t.trim()) : []
