@@ -1004,9 +1004,38 @@ export default function Admin() {
                 return true
               }).map(ev => (
                 <div key={ev.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${selected.has(ev.id) ? '#1a3d2b' : ev.recurrence_id ? '#7EC8A4' : '#e5e7eb'}` }}>
-                  {eventFilter === 'pending' && findPossibleDuplicates(ev).length > 0 && (
-                    <div style={{ background: '#fef9c3', border: '1.5px solid #fde68a', borderRadius: '8px', padding: '8px 14px', marginBottom: '12px', fontSize: '12px', color: '#92400e', fontWeight: 600 }}>
-                      ⚠️ Possible duplicate of: {findPossibleDuplicates(ev).map(d => `"${d.title}" on ${d.date} at ${d.time} · ${d.organization}`).join(', ')}
+                   {eventFilter === 'pending' && findPossibleDuplicates(ev).length > 0 && (
+                    <div style={{ background: '#fef9c3', border: '1.5px solid #fde68a', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
+                      {findPossibleDuplicates(ev).map(dup => (
+                        <div key={dup.id} style={{ marginBottom: '6px' }}>
+                          <div style={{ fontSize: '12px', color: '#92400e', fontWeight: 600, marginBottom: '6px' }}>
+                            ⚠️ Possible duplicate: "{dup.title}" on {dup.date} at {dup.time} · {dup.organization}
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={async e => {
+                                e.stopPropagation()
+                                if (!confirm(`Delete the existing "${dup.title}" and approve this one instead?`)) return
+                                const { error: delError } = await supabase.from('events').delete().eq('id', dup.id)
+                                if (!delError) {
+                                  setApprovedEvents(prev => prev.filter(a => a.id !== dup.id))
+                                  await updateStatus(ev.id, 'approved')
+                                }
+                              }}
+                              style={{ background: '#16803c', color: 'white', border: 'none', padding: '5px 12px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>
+                              ✓ Keep this one
+                            </button>
+                            <button
+                              onClick={async e => {
+                                e.stopPropagation()
+                                await updateStatus(ev.id, 'rejected')
+                              }}
+                              style={{ background: 'white', color: '#92400e', border: '1.5px solid #fde68a', padding: '5px 12px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>
+                              ✕ Keep existing
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
