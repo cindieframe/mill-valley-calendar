@@ -42,6 +42,7 @@ const description = cleanLines.join(' ').replace(/\s+/g, ' ').trim()
     const location = get('LOCATION').replace(/\\,/g, ',').replace(/<[^>]+>/g, '').trim()
     
     const image = get('IMAGE') || get('X-IMAGE') || ''
+    const uid = get('UID') || ''
     
     if (!summary || !dtstart) continue
     
@@ -93,7 +94,7 @@ const description = cleanLines.join(' ').replace(/\s+/g, ' ').trim()
     if (eventDate < today) continue
 
     // NEW — endTimeStr added to the pushed object
-    events.push({ summary, description, location, dateStr, timeStr, endTimeStr, url, image })
+   events.push({ summary, description, location, dateStr, timeStr, endTimeStr, url, image, uid })
   }
   
   events.sort((a, b) => new Date(a.dateStr).getTime() - new Date(b.dateStr).getTime())
@@ -209,16 +210,15 @@ const displayName = linkedOrg ? linkedOrg.name : organization
     for (const ev of events) {
       try {
         // Check if event already exists BEFORE calling Claude
-       const { data: existingEvents } = await supabase
-  .from('events')
-  .select('id')
-  .eq('title', ev.summary)
-  .eq('date', ev.dateStr)
+// Check by UID first (survives title/org name changes), fall back to title+date
+        const uidCheck = ev.uid ? await supabase
+          .from('events').select('id').eq('ical_uid', ev.uid).limit(1) : { data: null }
+        
+        if (uidCheck.data && uidCheck.data.length > 0) { skipped++; continue }
 
-if (existingEvents && existingEvents.length > 0) {
-  skipped++
-  continue
-}
+        const { data: existingEvents } = await supabase
+          .from('events').select('id').eq('title', ev.summary).eq('date', ev.dateStr).limit(1)
+        if (existingEvents && existingEvents.length > 0) { skipped++; continue }
         
   
 
@@ -239,7 +239,8 @@ if (existingEvents && existingEvents.length > 0) {
   description: ev.description || '',
   website: ev.url || '',
   image_url: ev.image || null,
-  status: 'pending',
+status: 'pending',
+  ical_uid: ev.uid || null,
 }])
         
         if (!error) {
