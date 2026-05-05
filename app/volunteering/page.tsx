@@ -163,47 +163,53 @@ export default function Volunteering() {
         ) : filtered.map(opp => {
           const cat = BOARD_CATEGORIES[opp.category]
           return (
-            <div key={opp.id}
+<div key={opp.id}
               onClick={() => router.push(`/volunteering/${opp.id}`)}
               style={{ ...styles.card, display: 'flex', alignItems: 'flex-start', gap: '16px', cursor: 'pointer' }}>
 
               <CategoryIcon category={opp.category} />
 
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '15px', fontWeight: 500, color: colors.textPrimary, marginBottom: '3px' }}>
-                  {opp.title}
-                  {isNew(opp.created_at) && <span style={styles.newBadge}>New</span>}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '3px' }}>
+                  <div style={{ fontSize: '15px', fontWeight: 500, color: colors.textPrimary }}>
+                    {opp.title}
+                    {isNew(opp.created_at) && <span style={styles.newBadge}>New</span>}
+                  </div>
                 </div>
                 <div style={{ fontSize: '13px', color: colors.orgGreen, marginBottom: '5px' }}>
                   {opp.organization || 'Community Member'}
                 </div>
-                <div style={{ fontSize: '13px', color: colors.textSecondary, lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '520px', marginBottom: '8px' }}>
+                <div style={{ fontSize: '13px', color: colors.textSecondary, lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '8px' }}>
                   {opp.description}
                 </div>
-                <div style={{ fontSize: '12px', color: colors.textSecondary }}>
-                  {opp.contact_name && <span>{opp.contact_name}</span>}
-                  {opp.contact_email && <span> &middot; {opp.contact_email}</span>}
-                  {opp.contact_phone && <span> &middot; {opp.contact_phone}</span>}
-                  <span> &middot; Posted {new Date(opp.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '8px' }}>
+                  {cat && (
+                    <div style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}`, borderRadius: radii.categoryPill, padding: '3px 10px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                      {cat.label}
+                    </div>
+                  )}
+                  {opp.is_student_opportunity && (
+                    <div style={{ background: STUDENT_TAG.bg, color: STUDENT_TAG.text, border: `1px solid ${STUDENT_TAG.border}`, borderRadius: radii.tagPill, padding: '3px 10px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                      Student Opp.
+                    </div>
+                  )}
+                  {opp.tags?.includes('scheduled') && (
+                    <div style={{ background: '#f0fdf4', color: colors.navBg, border: `1px solid #bbf7d0`, borderRadius: radii.tagPill, padding: '3px 10px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                      Show Up
+                    </div>
+                  )}
                 </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', alignItems: 'flex-end', flexShrink: 0, minWidth: '130px' }}>
-                {cat && (
-                  <div style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}`, borderRadius: radii.categoryPill, padding: '3px 10px', fontSize: '11px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                    {cat.label}
-                  </div>
-                )}
-               {opp.is_student_opportunity && (
-                  <div style={{ background: STUDENT_TAG.bg, color: STUDENT_TAG.text, border: `1px solid ${STUDENT_TAG.border}`, borderRadius: radii.tagPill, padding: '3px 10px', fontSize: '11px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                    Student Opp.
-                  </div>
-                )}
-                {opp.tags?.includes('scheduled') && (
-                  <div style={{ background: '#f0fdf4', color: colors.navBg, border: `1px solid #bbf7d0`, borderRadius: radii.tagPill, padding: '3px 10px', fontSize: '11px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                    Show Up
-                  </div>
-                )}
+                <div style={{ fontSize: '12px', color: colors.textSecondary, lineHeight: 1.6 }}>
+                  {opp.contact_name && <div style={{ fontWeight: 500, color: colors.textPrimary }}>{opp.contact_name}</div>}
+                  {(opp.contact_email || opp.contact_phone) && (
+                    <div>
+                      {opp.contact_email && <span>{opp.contact_email}</span>}
+                                           {opp.contact_email && opp.contact_phone && <span style={{ margin: '0 6px', color: colors.textSecondary }}>|</span>}
+                      {opp.contact_phone && <span>{opp.contact_phone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3')}</span>}
+                    </div>
+                  )}
+                  <div>Posted {new Date(opp.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                </div>
               </div>
             </div>
           )

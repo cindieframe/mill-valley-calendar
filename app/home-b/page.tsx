@@ -15,8 +15,8 @@ const CATEGORY_IMAGES: Record<string, string> = {
   community: `${SUPABASE_ASSETS}/category-community-portrait.jpg`,
   classes:   `${SUPABASE_ASSETS}/category-classes-portrait.jpg`,
   gov:       `${SUPABASE_ASSETS}/category-gov-portrait.jpg`,
-  family:    `${SUPABASE_ASSETS}/category-family-portrait.jpg`,
-  youth:     `${SUPABASE_ASSETS}/category-family-portrait.jpg`,
+    family:    `${SUPABASE_ASSETS}/category-family-portrait-2.jpg`,
+  youth:     `${SUPABASE_ASSETS}/category-family-portrait-2.jpg`,
 }
 
 const CAT_PRIORITY = ['arts', 'outdoors', 'food', 'family', 'youth', 'community', 'classes', 'gov']
