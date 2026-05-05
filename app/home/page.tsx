@@ -71,8 +71,19 @@ function buildFeatured(data: any[]): any[] {
 
   // Assign fallback images to events with their own image too,
   // using an unused stock category so portrait swaps don't duplicate
+  // Enforce category diversity — max one event per category
+  const usedEventCats = new Set<string>()
+  const diverse: any[] = []
+  for (const ev of [...withImages, ...withStock]) {
+    const cat = getFirstCat(ev)
+    if (!usedEventCats.has(cat)) {
+      usedEventCats.add(cat)
+      diverse.push(ev)
+    }
+    if (diverse.length === 4) break
+  }
   const allCats = Object.keys(CATEGORY_IMAGES)
-  const result = [...withImages, ...withStock].slice(0, 4)
+  const result = diverse
   for (const ev of result) {
     if (!ev.fallbackImage) {
       const unusedCat = allCats.find(c => !usedStockCats.has(c)) || allCats[0]
@@ -104,7 +115,24 @@ const [townOpen, setTownOpen] = useState(false)
       .order('date', { ascending: true })
       .limit(40)
 
-    if (data) setFeaturedEvents(buildFeatured(data))
+    if (data) {
+      const checked = await Promise.all(data.map(ev => {
+        if (!ev.image_url) return Promise.resolve(ev)
+        return new Promise<any>(resolve => {
+          const img = new window.Image()
+          img.onload = () => {
+            if (img.naturalWidth < 400 || img.naturalHeight > img.naturalWidth * 1.2) {
+              resolve({ ...ev, image_url: null })
+            } else {
+              resolve(ev)
+            }
+          }
+          img.onerror = () => resolve({ ...ev, image_url: null })
+          img.src = ev.image_url
+        })
+      }))
+      setFeaturedEvents(buildFeatured(checked))
+    }
     setLoading(false)
   }
 

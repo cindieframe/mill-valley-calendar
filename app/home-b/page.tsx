@@ -68,8 +68,19 @@ function buildFeatured(data: any[]): any[] {
     }
   }
 
+  // Enforce category diversity — max one event per category
+  const usedEventCats = new Set<string>()
+  const diverse: any[] = []
+  for (const ev of [...withImages, ...withStock]) {
+    const cat = getFirstCat(ev)
+    if (!usedEventCats.has(cat)) {
+      usedEventCats.add(cat)
+      diverse.push(ev)
+    }
+    if (diverse.length === 4) break
+  }
   const allCats = Object.keys(CATEGORY_IMAGES)
-  const result = [...withImages, ...withStock].slice(0, 4)
+  const result = diverse
   for (const ev of result) {
     if (!ev.fallbackImage) {
       const unusedCat = allCats.find(c => !usedStockCats.has(c)) || allCats[0]
@@ -110,8 +121,8 @@ export default function HomeBPage() {
           img.onload = () => {
             // For portrait cards, landscape images that are very wide look bad
             // Keep images that are roughly square or portrait (height >= width * 0.6)
-            if (img.naturalWidth > img.naturalHeight * 2) {
-              resolve({ ...ev, image_url: null }) // very wide banner — swap to stock
+            if (img.naturalWidth < 400 || img.naturalHeight < 400 || img.naturalWidth > img.naturalHeight * 2) {
+              resolve({ ...ev, image_url: null })
             } else {
               resolve(ev)
             }
