@@ -9,17 +9,16 @@ const SUPABASE_ASSETS = 'https://uacthqlmxhslqzddfxwt.supabase.co/storage/v1/obj
 const HERO_IMAGE = `${SUPABASE_ASSETS}/aranxa-esteve-pOXHU0UEDcg-unsplash.jpg`
 
 const CATEGORY_IMAGES: Record<string, string> = {
-  outdoors:  `${SUPABASE_ASSETS}/category-outdoors.jpg`,
-  arts:      `${SUPABASE_ASSETS}/category-arts.jpg`,
-  food:      `${SUPABASE_ASSETS}/category-food.jpg`,
-  community: `${SUPABASE_ASSETS}/category-community-2.jpg`,
-  classes:   `${SUPABASE_ASSETS}/category-classes.jpg`,
-  gov:       `${SUPABASE_ASSETS}/category-gov.jpg`,
-  family:    `${SUPABASE_ASSETS}/category-family-2.jpg`,
-  youth:     `${SUPABASE_ASSETS}/category-family-2.jpg`,
+  outdoors:  `${SUPABASE_ASSETS}/category-outdoors-portrait.jpg`,
+  arts:      `${SUPABASE_ASSETS}/category-arts-portrait.jpg`,
+  food:      `${SUPABASE_ASSETS}/category-food-portrait.jpg`,
+  community: `${SUPABASE_ASSETS}/category-community-portrait.jpg`,
+  classes:   `${SUPABASE_ASSETS}/category-classes-portrait.jpg`,
+  gov:       `${SUPABASE_ASSETS}/category-gov-portrait.jpg`,
+  family:    `${SUPABASE_ASSETS}/category-family-portrait.jpg`,
+  youth:     `${SUPABASE_ASSETS}/category-family-portrait.jpg`,
 }
 
-// Priority order for no-image events
 const CAT_PRIORITY = ['arts', 'outdoors', 'food', 'family', 'youth', 'community', 'classes', 'gov']
 
 const TOWNS = [
@@ -69,8 +68,6 @@ function buildFeatured(data: any[]): any[] {
     }
   }
 
-  // Assign fallback images to events with their own image too,
-  // using an unused stock category so portrait swaps don't duplicate
   const allCats = Object.keys(CATEGORY_IMAGES)
   const result = [...withImages, ...withStock].slice(0, 4)
   for (const ev of result) {
@@ -84,12 +81,12 @@ function buildFeatured(data: any[]): any[] {
   return result
 }
 
-export default function HomePage() {
+export default function HomeBPage() {
   const router = useRouter()
   const [featuredEvents, setFeaturedEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-const [townOpen, setTownOpen] = useState(false)
+  const [townOpen, setTownOpen] = useState(false)
 
   useEffect(() => { loadFeaturedEvents() }, [])
 
@@ -104,7 +101,27 @@ const [townOpen, setTownOpen] = useState(false)
       .order('date', { ascending: true })
       .limit(40)
 
-    if (data) setFeaturedEvents(buildFeatured(data))
+    if (data) {
+      // Check image dimensions — swap landscape-unfriendly images to portrait stock
+      const checked = await Promise.all(data.map(ev => {
+        if (!ev.image_url) return Promise.resolve(ev)
+        return new Promise<any>(resolve => {
+          const img = new window.Image()
+          img.onload = () => {
+            // For portrait cards, landscape images that are very wide look bad
+            // Keep images that are roughly square or portrait (height >= width * 0.6)
+            if (img.naturalWidth > img.naturalHeight * 2) {
+              resolve({ ...ev, image_url: null }) // very wide banner — swap to stock
+            } else {
+              resolve(ev)
+            }
+          }
+          img.onerror = () => resolve({ ...ev, image_url: null })
+          img.src = ev.image_url
+        })
+      }))
+      setFeaturedEvents(buildFeatured(checked))
+    }
     setLoading(false)
   }
 
@@ -173,54 +190,42 @@ const [townOpen, setTownOpen] = useState(false)
       {/* Events section */}
       <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '32px 24px 60px' }}>
 
-        {/* Header with town dropdown — underline tight to text only */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '22px', fontWeight: 500, color: colors.textPrimary }}>Things to do in</span>
-  <div style={{ position: 'relative', display: 'inline-block' }}>
-  <span
-    onClick={() => setTownOpen(!townOpen)}
-    style={{ fontSize: '22px', fontWeight: 500, color: colors.navBg, borderBottom: `2px solid ${colors.navBg}`, paddingBottom: '2px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-    Mill Valley <span style={{ fontSize: '14px' }}>⌄</span>
-  </span>
-  {townOpen && (
-    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', background: '#fff', border: `1px solid ${colors.borderLight}`, borderRadius: '10px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, minWidth: '220px', overflow: 'hidden' }}>
-      {TOWNS.map(t => (
-        <div key={t.value}
-          onClick={() => t.live && setTownOpen(false)}
-          style={{ padding: '11px 16px', fontSize: '14px', fontWeight: t.live ? 500 : 400, color: t.live ? colors.textPrimary : colors.textSecondary, cursor: t.live ? 'pointer' : 'default', borderBottom: `1px solid ${colors.borderLight}` }}>
-          {t.label}
-        </div>
-      ))}
-    </div>
-  )}
-</div>
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <span onClick={() => setTownOpen(!townOpen)}
+              style={{ fontSize: '22px', fontWeight: 500, color: colors.navBg, borderBottom: `2px solid ${colors.navBg}`, paddingBottom: '2px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              Mill Valley <span style={{ fontSize: '14px' }}>⌄</span>
+            </span>
+            {townOpen && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', background: '#fff', border: `1px solid ${colors.borderLight}`, borderRadius: '10px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, minWidth: '220px', overflow: 'hidden' }}>
+                {TOWNS.map(t => (
+                  <div key={t.value}
+                    onClick={() => t.live && setTownOpen(false)}
+                    style={{ padding: '11px 16px', fontSize: '14px', fontWeight: t.live ? 500 : 400, color: t.live ? colors.textPrimary : colors.textSecondary, cursor: t.live ? 'pointer' : 'default', borderBottom: `1px solid ${colors.borderLight}` }}>
+                    {t.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Grid */}
+        {/* Portrait card grid */}
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px', color: colors.textSecondary }}>Loading…</div>
         ) : (
-          <div className="event-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+          <div className="event-grid-b" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
             {featuredEvents.map(ev => (
               <div key={ev.id} onClick={() => router.push(`/event/${ev.id}`)}
                 style={{ background: '#fff', borderRadius: '12px', overflow: 'hidden', cursor: 'pointer', border: `0.5px solid ${colors.borderLight}`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}
                 onMouseOver={e => (e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.12)')}
                 onMouseOut={e => (e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)')}>
-<img src={getCardImage(ev)} alt={ev.title}
-  style={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', objectPosition: 'center 20%', display: 'block' }}
-  onLoad={e => {
-    const img = e.currentTarget
-    const checkAndSwap = () => {
-      if (img.naturalWidth > 0 && img.naturalHeight > img.naturalWidth * 1.2) {
-        img.src = ev.fallbackImage || CATEGORY_IMAGES.community
-        img.style.objectPosition = 'center center'
-      }
-    }
-    if (img.complete) checkAndSwap()
-    else img.addEventListener('load', checkAndSwap, { once: true })
-    checkAndSwap()
-  }}
-/>
+                <img
+                  src={getCardImage(ev)}
+                  alt={ev.title}
+                  style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', objectPosition: 'center 20%', display: 'block' }}
+                />
                 <div style={{ padding: '12px 14px 16px' }}>
                   <div style={{ fontSize: '11px', color: colors.navBg, fontWeight: 500, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     {formatEventDate(ev.date)} · {ev.time}
@@ -244,8 +249,8 @@ const [townOpen, setTownOpen] = useState(false)
       </div>
 
       <style>{`
-        @media (max-width: 700px) { .event-grid { grid-template-columns: repeat(2, 1fr) !important; } }
-        @media (max-width: 420px) { .event-grid { grid-template-columns: 1fr !important; } }
+        @media (max-width: 700px) { .event-grid-b { grid-template-columns: repeat(2, 1fr) !important; } }
+        @media (max-width: 420px) { .event-grid-b { grid-template-columns: repeat(2, 1fr) !important; } }
       `}</style>
     </div>
   )
