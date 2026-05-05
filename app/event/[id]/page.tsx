@@ -219,7 +219,15 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
               {infoCell('Location', ev.location, ev.address && ev.address !== ev.location ? ev.address : undefined)}
             </div>
             <div>
-              {infoCell('Cost', ev.cost || 'See organizer')}
+              {ev.cost ? infoCell('Cost', ev.cost) : ev.website ? (
+                <div style={{ padding: '14px 16px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>Cost</div>
+                  <a href={ev.website} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize: '14px', fontWeight: 600, color: '#3a7d44', textDecoration: 'none' }}>
+                    Visit website →
+                  </a>
+                </div>
+              ) : infoCell('Cost', 'See organizer')}
             </div>
             {ev.age && (
               <div style={{ gridColumn: '1 / -1', borderTop: '1px solid #e8eaed' }}>
