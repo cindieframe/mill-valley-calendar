@@ -1,14 +1,19 @@
 import { supabase } from './supabase'
 
-export async function getEvents() {
+export async function getEvents(townSlug: string = 'mill-valley') {
+  const townName = townSlug
+    .split('-')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+
   const { data, error } = await supabase
     .from('events')
     .select('*')
     .eq('status', 'approved')
-.or('town.ilike.mill valley,town.ilike.mill-valley')
-.gte('date', new Date().toISOString().split('T')[0])
-.order('date', { ascending: true })
-.order('time', { ascending: true })
+    .or(`town.ilike.${townName},town.ilike.${townSlug}`)
+    .gte('date', new Date().toISOString().split('T')[0])
+    .order('date', { ascending: true })
+    .order('time', { ascending: true })
 
   if (error) {
     console.error('Error fetching events:', error)
