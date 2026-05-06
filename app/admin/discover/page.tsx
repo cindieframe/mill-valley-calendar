@@ -93,7 +93,7 @@ function DiscoverOrgsInner() {
       const res = await fetch('/api/import-ical', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feedUrl: org.feed_url, organization: org.name })
+       body: JSON.stringify({ feedUrl: org.feed_url, organization: org.name, town })
       })
       const data = await res.json()
       if (data.error) {
@@ -115,7 +115,7 @@ async function extractWithAI(index: number) {
       const res = await fetch('/api/extract-events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ websiteUrl: urlToUse, organization: org.name })
+        body: JSON.stringify({ websiteUrl: urlToUse, organization: org.name, town })
       })
       const data = await res.json()
       if (data.error) {

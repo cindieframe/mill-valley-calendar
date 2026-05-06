@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '../supabase'
+import { supabase } from './supabase'
 import { colors, fonts } from './lib/tokens'
 
 const SUPABASE_ASSETS = 'https://uacthqlmxhslqzddfxwt.supabase.co/storage/v1/object/public/site-assets'
@@ -15,19 +15,15 @@ const CATEGORY_IMAGES: Record<string, string> = {
   community: `${SUPABASE_ASSETS}/category-community-portrait.jpg`,
   classes:   `${SUPABASE_ASSETS}/category-classes-portrait.jpg`,
   gov:       `${SUPABASE_ASSETS}/category-gov-portrait.jpg`,
-    family:    `${SUPABASE_ASSETS}/category-family-portrait-2.jpg`,
+  family:    `${SUPABASE_ASSETS}/category-family-portrait-2.jpg`,
   youth:     `${SUPABASE_ASSETS}/category-family-portrait-2.jpg`,
 }
 
 const CAT_PRIORITY = ['arts', 'outdoors', 'food', 'family', 'youth', 'community', 'classes', 'gov']
 
-const TOWNS = [
-  { value: 'mill-valley', label: 'Mill Valley', live: true },
-  { value: 'fairfax', label: 'Fairfax — coming soon', live: false },
-  { value: 'san-anselmo', label: 'San Anselmo — coming soon', live: false },
-]
 const DEFAULT_TOWN = 'mill-valley'
 const DEFAULT_TOWN_NAME = 'Mill Valley'
+
 function formatEventDate(dateStr: string) {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
@@ -69,7 +65,6 @@ function buildFeatured(data: any[]): any[] {
     }
   }
 
-  // Enforce category diversity — max one event per category
   const usedEventCats = new Set<string>()
   const diverse: any[] = []
   for (const ev of [...withImages, ...withStock]) {
@@ -98,9 +93,37 @@ export default function HomeBPage() {
   const [featuredEvents, setFeaturedEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [townOpen, setTownOpen] = useState(false)
+  const [heroDropdownOpen, setHeroDropdownOpen] = useState(false)
+  const [sectionDropdownOpen, setSectionDropdownOpen] = useState(false)
+  const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
+  const heroRef = useRef<HTMLDivElement>(null)
+  const sectionRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { loadFeaturedEvents() }, [])
+  useEffect(() => {
+    loadFeaturedEvents()
+    loadTowns()
+  }, [])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (heroRef.current && !heroRef.current.contains(e.target as Node)) {
+        setHeroDropdownOpen(false)
+      }
+      if (sectionRef.current && !sectionRef.current.contains(e.target as Node)) {
+        setSectionDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  async function loadTowns() {
+    const { data } = await supabase
+      .from('towns')
+      .select('slug, name')
+      .order('name')
+    if (data) setTowns(data)
+  }
 
   async function loadFeaturedEvents() {
     const today = new Date().toISOString().split('T')[0]
@@ -114,14 +137,11 @@ export default function HomeBPage() {
       .limit(40)
 
     if (data) {
-      // Check image dimensions — swap landscape-unfriendly images to portrait stock
       const checked = await Promise.all(data.map(ev => {
         if (!ev.image_url) return Promise.resolve(ev)
         return new Promise<any>(resolve => {
           const img = new window.Image()
           img.onload = () => {
-            // For portrait cards, landscape images that are very wide look bad
-            // Keep images that are roughly square or portrait (height >= width * 0.6)
             if (img.naturalWidth < 400 || img.naturalHeight < 400 || img.naturalWidth > img.naturalHeight * 2) {
               resolve({ ...ev, image_url: null })
             } else {
@@ -139,7 +159,7 @@ export default function HomeBPage() {
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
-    router.push(search.trim() ? `/mill-valley?search=${encodeURIComponent(search.trim())}` : '/mill-valley')
+    router.push(search.trim() ? `/${DEFAULT_TOWN}?search=${encodeURIComponent(search.trim())}` : `/${DEFAULT_TOWN}`)
   }
 
   function getCardImage(ev: any): string {
@@ -147,6 +167,40 @@ export default function HomeBPage() {
     const cat = getFirstCat(ev)
     return CATEGORY_IMAGES[cat] || CATEGORY_IMAGES.community
   }
+
+  const dropdownMenu = (onSelect: () => void) => (
+    <div style={{
+      position: 'absolute', top: '100%', left: 0, marginTop: '8px',
+      background: '#fff', borderRadius: '12px',
+      boxShadow: '0 8px 30px rgba(0,0,0,0.15)', zIndex: 200,
+      minWidth: '200px', overflow: 'hidden',
+      border: '1px solid rgba(0,0,0,0.08)'
+    }}>
+      {towns.map((t, i) => (
+        <div key={t.slug}
+          onClick={() => { router.push(`/${t.slug}`); onSelect() }}
+          style={{
+            padding: '12px 18px', fontSize: '14px', fontWeight: 500,
+            color: t.slug === DEFAULT_TOWN ? colors.navBg : '#374151',
+            cursor: 'pointer',
+            borderBottom: i < towns.length - 1 ? '1px solid #f3f4f6' : 'none',
+            background: 'white',
+            display: 'flex', alignItems: 'center', gap: '8px'
+          }}
+          onMouseOver={e => (e.currentTarget.style.background = '#f9fafb')}
+          onMouseOut={e => (e.currentTarget.style.background = 'white')}
+        >
+          {t.slug === DEFAULT_TOWN && (
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: colors.navBg, flexShrink: 0, display: 'inline-block' }} />
+          )}
+          {t.slug !== DEFAULT_TOWN && (
+            <span style={{ width: '6px', height: '6px', flexShrink: 0, display: 'inline-block' }} />
+          )}
+          {t.name}
+        </div>
+      ))}
+    </div>
+  )
 
   return (
     <div style={{ fontFamily: fonts.sans, minHeight: '100vh', background: colors.pageBg }}>
@@ -186,7 +240,13 @@ export default function HomeBPage() {
           <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: colors.logoAccent, display: 'inline-block' }} />
             {DEFAULT_TOWN_NAME}, CA &nbsp;·&nbsp;
-            <span onClick={() => router.push(`/${DEFAULT_TOWN}`)} style={{ cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '2px' }}>change</span>
+            <div ref={heroRef} style={{ position: 'relative', display: 'inline-block' }}>
+              <span onClick={() => setHeroDropdownOpen(!heroDropdownOpen)}
+                style={{ cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '2px', color: 'rgba(255,255,255,0.8)' }}>
+                change
+              </span>
+              {heroDropdownOpen && dropdownMenu(() => setHeroDropdownOpen(false))}
+            </div>
           </div>
         </div>
       </div>
@@ -195,7 +255,7 @@ export default function HomeBPage() {
       <div style={{ display: 'flex', justifyContent: 'center', padding: '28px 24px 0' }}>
         <button onClick={() => router.push(`/${DEFAULT_TOWN}`)}
           style={{ background: colors.navBg, color: '#fff', border: 'none', padding: '13px 40px', borderRadius: '999px', fontSize: '15px', fontWeight: 500, cursor: 'pointer', fontFamily: fonts.sans }}>
-          Go to Mill Valley calendar →
+          Browse all {DEFAULT_TOWN_NAME} events →
         </button>
       </div>
 
@@ -204,22 +264,12 @@ export default function HomeBPage() {
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '22px', fontWeight: 500, color: colors.textPrimary }}>Things to do in</span>
-          <div style={{ position: 'relative', display: 'inline-block' }}>
-            <span onClick={() => setTownOpen(!townOpen)}
+          <div ref={sectionRef} style={{ position: 'relative', display: 'inline-block' }}>
+            <span onClick={() => setSectionDropdownOpen(!sectionDropdownOpen)}
               style={{ fontSize: '22px', fontWeight: 500, color: colors.navBg, borderBottom: `2px solid ${colors.navBg}`, paddingBottom: '2px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
               {DEFAULT_TOWN_NAME} <span style={{ fontSize: '14px' }}>⌄</span>
             </span>
-            {townOpen && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', background: '#fff', border: `1px solid ${colors.borderLight}`, borderRadius: '10px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, minWidth: '220px', overflow: 'hidden' }}>
-                {TOWNS.map(t => (
-                  <div key={t.value}
-                    onClick={() => t.live && setTownOpen(false)}
-                    style={{ padding: '11px 16px', fontSize: '14px', fontWeight: t.live ? 500 : 400, color: t.live ? colors.textPrimary : colors.textSecondary, cursor: t.live ? 'pointer' : 'default', borderBottom: `1px solid ${colors.borderLight}` }}>
-                    {t.label}
-                  </div>
-                ))}
-              </div>
-            )}
+            {sectionDropdownOpen && dropdownMenu(() => setSectionDropdownOpen(false))}
           </div>
         </div>
 
@@ -255,7 +305,7 @@ export default function HomeBPage() {
         <div style={{ textAlign: 'center', marginTop: '28px' }}>
           <button onClick={() => router.push(`/${DEFAULT_TOWN}`)}
             style={{ background: 'none', border: `1px solid ${colors.borderLight}`, color: colors.textSecondary, padding: '11px 36px', borderRadius: '999px', fontSize: '14px', cursor: 'pointer', fontFamily: fonts.sans }}>
-            See all Mill Valley events →
+            See all {DEFAULT_TOWN_NAME} events →
           </button>
         </div>
       </div>

@@ -7,6 +7,9 @@ import { AdminHeader } from '../../components/Header'
 export default function ImportPage() {
   const router = useRouter()
   const [tab, setTab] = useState<'ai' | 'ical'>('ai')
+  const [selectedTown, setSelectedTown] = useState<string>('Mill Valley')
+  const [allTowns, setAllTowns] = useState<string[]>([])
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
 
   const [websiteUrl, setWebsiteUrl] = useState('')
   const [aiOrg, setAiOrg] = useState('')
@@ -27,14 +30,35 @@ export default function ImportPage() {
   const [reextractResult, setReextractResult] = useState<any>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  useEffect(() => { loadSavedSources(); loadSavedFeeds() }, [])
+  useEffect(() => { checkSession() }, [])
+  useEffect(() => { loadSavedSources(); loadSavedFeeds() }, [selectedTown])
+
+  async function checkSession() {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user?.email) { router.push('/admin'); return }
+    const { data: adminData } = await supabase
+      .from('admins').select('role, towns').eq('email', session.user.email).single()
+    if (!adminData) { router.push('/admin'); return }
+    if (adminData.role === 'super_admin') {
+      setIsSuperAdmin(true)
+      const { data: townData } = await supabase
+        .from('events').select('town').not('town', 'is', null)
+      if (townData) {
+        const unique = [...new Set(townData.map((t: any) => t.town).filter(Boolean))].sort() as string[]
+        setAllTowns(unique)
+      }
+    } else {
+      if (adminData.towns?.length) setSelectedTown(adminData.towns[0])
+    }
+  }
 
   async function loadSavedSources() {
     const { data } = await supabase
-  .from('organizations')
- .select('id, name, website_url, last_extracted_at, is_aggregator')
-  .not('website_url', 'is', null)
-  .order('name')
+      .from('organizations')
+      .select('id, name, website_url, last_extracted_at, is_aggregator, town')
+      .not('website_url', 'is', null)
+      .eq('town', selectedTown)
+      .order('name')
     if (data) setSavedSources(data)
   }
 
@@ -43,6 +67,7 @@ export default function ImportPage() {
       .from('ical_feeds')
       .select('*')
       .eq('active', true)
+      .eq('town', selectedTown)
       .order('organization')
     if (data) setSavedFeeds(data)
   }
@@ -71,7 +96,7 @@ export default function ImportPage() {
       const response = await fetch('/api/extract-events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ websiteUrl, organization: aiOrg, isAggregator: aiIsAggregator }),
+        body: JSON.stringify({ websiteUrl, organization: aiOrg, isAggregator: aiIsAggregator, town: selectedTown }),
       })
       const data = await response.json()
       if (data.error) {
@@ -83,16 +108,16 @@ export default function ImportPage() {
           .select('id')
           .ilike('name', aiOrg)
           .single()
-     if (orgMatch) {
-  await supabase
-    .from('organizations')
-    .update({ website_url: websiteUrl, last_extracted_at: new Date().toISOString() })
-    .eq('id', orgMatch.id)
-} else {
-  await supabase
-    .from('organizations')
-    .insert([{ name: aiOrg, website_url: websiteUrl, last_extracted_at: new Date().toISOString() }])
-}
+        if (orgMatch) {
+          await supabase
+            .from('organizations')
+            .update({ website_url: websiteUrl, last_extracted_at: new Date().toISOString(), town: selectedTown })
+            .eq('id', orgMatch.id)
+        } else {
+          await supabase
+            .from('organizations')
+            .insert([{ name: aiOrg, website_url: websiteUrl, last_extracted_at: new Date().toISOString(), town: selectedTown }])
+        }
         loadSavedSources()
       }
     } catch {
@@ -102,28 +127,28 @@ export default function ImportPage() {
   }
 
   async function handleReextract(org: any) {
-  setReextractingId(org.id)
-  setReextractResult(null)
-  try {
-    const response = await fetch('/api/extract-events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ websiteUrl: org.website_url, organization: org.name, isAggregator: org.is_aggregator }),
-    })
-    const data = await response.json()
-    setReextractResult({ orgId: org.id, ...data })
-    await supabase
-      .from('organizations')
-      .update({ last_extracted_at: new Date().toISOString() })
-      .eq('id', org.id)
-    setSavedSources(prev => prev.map(s =>
-      s.id === org.id ? { ...s, last_extracted_at: new Date().toISOString() } : s
-    ))
-  } catch {
-    setReextractResult({ orgId: org.id, error: 'Something went wrong.' })
+    setReextractingId(org.id)
+    setReextractResult(null)
+    try {
+      const response = await fetch('/api/extract-events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ websiteUrl: org.website_url, organization: org.name, isAggregator: org.is_aggregator, town: selectedTown }),
+      })
+      const data = await response.json()
+      setReextractResult({ orgId: org.id, ...data })
+      await supabase
+        .from('organizations')
+        .update({ last_extracted_at: new Date().toISOString() })
+        .eq('id', org.id)
+      setSavedSources(prev => prev.map(s =>
+        s.id === org.id ? { ...s, last_extracted_at: new Date().toISOString() } : s
+      ))
+    } catch {
+      setReextractResult({ orgId: org.id, error: 'Something went wrong.' })
+    }
+    setReextractingId(null)
   }
-  setReextractingId(null)
-}
 
   async function handleDeleteSource(org: any) {
     setDeletingId(org.id)
@@ -134,22 +159,18 @@ export default function ImportPage() {
         body: JSON.stringify({ id: org.id }),
       })
       const data = await response.json()
-      if (!data.error) {
-        await loadSavedSources()
-      }
+      if (!data.error) await loadSavedSources()
     } catch {
       console.error('Delete failed')
     }
     setDeletingId(null)
   }
-async function toggleAggregator(org: any) {
+
+  async function toggleAggregator(org: any) {
     const newVal = !org.is_aggregator
     const { error: orgError } = await supabase.from('organizations').update({ is_aggregator: newVal }).eq('id', org.id)
     const { error: evError } = await supabase.from('events').update({ is_aggregator: newVal }).eq('organization', org.name)
-    if (orgError || evError) {
-      alert('Failed to update aggregator status. Please try again.')
-      return
-    }
+    if (orgError || evError) { alert('Failed to update aggregator status.'); return }
     await loadSavedSources()
   }
 
@@ -165,7 +186,7 @@ async function toggleAggregator(org: any) {
       const response = await fetch('/api/import-ical', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feedUrl, organization: icalOrg }),
+        body: JSON.stringify({ feedUrl, organization: icalOrg, town: selectedTown }),
       })
       const data = await response.json()
       if (data.error) {
@@ -177,6 +198,7 @@ async function toggleAggregator(org: any) {
           url: feedUrl,
           last_synced: new Date().toISOString(),
           active: true,
+          town: selectedTown,
         }])
         loadSavedFeeds()
       }
@@ -189,27 +211,35 @@ async function toggleAggregator(org: any) {
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: 'sans-serif' }}>
 
- <AdminHeader
-  rightSlot={
-    <div style={{ display: 'flex', gap: '8px' }}>
-      <button onClick={() => router.push('/admin')}
-        style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer' }}>
-        ← Moderation Queue
-      </button>
-      <button onClick={() => router.push('/')}
-        style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer' }}>
-        Calendar
-      </button>
-    </div>
-  }
-/>
+      <AdminHeader
+        rightSlot={
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {isSuperAdmin && (
+              <select
+                value={selectedTown}
+                onChange={e => setSelectedTown(e.target.value)}
+                style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: 'rgba(255,255,255,0.9)', borderRadius: '6px', padding: '5px 10px', fontSize: '13px', fontFamily: 'sans-serif', cursor: 'pointer', outline: 'none' }}>
+                {allTowns.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            )}
+            <button onClick={() => router.push('/admin')}
+              style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer' }}>
+              ← Moderation Queue
+            </button>
+            <button onClick={() => router.push('/')}
+              style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer' }}>
+              Calendar
+            </button>
+          </div>
+        }
+      />
 
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '40px 24px 80px' }}>
         <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '28px', fontWeight: 900, color: '#1f2937', marginBottom: '6px' }}>
           Import Events
         </h1>
-        <p className="text-muted" style={{ fontSize: '14px', marginBottom: '28px' }}>
-          Add events from any org website or iCal feed. Imported events go to the pending queue for your review.
+        <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '28px' }}>
+          Importing for: <strong style={{ color: '#1f2937' }}>{selectedTown}</strong>
         </p>
 
         {/* Tabs */}
@@ -241,20 +271,15 @@ async function toggleAggregator(org: any) {
               <label style={labelStyle}>Events Page URL</label>
               <input style={inputStyle} placeholder="e.g. https://depotbookstore.com/events"
                 value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} />
-              <div className="text-muted" style={{ fontSize: '11px', marginTop: '5px' }}>
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '5px' }}>
                 Tip: link directly to their /events or /calendar page for best results
               </div>
             </div>
 
-
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-              <input
-                type="checkbox"
-                id="aggregator-check"
-                checked={aiIsAggregator}
+              <input type="checkbox" id="aggregator-check" checked={aiIsAggregator}
                 onChange={e => setAiIsAggregator(e.target.checked)}
-                style={{ width: '14px', height: '14px', cursor: 'pointer' }}
-              />
+                style={{ width: '14px', height: '14px', cursor: 'pointer' }} />
               <label htmlFor="aggregator-check" style={{ fontSize: '13px', color: '#6b7280', cursor: 'pointer' }}>
                 This is an aggregator (e.g. Patch, Chamber listing) — not the event organizer
               </label>
@@ -289,7 +314,7 @@ async function toggleAggregator(org: any) {
                     {aiResult.results?.map((r: any, i: number) => (
                       <div key={i} style={{ background: 'white', borderRadius: '8px', padding: '10px 14px', marginBottom: '6px', fontSize: '12px' }}>
                         <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: '2px' }}>{r.title}</div>
-                        <div className="text-muted">{r.date}{r.time ? ` · ${r.time}` : ''} &nbsp;·&nbsp; 🏷️ {r.categories || 'community'}</div>
+                        <div style={{ color: '#9ca3af' }}>{r.date}{r.time ? ` · ${r.time}` : ''} &nbsp;·&nbsp; 🏷️ {r.categories || 'community'}</div>
                       </div>
                     ))}
                     <button onClick={() => router.push('/admin')}
@@ -319,28 +344,23 @@ async function toggleAggregator(org: any) {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{org.name}</div>
-                        <div className="text-muted" style={{ fontSize: '11px', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{org.website_url}</div>
-{org.last_extracted_at && (
-  <div className="text-muted" style={{ fontSize: '11px', marginTop: '2px' }}>
-    Last extracted: {new Date(org.last_extracted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-  </div>
-)}
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{org.website_url}</div>
+                        {org.last_extracted_at && (
+                          <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+                            Last extracted: {new Date(org.last_extracted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </div>
+                        )}
                       </div>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button
-                          onClick={() => toggleAggregator(org)}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button onClick={() => toggleAggregator(org)}
                           style={{ background: 'none', border: 'none', fontSize: '11px', color: org.is_aggregator ? '#854F0B' : '#9ca3af', fontWeight: org.is_aggregator ? 600 : 400, cursor: 'pointer', padding: '0 4px', whiteSpace: 'nowrap' as const }}>
                           {org.is_aggregator ? 'Aggregator ✓' : 'Aggregator'}
                         </button>
-                        <button
-                          onClick={() => handleDeleteSource(org)}
-                          disabled={deletingId === org.id}
+                        <button onClick={() => handleDeleteSource(org)} disabled={deletingId === org.id}
                           style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '8px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: deletingId === org.id ? 'not-allowed' : 'pointer', opacity: deletingId === org.id ? 0.7 : 1, whiteSpace: 'nowrap' as const }}>
                           {deletingId === org.id ? 'Deleting…' : 'Delete'}
                         </button>
-                        <button
-                          onClick={() => handleReextract(org)}
-                          disabled={reextractingId === org.id}
+                        <button onClick={() => handleReextract(org)} disabled={reextractingId === org.id}
                           style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: reextractingId === org.id ? 'not-allowed' : 'pointer', opacity: reextractingId === org.id ? 0.7 : 1, whiteSpace: 'nowrap' as const }}>
                           {reextractingId === org.id ? 'Reading…' : 'Re-extract'}
                         </button>
@@ -348,11 +368,7 @@ async function toggleAggregator(org: any) {
                     </div>
                     {reextractResult?.orgId === org.id && (
                       <div style={{ marginTop: '10px', fontSize: '12px', color: reextractResult.error ? '#dc2626' : '#16803c', background: reextractResult.error ? '#fee2e2' : '#f0fdf4', borderRadius: '6px', padding: '8px 12px' }}>
-                        {reextractResult.error
-                          ? `⚠️ ${reextractResult.error}`
-                          : reextractResult.imported > 0
-                            ? `✅ Imported ${reextractResult.imported} new events!`
-                            : 'No new events found — all up to date!'}
+                        {reextractResult.error ? `⚠️ ${reextractResult.error}` : reextractResult.imported > 0 ? `✅ Imported ${reextractResult.imported} new events!` : 'No new events found — all up to date!'}
                       </div>
                     )}
                   </div>
@@ -379,7 +395,7 @@ async function toggleAggregator(org: any) {
               <label style={labelStyle}>iCal Feed URL</label>
               <input style={inputStyle} placeholder="https://calendar.google.com/calendar/ical/..."
                 value={feedUrl} onChange={e => setFeedUrl(e.target.value)} />
-              <div className="text-muted" style={{ fontSize: '11px', marginTop: '5px' }}>
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '5px' }}>
                 Google Calendar: Settings → your calendar → Integrate calendar → copy the iCal link
               </div>
             </div>
@@ -406,7 +422,7 @@ async function toggleAggregator(org: any) {
                 {icalResult.results?.map((r: any, i: number) => (
                   <div key={i} style={{ background: 'white', borderRadius: '8px', padding: '10px 14px', marginBottom: '6px', fontSize: '12px' }}>
                     <div style={{ fontWeight: 700, color: '#1f2937', marginBottom: '2px' }}>{r.title}</div>
-                    <div className="text-muted" style={{ }}>{r.date} &nbsp;·&nbsp; 🏷️ {r.categories} &nbsp;·&nbsp; {r.tags || 'no tags'}</div>
+                    <div style={{ color: '#9ca3af' }}>{r.date} &nbsp;·&nbsp; 🏷️ {r.categories} &nbsp;·&nbsp; {r.tags || 'no tags'}</div>
                   </div>
                 ))}
                 <button onClick={() => router.push('/admin')}
@@ -416,7 +432,6 @@ async function toggleAggregator(org: any) {
               </div>
             )}
 
-            {/* Active iCal Feeds */}
             {savedFeeds.length > 0 && (
               <div style={{ marginTop: '32px' }}>
                 <hr style={{ border: 'none', borderTop: '1.5px solid #e5e7eb', margin: '24px 0' }} />
@@ -428,7 +443,7 @@ async function toggleAggregator(org: any) {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{feed.organization}</div>
-                        <div className="text-muted" style={{ fontSize: '11px', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{feed.url}</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{feed.url}</div>
                         {feed.last_synced && (
                           <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
                             Last synced: {new Date(feed.last_synced).toLocaleDateString()}
@@ -436,20 +451,20 @@ async function toggleAggregator(org: any) {
                         )}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-  <button
-    onClick={async () => {
-      const newVal = !feed.is_aggregator
-      await supabase.from('ical_feeds').update({ is_aggregator: newVal }).eq('id', feed.id)
-      await supabase.from('events').update({ is_aggregator: newVal }).eq('organization', feed.organization)
-      setSavedFeeds(prev => prev.map(f => f.id === feed.id ? { ...f, is_aggregator: newVal } : f))
-    }}
-    style={{ background: 'none', border: 'none', fontSize: '11px', color: feed.is_aggregator ? '#854F0B' : '#9ca3af', fontWeight: feed.is_aggregator ? 600 : 400, cursor: 'pointer', padding: '0 4px', whiteSpace: 'nowrap' as const }}>
-    {feed.is_aggregator ? 'Aggregator ✓' : 'Aggregator'}
-  </button>
-  <div style={{ fontSize: '11px', background: '#f0fdf4', color: '#16803c', border: '1.5px solid #86efac', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
-    ✓ Active
-  </div>
-</div>
+                        <button
+                          onClick={async () => {
+                            const newVal = !feed.is_aggregator
+                            await supabase.from('ical_feeds').update({ is_aggregator: newVal }).eq('id', feed.id)
+                            await supabase.from('events').update({ is_aggregator: newVal }).eq('organization', feed.organization)
+                            setSavedFeeds(prev => prev.map(f => f.id === feed.id ? { ...f, is_aggregator: newVal } : f))
+                          }}
+                          style={{ background: 'none', border: 'none', fontSize: '11px', color: feed.is_aggregator ? '#854F0B' : '#9ca3af', fontWeight: feed.is_aggregator ? 600 : 400, cursor: 'pointer', padding: '0 4px', whiteSpace: 'nowrap' as const }}>
+                          {feed.is_aggregator ? 'Aggregator ✓' : 'Aggregator'}
+                        </button>
+                        <div style={{ fontSize: '11px', background: '#f0fdf4', color: '#16803c', border: '1.5px solid #86efac', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
+                          ✓ Active
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}

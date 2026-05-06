@@ -97,6 +97,10 @@ function HomeInner() {
   const router = useRouter()
   const params = useParams()
 const townSlug = (params?.town as string) || 'mill-valley'
+const townName = townSlug
+  .split('-')
+  .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+  .join(' ')
   const [events, setEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [catFilters, setCatFilters] = useState<string[]>([])
@@ -112,6 +116,8 @@ const townSlug = (params?.town as string) || 'mill-valley'
   const [showFilterDrawer, setShowFilterDrawer] = useState(false)
   const [hasSpeech, setHasSpeech] = useState(false)
   const [sessionLoaded, setSessionLoaded] = useState(false)
+const [townOpen, setTownOpen] = useState(false)
+const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
 
   // Restore filters from sessionStorage on back navigation
   useEffect(() => {
@@ -160,6 +166,14 @@ const townSlug = (params?.town as string) || 'mill-valley'
       setLoading(false)
     }
     loadEvents()
+    async function loadTowns() {
+      const { data } = await supabase
+        .from('towns')
+        .select('slug, name')
+        .order('name')
+      if (data) setTowns(data)
+    }
+    loadTowns()
     async function loadOrgList() {
       const { data } = await supabase
         .from('events')
@@ -175,6 +189,14 @@ const townSlug = (params?.town as string) || 'mill-valley'
     }
     loadOrgList()
   }, [])
+  useEffect(() => {
+  function handleClickOutside(e: MouseEvent) {
+    const target = e.target as HTMLElement
+    if (!target.closest('.town-switcher')) setTownOpen(false)
+  }
+  document.addEventListener('mousedown', handleClickOutside)
+  return () => document.removeEventListener('mousedown', handleClickOutside)
+}, [])
 
   const {
     todayStr, tomorrowStr, satStr, sunStr,
@@ -308,10 +330,24 @@ const townSlug = (params?.town as string) || 'mill-valley'
       <div style={{ background: '#f2f3f5', padding: '20px 20px 18px', textAlign: 'center' }}>
         <div style={{ fontSize: '28px', fontWeight: 400, color: '#1a2530', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
           What's happening in
-          <span style={{ border: '1.5px solid #c8d0d8', borderRadius: '10px', padding: '4px 16px', fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: '28px', color: '#1a3d2b', background: '#fff', display: 'inline-flex', alignItems: 'center', gap: '7px' }}>
-            Mill Valley
-            <span style={{ fontSize: '13px', color: '#888', fontStyle: 'normal' }}>&#8964;</span>
-          </span>
+          <div className="town-switcher" style={{ position: 'relative', display: 'inline-block' }}>
+            <span onClick={() => setTownOpen(!townOpen)}
+              style={{ border: '1.5px solid #c8d0d8', borderRadius: '10px', padding: '4px 16px', fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: '28px', color: '#1a3d2b', background: '#fff', display: 'inline-flex', alignItems: 'center', gap: '7px', cursor: 'pointer' }}>
+              {townName}
+              <span style={{ fontSize: '13px', color: '#888', fontStyle: 'normal' }}>&#8964;</span>
+            </span>
+            {townOpen && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, minWidth: '200px', overflow: 'hidden' }}>
+                {towns.map(t => (
+                  <div key={t.slug}
+                    onClick={() => { router.push(`/${t.slug}`); setTownOpen(false) }}
+                    style={{ padding: '11px 16px', fontSize: '15px', fontWeight: t.slug === townSlug ? 600 : 400, color: t.slug === townSlug ? '#1a3d2b' : '#374151', cursor: 'pointer', borderBottom: '1px solid #f3f4f6', background: t.slug === townSlug ? '#f0fdf4' : 'white' }}>
+                    {t.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Search */}

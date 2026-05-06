@@ -65,7 +65,7 @@ async function detectIcalFeed(url: string): Promise<string | null> {
  
 export async function POST(request: NextRequest) {
   try {
-    const { websiteUrl, organization, isAggregator: isAggregatorParam } = await request.json()
+    const { websiteUrl, organization, isAggregator: isAggregatorParam, town } = await request.json()
  
     if (!websiteUrl || !organization) {
       return NextResponse.json({ error: 'websiteUrl and organization required' }, { status: 400 })
@@ -126,6 +126,7 @@ export async function POST(request: NextRequest) {
             status: 'pending',
             is_aggregator: isAggregator,
             extracted_organizer: null,
+            town: town || 'Mill Valley',
           }])
  
           if (!error) {
@@ -295,6 +296,7 @@ Rules:
         status: 'pending',
         is_aggregator: isAggregator,
         extracted_organizer: isAggregator ? (ev.extracted_organizer || null) : null,
+        town: town || 'Mill Valley',
       }])
  
       if (!error) {

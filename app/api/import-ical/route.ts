@@ -155,7 +155,7 @@ TAGS: tag1,tag2`
 
 export async function POST(request: NextRequest) {
   try {
-    const { feedUrl, organization } = await request.json()
+    const { feedUrl, organization, town } = await request.json()
     
     if (!feedUrl || !organization) {
       return NextResponse.json({ error: 'feedUrl and organization required' }, { status: 400 })
@@ -241,6 +241,7 @@ const displayName = linkedOrg ? linkedOrg.name : organization
   image_url: ev.image || null,
 status: 'pending',
   ical_uid: ev.uid || null,
+  town: town || 'Mill Valley',
 }])
         
         if (!error) {
