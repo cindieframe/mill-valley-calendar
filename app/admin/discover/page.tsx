@@ -2,9 +2,9 @@
 
 import { useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '../../supabase'
 import { AdminHeader } from '../../components/Header'
 import { useSearchParams } from 'next/navigation'
-
 
 type OrgResult = {
   name: string
@@ -17,11 +17,11 @@ type OrgResult = {
   feed_url: string | null
   already_imported: boolean
   feed_already_connected: boolean
-  // UI state per org
   selected: boolean
   status: 'idle' | 'connecting' | 'extracting' | 'done' | 'error'
   statusMessage: string
   dismissed: boolean
+  confirmingDismiss: boolean
 }
 
 function DiscoverOrgsInner() {
@@ -34,6 +34,8 @@ function DiscoverOrgsInner() {
   const [orgs, setOrgs] = useState<OrgResult[]>([])
   const [summary, setSummary] = useState<{ total_found: number; town: string; orgs_with_events: number } | null>(null)
   const [error, setError] = useState('')
+  const [blockedOrgs, setBlockedOrgs] = useState<any[]>([])
+  const [showBlocked, setShowBlocked] = useState(false)
 
   async function handleDiscover() {
     setLoading(true)
@@ -41,6 +43,12 @@ function DiscoverOrgsInner() {
     setOrgs([])
     setSummary(null)
     try {
+      const { data: blocked } = await supabase
+        .from('blocked_orgs')
+        .select('place_id')
+        .eq('town', town)
+      const blockedIds = new Set((blocked || []).map((b: any) => b.place_id))
+
       const res = await fetch('/api/discover-orgs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,13 +60,16 @@ function DiscoverOrgsInner() {
       } else {
         setSummary({ total_found: data.total_found, town: data.town, orgs_with_events: data.orgs_with_events })
         setOrgs(
-          data.orgs.map((o: any) => ({
-            ...o,
-            selected: !o.already_imported && !o.feed_already_connected,
-            status: 'idle',
-            statusMessage: '',
-            dismissed: false,
-          }))
+          data.orgs
+            .filter((o: any) => !blockedIds.has(o.place_id))
+            .map((o: any) => ({
+              ...o,
+              selected: !o.already_imported && !o.feed_already_connected,
+              status: 'idle',
+              statusMessage: '',
+              dismissed: false,
+              confirmingDismiss: false,
+            }))
         )
       }
     } catch {
@@ -77,9 +88,49 @@ function DiscoverOrgsInner() {
     setOrgs(prev => prev.map(o => names.has(o.name) ? { ...o, selected: !allSelected } : o))
   }
 
-  function dismissOrg(index: number) {
-    setOrgs(prev => prev.map((o, i) => i === index ? { ...o, dismissed: true } : o))
+  function startDismiss(index: number) {
+    setOrgs(prev => prev.map((o, i) => i === index ? { ...o, confirmingDismiss: true } : o))
   }
+
+  function cancelDismiss(index: number) {
+    setOrgs(prev => prev.map((o, i) => i === index ? { ...o, confirmingDismiss: false } : o))
+  }
+
+  function dismissOrg(index: number) {
+    setOrgs(prev => prev.map((o, i) => i === index ? { ...o, dismissed: true, confirmingDismiss: false } : o))
+  }
+
+  async function blockOrg(index: number) {
+  const org = orgs[index]
+  const res = await fetch('/api/block-org', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ place_id: org.place_id, name: org.name, town, website: org.website })
+  })
+  const data = await res.json()
+  if (data.error) { alert('Block failed: ' + data.error); return }
+  setOrgs(prev => prev.map((o, i) => i === index ? { ...o, dismissed: true, confirmingDismiss: false } : o))
+}
+
+async function unblockOrg(id: string) {
+  await fetch('/api/unblock-org', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id })
+  })
+  setBlockedOrgs(prev => prev.filter(b => b.id !== id))
+}
+
+  async function loadBlockedOrgs() {
+    const { data } = await supabase
+      .from('blocked_orgs')
+      .select('*')
+      .eq('town', town)
+      .order('name')
+    if (data) setBlockedOrgs(data)
+  }
+
+
 
   function setOrgStatus(index: number, status: OrgResult['status'], message: string) {
     setOrgs(prev => prev.map((o, i) => i === index ? { ...o, status, statusMessage: message } : o))
@@ -93,7 +144,7 @@ function DiscoverOrgsInner() {
       const res = await fetch('/api/import-ical', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({ feedUrl: org.feed_url, organization: org.name, town })
+        body: JSON.stringify({ feedUrl: org.feed_url, organization: org.name, town })
       })
       const data = await res.json()
       if (data.error) {
@@ -106,7 +157,7 @@ function DiscoverOrgsInner() {
     }
   }
 
-async function extractWithAI(index: number) {
+  async function extractWithAI(index: number) {
     const org = orgs[index]
     const urlToUse = org.extraction_url || org.website
     if (!urlToUse) return
@@ -123,7 +174,6 @@ async function extractWithAI(index: number) {
       } else if (data.imported === 0 && data.skipped === 0) {
         setOrgStatus(index, 'error', data.message || 'No upcoming events found on that page.')
       } else {
-        // Save org to organizations table so it appears in Import Events for future re-extraction
         await fetch('/api/save-org', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -169,10 +219,8 @@ async function extractWithAI(index: number) {
       }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
 
-          {/* Checkbox — only for actionable orgs */}
           {!org.already_imported && !org.feed_already_connected && (
-            <div
-              onClick={() => toggleSelect(index)}
+            <div onClick={() => toggleSelect(index)}
               style={{
                 width: '16px', height: '16px', borderRadius: '4px', flexShrink: 0,
                 marginTop: '2px', cursor: 'pointer', display: 'flex',
@@ -184,7 +232,6 @@ async function extractWithAI(index: number) {
             </div>
           )}
 
-          {/* Info */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '14px', fontWeight: 500, color: '#1f2937', marginBottom: '2px' }}>
               {org.name}
@@ -195,6 +242,11 @@ async function extractWithAI(index: number) {
                 style={{ fontSize: '11px', color: '#3a7d44', textDecoration: 'none' }}>
                 {org.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
               </a>
+            )}
+            {org.extraction_url && org.extraction_url !== org.website && (
+              <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
+                📅 Events page: {org.extraction_url.replace(/^https?:\/\//, '')}
+              </div>
             )}
             {org.reason && (
               <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '3px', fontStyle: 'italic' }}>
@@ -207,7 +259,6 @@ async function extractWithAI(index: number) {
               </div>
             )}
 
-            {/* Inline result */}
             {(isDone || isError) && (
               <div style={{
                 marginTop: '8px', fontSize: '12px', padding: '6px 10px', borderRadius: '6px',
@@ -217,11 +268,27 @@ async function extractWithAI(index: number) {
                 {isDone ? '✓ ' : '⚠ '}{org.statusMessage}
               </div>
             )}
+
+            {org.confirmingDismiss && (
+              <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', color: '#6b7280' }}>Remove this org?</span>
+                <button onClick={() => dismissOrg(index)}
+                  style={{ ...btn, background: '#f3f4f6', color: '#374151', padding: '4px 10px' }}>
+                  Just this session
+                </button>
+                <button onClick={() => blockOrg(index)}
+                  style={{ ...btn, background: '#dc2626', color: 'white', padding: '4px 10px' }}>
+                  Block permanently
+                </button>
+                <button onClick={() => cancelDismiss(index)}
+                  style={{ ...btn, background: 'transparent', color: '#9ca3af', padding: '4px 6px' }}>
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Right side: badge + action + delete */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
-
             {org.already_imported && (
               <span style={{ fontSize: '10px', padding: '3px 8px', borderRadius: '999px', background: '#f3f4f6', color: '#6b7280' }}>
                 Already in Import
@@ -243,33 +310,27 @@ async function extractWithAI(index: number) {
               </span>
             )}
 
-            {/* Action button */}
             {!org.already_imported && !org.feed_already_connected && !isDone && (
               org.feed_url ? (
-                <button
-                  onClick={() => connectFeed(index)}
-                  disabled={isWorking}
+                <button onClick={() => connectFeed(index)} disabled={isWorking}
                   style={{ ...btn, background: isWorking ? '#9ca3af' : '#1a3d2b', color: 'white' }}>
                   {org.status === 'connecting' ? 'Connecting…' : 'Connect Feed'}
                 </button>
               ) : (
-                <button
-                  onClick={() => extractWithAI(index)}
-                  disabled={isWorking}
+                <button onClick={() => extractWithAI(index)} disabled={isWorking}
                   style={{ ...btn, background: 'white', color: '#C9952A', border: '1.5px solid #C9952A' }}>
                   {org.status === 'extracting' ? 'Extracting…' : 'Extract with AI'}
                 </button>
               )
             )}
 
-            {/* Delete */}
-            <button
-              onClick={() => dismissOrg(index)}
-              style={{ ...btn, background: 'transparent', color: '#9ca3af', border: 'none', padding: '2px 4px', fontSize: '13px' }}
-              title="Remove from list">
-              ✕
-            </button>
-
+            {!org.confirmingDismiss && (
+              <button onClick={() => startDismiss(index)}
+                style={{ ...btn, background: 'transparent', color: '#9ca3af', border: 'none', padding: '2px 4px', fontSize: '13px' }}
+                title="Remove from list">
+                ✕
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -295,19 +356,18 @@ async function extractWithAI(index: number) {
           Enter a town to discover local organizations that likely host community events.
         </p>
 
-        {/* Input */}
         <div style={{ background: 'white', borderRadius: '12px', padding: '24px', marginBottom: '24px', border: '1.5px solid #e5e7eb', display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
           <div style={{ flex: 2 }}>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
               Town
             </label>
-<input
-  value={town}
-  onChange={e => !lockedTown && setTown(e.target.value)}
-  readOnly={!!lockedTown}
-  style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 14px', fontSize: '14px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', background: lockedTown ? '#f9fafb' : 'white', cursor: lockedTown ? 'default' : 'text' }}
-  placeholder="e.g. Mill Valley"
-/>
+            <input
+              value={town}
+              onChange={e => !lockedTown && setTown(e.target.value)}
+              readOnly={!!lockedTown}
+              style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 14px', fontSize: '14px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', background: lockedTown ? '#f9fafb' : 'white', cursor: lockedTown ? 'default' : 'text' }}
+              placeholder="e.g. Mill Valley"
+            />
           </div>
           <div style={{ flex: 1 }}>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#374151', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
@@ -352,13 +412,11 @@ async function extractWithAI(index: number) {
               {withoutFeed.length > 0 && ` · AI extraction available for ${withoutFeed.length}`}
             </div>
 
-            {/* iCal feed section */}
             {withFeed.length > 0 && (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div
-                      onClick={() => toggleSelectAll(withFeed)}
+                    <div onClick={() => toggleSelectAll(withFeed)}
                       style={{
                         width: '14px', height: '14px', borderRadius: '3px', cursor: 'pointer',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -371,8 +429,7 @@ async function extractWithAI(index: number) {
                       iCal feed found ({withFeed.length})
                     </span>
                   </div>
-                  <button
-                    onClick={connectAllFeeds}
+                  <button onClick={connectAllFeeds}
                     style={{ ...btn, background: '#1a3d2b', color: 'white', padding: '6px 14px', fontSize: '12px' }}>
                     Connect all selected feeds
                   </button>
@@ -385,12 +442,10 @@ async function extractWithAI(index: number) {
               </>
             )}
 
-            {/* No feed section */}
             {withoutFeed.length > 0 && (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: `${withFeed.length > 0 ? '24px' : '0'} 0 10px` }}>
-                  <div
-                    onClick={() => toggleSelectAll(withoutFeed)}
+                  <div onClick={() => toggleSelectAll(withoutFeed)}
                     style={{
                       width: '14px', height: '14px', borderRadius: '3px', cursor: 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -411,7 +466,6 @@ async function extractWithAI(index: number) {
               </>
             )}
 
-            {/* Already imported section */}
             {alreadyImported.length > 0 && (
               <>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.8px', margin: '24px 0 10px' }}>
@@ -426,10 +480,42 @@ async function extractWithAI(index: number) {
             )}
           </div>
         )}
+
+        {/* Blocked Orgs Manager */}
+        <div style={{ marginTop: '48px', borderTop: '1.5px solid #e5e7eb', paddingTop: '24px' }}>
+          <button
+            onClick={() => { setShowBlocked(!showBlocked); if (!showBlocked) loadBlockedOrgs() }}
+            style={{ background: 'none', border: 'none', fontSize: '12px', color: '#9ca3af', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+            {showBlocked ? '▲ Hide' : '▼ Show'} blocked orgs for {town}
+          </button>
+          {showBlocked && (
+            <div style={{ marginTop: '12px' }}>
+              {blockedOrgs.length === 0 ? (
+                <div style={{ fontSize: '13px', color: '#9ca3af' }}>No blocked orgs for {town}.</div>
+              ) : (
+                blockedOrgs.map(b => (
+                  <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 14px', marginBottom: '6px' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 500, color: '#1f2937' }}>{b.name}</div>
+                      {b.website && <div style={{ fontSize: '11px', color: '#9ca3af' }}>{b.website}</div>}
+                    </div>
+                    <button
+                      onClick={() => unblockOrg(b.id)}
+                      style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '5px 12px', borderRadius: '999px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      Unblock
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   )
 }
+
 export default function DiscoverOrgs() {
   return (
     <Suspense fallback={<div style={{ padding: '40px', fontFamily: 'sans-serif' }}>Loading…</div>}>
