@@ -43,11 +43,13 @@ function DiscoverOrgsInner() {
     setOrgs([])
     setSummary(null)
     try {
-      const { data: blocked } = await supabase
-        .from('blocked_orgs')
-        .select('place_id')
-        .eq('town', town)
-      const blockedIds = new Set((blocked || []).map((b: any) => b.place_id))
+      const blockedRes = await fetch('/api/get-blocked-orgs', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ town })
+})
+const blockedData = await blockedRes.json()
+const blockedIds = new Set((blockedData.data || []).map((b: any) => b.place_id))
 
       const res = await fetch('/api/discover-orgs', {
         method: 'POST',
