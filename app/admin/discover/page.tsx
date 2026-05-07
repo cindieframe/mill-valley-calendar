@@ -121,14 +121,15 @@ async function unblockOrg(id: string) {
   setBlockedOrgs(prev => prev.filter(b => b.id !== id))
 }
 
-  async function loadBlockedOrgs() {
-    const { data } = await supabase
-      .from('blocked_orgs')
-      .select('*')
-      .eq('town', town)
-      .order('name')
-    if (data) setBlockedOrgs(data)
-  }
+async function loadBlockedOrgs() {
+  const res = await fetch('/api/get-blocked-orgs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ town })
+  })
+  const { data } = await res.json()
+  if (data) setBlockedOrgs(data)
+}
 
 
 
