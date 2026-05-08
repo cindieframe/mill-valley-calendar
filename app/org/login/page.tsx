@@ -1,17 +1,20 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../../supabase'
 import Header from '../../components/Header'
 
-export default function OrgLogin() {
+function OrgLoginInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+
+  const town = searchParams.get('town') || ''
 
   async function handleLogin() {
     if (!email || !password) {
@@ -44,13 +47,13 @@ export default function OrgLogin() {
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf8', fontFamily: 'sans-serif' }}>
       <Header
-  rightSlot={
-    <button onClick={() => router.push('/')}
-      style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer' }}>
-      ← Calendar
-    </button>
-  }
-/>
+        rightSlot={
+          <button onClick={() => router.push('/')}
+            style={{ background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer' }}>
+            ← Calendar
+          </button>
+        }
+      />
       <div style={{ maxWidth: '400px', margin: '0 auto', padding: '80px 24px' }}>
         <h1 style={{ fontFamily: 'Georgia,serif', fontSize: '28px', fontWeight: 900, color: '#1f2937', marginBottom: '6px' }}>
           Organization Login
@@ -85,12 +88,21 @@ export default function OrgLogin() {
         </button>
         <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '13px', color: '#9ca3af' }}>
           Don't have an account?{' '}
-          <span onClick={() => router.push('/org/signup')}
+          <span
+            onClick={() => router.push(town ? `/org/signup?town=${encodeURIComponent(town)}` : '/org/signup')}
             style={{ color: '#1a3d2b', fontWeight: 700, cursor: 'pointer' }}>
             Sign up
           </span>
         </p>
       </div>
     </div>
+  )
+}
+
+export default function OrgLogin() {
+  return (
+    <Suspense>
+      <OrgLoginInner />
+    </Suspense>
   )
 }

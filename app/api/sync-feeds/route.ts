@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   // Load all active iCal feeds
   const { data: feeds, error } = await supabase
     .from('ical_feeds')
-    .select('id, organization, url')
+  .select('id, organization, url, town')
     .eq('active', true)
 
   if (error || !feeds) {
@@ -41,10 +41,11 @@ export async function GET(request: NextRequest) {
       const response = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/import-ical`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          feedUrl: feed.url,
-          organization: orgNameToUse,
-        })
+       body: JSON.stringify({
+  feedUrl: feed.url,
+  organization: orgNameToUse,
+  town: feed.town || 'Mill Valley',
+})
       })
       const data = await response.json()
 

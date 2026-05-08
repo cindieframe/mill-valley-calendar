@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../../supabase'
 import Header from '../../components/Header'
 
-export default function OrgSignup() {
+function OrgSignupInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -17,10 +18,29 @@ export default function OrgSignup() {
   const [showClaimWarning, setShowClaimWarning] = useState<string>('')
   const [logoUrl, setLogoUrl] = useState('')
   const [logoUploading, setLogoUploading] = useState(false)
+  const [towns, setTowns] = useState<string[]>([])
+  const [selectedTown, setSelectedTown] = useState('')
   const [form, setForm] = useState({
     name: '', email: '', password: '', confirmPassword: '',
     description: '', website: '', phone: '', instagram: '', facebook: '',
   })
+
+  useEffect(() => {
+    async function loadTowns() {
+      const { data } = await supabase
+        .from('towns')
+        .select('name')
+        .eq('active', true)
+        .order('name')
+      if (data) {
+        const names = data.map((t: any) => t.name)
+        setTowns(names)
+        const fromUrl = searchParams.get('town')
+        if (fromUrl && names.includes(fromUrl)) setSelectedTown(fromUrl)
+      }
+    }
+    loadTowns()
+  }, [])
 
   function set(field: string, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -72,6 +92,10 @@ export default function OrgSignup() {
   async function handleSignup() {
     if (!form.name || !form.email || !form.password) {
       setError('Organization name, email, and password are required.')
+      return
+    }
+    if (!selectedTown) {
+      setError('Please select your town.')
       return
     }
     if (form.password !== form.confirmPassword) {
@@ -143,6 +167,7 @@ export default function OrgSignup() {
         instagram: form.instagram || '',
         facebook: form.facebook || '',
         logo_url: logoUrl || null,
+        town: selectedTown,
       }])
 
     if (orgError) {
@@ -241,7 +266,7 @@ export default function OrgSignup() {
           Create Organization Account
         </h1>
         <p className="text-muted" style={{ fontSize: '14px', marginBottom: '32px' }}>
-          List your organization's events on the Mill Valley community calendar.
+          List your organization's events on the Townstir community calendar.
         </p>
 
         {error && (
@@ -249,6 +274,24 @@ export default function OrgSignup() {
             ⚠️ {error}
           </div>
         )}
+
+        <label style={labelStyle}>Your Town *</label>
+        <select
+          style={{
+            ...inputStyle,
+            appearance: 'none',
+            backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\'%3E%3Cpath fill=\'%236b7280\' d=\'M7 10l5 5 5-5z\'/%3E%3C/svg%3E")',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'right 14px center',
+            cursor: 'pointer',
+          }}
+          value={selectedTown}
+          onChange={e => setSelectedTown(e.target.value)}>
+          <option value=''>Select your town…</option>
+          {towns.map(t => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
 
         <label style={labelStyle}>Organization Name *</label>
         <input style={inputStyle} placeholder="e.g. Mill Valley Library"
@@ -402,5 +445,13 @@ export default function OrgSignup() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function OrgSignup() {
+  return (
+    <Suspense>
+      <OrgSignupInner />
+    </Suspense>
   )
 }

@@ -47,7 +47,7 @@ const TAG_CARD: Record<string, { bg: string; color: string; label: string }> = {
   family:   { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Family-friendly' },
   wellness: { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Wellness' },
   reg:      { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Reg. Required' },
-music:    { bg: 'rgba(100,80,200,0.06)', color: '#4a3fa0', label: 'Live Music' },
+  music:    { bg: 'rgba(100,80,200,0.06)', color: '#4a3fa0', label: 'Live Music' },
   volunteer: { bg: 'rgba(30,80,160,0.05)', color: '#1a4f8a', label: 'Volunteer' },
 }
 
@@ -63,8 +63,8 @@ function getDateStrings() {
   tomorrow.setDate(tomorrow.getDate() + 1)
   const day = today.getDay()
   const satOffset = day === 0 ? -1 : (6 - day + 7) % 7
-const sat = new Date(today); sat.setDate(today.getDate() + satOffset)
-const sun = new Date(today); sun.setDate(today.getDate() + satOffset + 1)
+  const sat = new Date(today); sat.setDate(today.getDate() + satOffset)
+  const sun = new Date(today); sun.setDate(today.getDate() + satOffset + 1)
   return {
     todayStr,
     tomorrowStr: tomorrow.toISOString().split('T')[0],
@@ -96,11 +96,11 @@ function loadSession() {
 function HomeInner() {
   const router = useRouter()
   const params = useParams()
-const townSlug = (params?.town as string) || 'mill-valley'
-const townName = townSlug
-  .split('-')
-  .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
-  .join(' ')
+  const townSlug = (params?.town as string) || 'mill-valley'
+  const townName = townSlug
+    .split('-')
+    .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
   const [events, setEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [catFilters, setCatFilters] = useState<string[]>([])
@@ -116,8 +116,8 @@ const townName = townSlug
   const [showFilterDrawer, setShowFilterDrawer] = useState(false)
   const [hasSpeech, setHasSpeech] = useState(false)
   const [sessionLoaded, setSessionLoaded] = useState(false)
-const [townOpen, setTownOpen] = useState(false)
-const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
+  const [townOpen, setTownOpen] = useState(false)
+  const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
 
   // Restore filters from sessionStorage on back navigation
   useEffect(() => {
@@ -125,7 +125,6 @@ const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
       router.push('/auth/confirm' + window.location.hash)
       return
     }
-    // Only restore if navigating back (session exists and was set this session)
     const saved = loadSession()
     if (saved && saved._navigatedAway) {
       setCatFilters(saved.catFilters || [])
@@ -136,7 +135,6 @@ const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
       setFromDate(saved.fromDate ? new Date(saved.fromDate) : null)
       setToDate(saved.toDate ? new Date(saved.toDate) : null)
       setAiFilters(saved.aiFilters || null)
-      // Clear the flag so a fresh load won't restore
       saveSession({ ...saved, _navigatedAway: false })
     }
     setSessionLoaded(true)
@@ -189,14 +187,15 @@ const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
     }
     loadOrgList()
   }, [])
+
   useEffect(() => {
-  function handleClickOutside(e: MouseEvent) {
-    const target = e.target as HTMLElement
-    if (!target.closest('.town-switcher')) setTownOpen(false)
-  }
-  document.addEventListener('mousedown', handleClickOutside)
-  return () => document.removeEventListener('mousedown', handleClickOutside)
-}, [])
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      if (!target.closest('.town-switcher')) setTownOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const {
     todayStr, tomorrowStr, satStr, sunStr,
@@ -244,7 +243,6 @@ const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
   const sortedDates = Object.keys(grouped).sort()
 
   function navigateToEvent(id: string) {
-    // Mark that user navigated away so filters restore on back
     const saved = loadSession()
     if (saved) saveSession({ ...saved, _navigatedAway: true })
     router.push(`/event/${id}`)
@@ -315,7 +313,7 @@ const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
       <Header
         rightSlot={
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <a href="/org/login" style={{ color: 'rgba(255,255,255,0.65)', fontSize: '13px', textDecoration: 'none' }}>
+            <a href={`/org/login?town=${encodeURIComponent(townName)}`} style={{ color: 'rgba(255,255,255,0.65)', fontSize: '13px', textDecoration: 'none' }}>
               Org Login
             </a>
             <button onClick={() => router.push('/post-event')}

@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
         age: row.age || '',
         website: row.website || '',
         status: 'pending',
-        town: town || 'mill-valley',
+        town: town || 'Mill Valley',
       }])
 
       if (!error) imported++
