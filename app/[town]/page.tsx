@@ -8,7 +8,7 @@ import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import Header from '../components/Header'
 import { Suspense } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 
 const CATS: Record<string, { label: string }> = {
   outdoors:  { label: 'Outdoors, Sports & Movement' },
@@ -43,12 +43,12 @@ const CAT_LABELS: Record<string, string> = {
 }
 
 const TAG_CARD: Record<string, { bg: string; color: string; label: string }> = {
-  free:     { bg: 'rgba(180,130,0,0.06)',  color: '#7a5500', label: 'Free' },
-  family:   { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Family-friendly' },
-  wellness: { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Wellness' },
-  reg:      { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Reg. Required' },
-  music:    { bg: 'rgba(100,80,200,0.06)', color: '#4a3fa0', label: 'Live Music' },
-  volunteer: { bg: 'rgba(30,80,160,0.05)', color: '#1a4f8a', label: 'Volunteer' },
+  free:      { bg: 'rgba(180,130,0,0.06)',  color: '#7a5500', label: 'Free' },
+  family:    { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Family-friendly' },
+  wellness:  { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Wellness' },
+  reg:       { bg: 'rgba(0,0,0,0.04)',      color: '#555',    label: 'Reg. Required' },
+  music:     { bg: 'rgba(100,80,200,0.06)', color: '#4a3fa0', label: 'Live Music' },
+  volunteer: { bg: 'rgba(30,80,160,0.05)',  color: '#1a4f8a', label: 'Volunteer' },
 }
 
 function fmt(d: Date) {
@@ -96,11 +96,13 @@ function loadSession() {
 function HomeInner() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const townSlug = (params?.town as string) || 'mill-valley'
   const townName = townSlug
     .split('-')
     .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
+
   const [events, setEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [catFilters, setCatFilters] = useState<string[]>([])
@@ -119,12 +121,59 @@ function HomeInner() {
   const [townOpen, setTownOpen] = useState(false)
   const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
 
-  // Restore filters from sessionStorage on back navigation
+  const {
+    todayStr, tomorrowStr, satStr, sunStr,
+    todayLabel, tomorrowLabel, satLabel, sunLabel,
+  } = getDateStrings()
+
+  // On mount: apply URL params from homepage AI search, or restore session on back nav
   useEffect(() => {
     if (window.location.hash?.includes('access_token')) {
       router.push('/auth/confirm' + window.location.hash)
       return
     }
+
+    const urlCats     = searchParams.get('cats')
+    const urlTags     = searchParams.get('tags')
+    const urlDateFrom = searchParams.get('dateFrom')
+    const urlDateTo   = searchParams.get('dateTo')
+    const urlKeyword  = searchParams.get('keyword')
+    const urlSearch   = searchParams.get('search')
+
+    if (urlSearch || urlCats || urlTags || urlDateFrom || urlKeyword) {
+      if (urlCats) setCatFilters(urlCats.split(',').filter(Boolean))
+      if (urlTags) setTagFilters(urlTags.split(',').filter(Boolean))
+      if (urlSearch) setSearch(urlSearch)
+
+      const reconstructed: any = {
+        cats:     urlCats    ? urlCats.split(',').filter(Boolean) : [],
+        tags:     urlTags    ? urlTags.split(',').filter(Boolean) : [],
+        dateFrom: urlDateFrom || null,
+        dateTo:   urlDateTo  || null,
+        keyword:  urlKeyword || '',
+      }
+      setAiFilters(reconstructed)
+
+      if (urlDateFrom) {
+        const isToday    = urlDateFrom === todayStr    && (!urlDateTo || urlDateTo === todayStr)
+        const isTomorrow = urlDateFrom === tomorrowStr && (!urlDateTo || urlDateTo === tomorrowStr)
+        const isWeekend  = urlDateFrom === satStr      && urlDateTo === sunStr
+        if (isToday)         setCurrentView('today')
+        else if (isTomorrow) setCurrentView('tomorrow')
+        else if (isWeekend)  setCurrentView('weekend')
+        else {
+          setCurrentView('pick')
+          setFromDate(new Date(urlDateFrom + 'T12:00:00'))
+          setToDate(urlDateTo ? new Date(urlDateTo + 'T12:00:00') : null)
+        }
+      } else {
+        setCurrentView('all')
+      }
+
+      setSessionLoaded(true)
+      return
+    }
+
     const saved = loadSession()
     if (saved && saved._navigatedAway) {
       setCatFilters(saved.catFilters || [])
@@ -140,7 +189,6 @@ function HomeInner() {
     setSessionLoaded(true)
   }, [])
 
-  // Save filters to sessionStorage whenever they change
   useEffect(() => {
     if (!sessionLoaded) return
     saveSession({
@@ -165,18 +213,12 @@ function HomeInner() {
     }
     loadEvents()
     async function loadTowns() {
-      const { data } = await supabase
-        .from('towns')
-        .select('slug, name')
-        .order('name')
+      const { data } = await supabase.from('towns').select('slug, name').order('name')
       if (data) setTowns(data)
     }
     loadTowns()
     async function loadOrgList() {
-      const { data } = await supabase
-        .from('events')
-        .select('organization')
-        .eq('status', 'approved')
+      const { data } = await supabase.from('events').select('organization').eq('status', 'approved')
       if (data) {
         const counts: Record<string, number> = {}
         data.forEach((e: any) => {
@@ -196,11 +238,6 @@ function HomeInner() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
-
-  const {
-    todayStr, tomorrowStr, satStr, sunStr,
-    todayLabel, tomorrowLabel, satLabel, sunLabel,
-  } = getDateStrings()
 
   const filtered = events.filter(ev => {
     if (currentView === 'today'    && ev.date !== todayStr) return false
@@ -222,7 +259,6 @@ function HomeInner() {
       !ev.location?.toLowerCase().includes(search.toLowerCase()) &&
       !ev.description?.toLowerCase().includes(search.toLowerCase())
     ) return false
-
     if (aiFilters && aiFilters.keyword) {
       const kw = aiFilters.keyword.toLowerCase()
       const musicTerms = ['music', 'musical', 'concert', 'band', 'jazz', 'folk', 'rock', 'acoustic', 'singer', 'song', 'perform', 'ensemble', 'orchestra', 'symphony', 'choir', 'violin', 'guitar', 'flute', 'rhythm', 'melody', 'tune', 'gong', 'drum']
@@ -231,7 +267,6 @@ function HomeInner() {
       const haystack = `${ev.title} ${ev.description} ${ev.location}`.toLowerCase()
       if (!searchTerms.some(term => haystack.includes(term))) return false
     }
-
     return true
   })
 
@@ -309,7 +344,6 @@ function HomeInner() {
   return (
     <div style={{ fontFamily: "'Helvetica Neue', Arial, sans-serif", minHeight: '100vh', background: '#f2f3f5' }}>
 
-      {/* Nav */}
       <Header
         rightSlot={
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -324,7 +358,6 @@ function HomeInner() {
         }
       />
 
-      {/* Hero */}
       <div style={{ background: '#f2f3f5', padding: '20px 20px 18px', textAlign: 'center' }}>
         <div style={{ fontSize: '28px', fontWeight: 400, color: '#1a2530', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
           What's happening in
@@ -348,7 +381,6 @@ function HomeInner() {
           </div>
         </div>
 
-        {/* Search */}
         <div style={{ maxWidth: '540px', margin: '0 auto 18px', background: '#fff', border: '1px solid #d0d6db', borderRadius: '999px', display: 'flex', alignItems: 'center', padding: '6px 6px 6px 22px' }}>
           <input
             type="text"
@@ -358,7 +390,7 @@ function HomeInner() {
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
             style={{ flex: 1, border: 'none', outline: 'none', fontSize: '15px', color: '#333', background: 'transparent', fontFamily: 'inherit' }}
           />
-          {aiFilters && (
+          {(aiFilters || search) && (
             <button onClick={clearSearch} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '18px', padding: '0 8px', cursor: 'pointer', lineHeight: 1 }}>×</button>
           )}
           {hasSpeech && (
@@ -386,7 +418,6 @@ function HomeInner() {
           </button>
         </div>
 
-        {/* Date shortcuts */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {shortcuts.map(({ label, value, shortLabel }) => (
             <button key={value} onClick={() => setCurrentView(value)}
@@ -405,7 +436,6 @@ function HomeInner() {
         </div>
       </div>
 
-      {/* Custom date picker */}
       {currentView === 'pick' && (
         <div style={{ background: '#fff', borderBottom: '1px solid #e8eaed', padding: '12px 40px', display: 'flex', justifyContent: 'center' }}>
           <DatePicker
@@ -417,7 +447,6 @@ function HomeInner() {
         </div>
       )}
 
-      {/* Desktop filters */}
       <div className="desktop-filters">
         <div style={{ background: '#f2f3f5', padding: '10px 20px 8px', display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
           <button onClick={() => setCatFilters([])}
@@ -448,7 +477,6 @@ function HomeInner() {
         </div>
       </div>
 
-      {/* Mobile filters */}
       <div className="mobile-filters">
         <div style={{ background: '#f2f3f5', padding: '6px 20px 4px', display: 'flex', justifyContent: 'center' }}>
           <button onClick={() => setShowFilterDrawer(true)}
@@ -463,7 +491,6 @@ function HomeInner() {
         </div>
       </div>
 
-      {/* Mobile filter drawer */}
       {showFilterDrawer && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
           <div onClick={() => setShowFilterDrawer(false)}
@@ -490,8 +517,6 @@ function HomeInner() {
               </div>
             </div>
             <div style={{ height: '1px', background: '#e5e7eb', margin: '0 20px 16px' }} />
-
-            {/* Category */}
             <div style={{ padding: '0 20px 16px' }}>
               <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>Category</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -507,8 +532,6 @@ function HomeInner() {
               </div>
             </div>
             <div style={{ height: '1px', background: '#e5e7eb', margin: '0 20px 16px' }} />
-
-            {/* Tag */}
             <div style={{ padding: '0 20px 16px' }}>
               <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>Tag</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -524,19 +547,13 @@ function HomeInner() {
               </div>
             </div>
             <div style={{ height: '1px', background: '#e5e7eb', margin: '0 20px 16px' }} />
-
-            {/* Organization */}
             {orgList.length > 0 && (
               <div style={{ padding: '0 20px' }}>
                 <p style={{ fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '0 0 10px' }}>Organization</p>
-                <select
-                  value={orgFilter}
-                  onChange={e => setOrgFilter(e.target.value)}
+                <select value={orgFilter} onChange={e => setOrgFilter(e.target.value)}
                   style={{ width: '100%', borderRadius: '8px', padding: '9px 14px', fontSize: '13px', fontFamily: 'inherit', cursor: 'pointer', outline: 'none', border: `1.5px solid ${orgFilter ? '#1a3d2b' : '#d0d6db'}`, color: '#444', background: '#fff' }}>
                   <option value=''>All Organizations</option>
-                  {orgList.map(org => (
-                    <option key={org} value={org}>{org}</option>
-                  ))}
+                  {orgList.map(org => <option key={org} value={org}>{org}</option>)}
                 </select>
               </div>
             )}
@@ -544,20 +561,13 @@ function HomeInner() {
         </div>
       )}
 
-      {/* Events list */}
       <div style={{ maxWidth: '860px', margin: '0 auto', padding: '4px 16px 40px' }}>
-
-        {/* Org dropdown — desktop only */}
         {orgList.length > 0 && (
           <div className="org-dropdown" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-34px', position: 'relative', zIndex: 1 }}>
-            <select
-              value={orgFilter}
-              onChange={e => setOrgFilter(e.target.value)}
+            <select value={orgFilter} onChange={e => setOrgFilter(e.target.value)}
               style={{ borderRadius: '8px', padding: '5px 14px', fontSize: '12px', fontFamily: 'inherit', cursor: 'pointer', outline: 'none', border: `1.5px solid ${orgFilter ? '#1a3d2b' : '#d0d6db'}`, color: '#444', background: '#fff' }}>
               <option value=''>All Organizations</option>
-              {orgList.map(org => (
-                <option key={org} value={org}>{org}</option>
-              ))}
+              {orgList.map(org => <option key={org} value={org}>{org}</option>)}
             </select>
           </div>
         )}
@@ -577,34 +587,22 @@ function HomeInner() {
                 const tagKeys: string[] = ev.tags ? ev.tags.split(',').map((t: string) => t.trim()).filter((t: string) => !catKeys.includes(t)) : []
                 const desc = ev.description?.trim()
                 return (
-                  <div key={ev.id}
-                    onClick={() => navigateToEvent(ev.id)}
-                    className="event-card-outer"
+                  <div key={ev.id} onClick={() => navigateToEvent(ev.id)} className="event-card-outer"
                     style={{ background: '#fff', borderRadius: '10px', padding: '11px 14px', marginBottom: '6px', display: 'flex', alignItems: 'flex-start', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', cursor: 'pointer' }}
                     onMouseOver={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.11)')}
                     onMouseOut={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.07)')}>
 
                     <div className="event-card-date-top" style={{ display: 'none', alignItems: 'baseline', gap: '4px', marginBottom: '5px' }}>
-                      <span style={{ fontSize: '15px', fontWeight: 500, color: '#2a7a55', lineHeight: 1 }}>
-                        {new Date(dateStr + 'T12:00:00').getDate()}
-                      </span>
-                      <span style={{ fontSize: '10px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        {new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' })}
-                      </span>
+                      <span style={{ fontSize: '15px', fontWeight: 500, color: '#2a7a55', lineHeight: 1 }}>{new Date(dateStr + 'T12:00:00').getDate()}</span>
+                      <span style={{ fontSize: '10px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' })}</span>
                       <span style={{ color: '#ccc', fontSize: '10px' }}>·</span>
                       <span style={{ fontSize: '11px', fontWeight: 600, color: '#2C3E50' }}>{ev.time}</span>
                     </div>
 
                     <div className="event-card-date-col" style={{ minWidth: '50px', textAlign: 'center', flexShrink: 0, paddingRight: '14px', borderRight: '1px solid #eee', paddingTop: '1px' }}>
-                      <div style={{ fontSize: '10px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        {new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' })}
-                      </div>
-                      <div style={{ fontSize: '22px', fontWeight: 500, color: '#2a7a55', lineHeight: 1.1, marginBottom: '3px' }}>
-                        {new Date(dateStr + 'T12:00:00').getDate()}
-                      </div>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#2C3E50', whiteSpace: 'nowrap' }}>
-                        {ev.time}
-                      </div>
+                      <div style={{ fontSize: '10px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' })}</div>
+                      <div style={{ fontSize: '22px', fontWeight: 500, color: '#2a7a55', lineHeight: 1.1, marginBottom: '3px' }}>{new Date(dateStr + 'T12:00:00').getDate()}</div>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#2C3E50', whiteSpace: 'nowrap' }}>{ev.time}</div>
                     </div>
 
                     <div className="event-card-body" style={{ flex: 1, minWidth: 0, padding: '0 14px' }}>
@@ -618,10 +616,7 @@ function HomeInner() {
                         {ev.is_aggregator ? (
                           <span style={{ color: '#9ca3af' }}>
                             {(ev.extracted_organizer || ev.location) && (
-                              <>
-                                <span style={{ color: '#3a7d44' }}>{ev.extracted_organizer || ev.location}</span>
-                                <span style={{ color: '#ccc', margin: '0 4px' }}>·</span>
-                              </>
+                              <><span style={{ color: '#3a7d44' }}>{ev.extracted_organizer || ev.location}</span><span style={{ color: '#ccc', margin: '0 4px' }}>·</span></>
                             )}
                             via {ev.organization}
                           </span>
@@ -633,26 +628,12 @@ function HomeInner() {
                           </a>
                         )}
                       </div>
-                      {desc && (
-                        <div style={{ fontSize: '12px', color: '#767e8a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {desc}
-                        </div>
-                      )}
+                      {desc && <div style={{ fontSize: '12px', color: '#767e8a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{desc}</div>}
                       <div className="event-card-pills-mobile" style={{ display: 'none', flexDirection: 'row', gap: '4px', marginTop: '6px', overflow: 'hidden' }}>
                         {[...catKeys, ...tagKeys].map((key: string) => {
-                          const catStyle = CAT_CARD[key]
-                          const catLabel = CAT_LABELS[key]
-                          const tagMeta = TAG_CARD[key]
-                          if (catStyle && catLabel) return (
-                            <span key={key} style={{ background: catStyle.bg, color: catStyle.color, fontSize: '10px', borderRadius: '5px', padding: '2px 6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                              {catLabel}
-                            </span>
-                          )
-                          if (tagMeta) return (
-                            <span key={key} style={{ background: tagMeta.bg, color: tagMeta.color, fontSize: '10px', borderRadius: '999px', padding: '2px 6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                              {tagMeta.label}
-                            </span>
-                          )
+                          const catStyle = CAT_CARD[key]; const catLabel = CAT_LABELS[key]; const tagMeta = TAG_CARD[key]
+                          if (catStyle && catLabel) return <span key={key} style={{ background: catStyle.bg, color: catStyle.color, fontSize: '10px', borderRadius: '5px', padding: '2px 6px', whiteSpace: 'nowrap', flexShrink: 0 }}>{catLabel}</span>
+                          if (tagMeta) return <span key={key} style={{ background: tagMeta.bg, color: tagMeta.color, fontSize: '10px', borderRadius: '999px', padding: '2px 6px', whiteSpace: 'nowrap', flexShrink: 0 }}>{tagMeta.label}</span>
                           return null
                         })}
                       </div>
@@ -662,14 +643,9 @@ function HomeInner() {
                       {catKeys.length > 0 && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           {catKeys.map((c: string) => {
-                            const s = CAT_CARD[c]
-                            const lbl = CAT_LABELS[c]
+                            const s = CAT_CARD[c]; const lbl = CAT_LABELS[c]
                             if (!s || !lbl) return null
-                            return (
-                              <span key={c} style={{ background: s.bg, color: s.color, fontSize: '11px', borderRadius: '5px', padding: '3px 8px', whiteSpace: 'nowrap', display: 'inline-block', width: '82px', textAlign: 'center' }}>
-                                {lbl}
-                              </span>
-                            )
+                            return <span key={c} style={{ background: s.bg, color: s.color, fontSize: '11px', borderRadius: '5px', padding: '3px 8px', whiteSpace: 'nowrap', display: 'inline-block', width: '82px', textAlign: 'center' }}>{lbl}</span>
                           })}
                         </div>
                       )}
@@ -678,16 +654,11 @@ function HomeInner() {
                           {tagKeys.map((t: string) => {
                             const meta = TAG_CARD[t]
                             if (!meta) return null
-                            return (
-                              <span key={t} style={{ background: meta.bg, color: meta.color, fontSize: '11px', borderRadius: '999px', padding: '3px 8px', whiteSpace: 'nowrap', display: 'inline-block', width: '88px', textAlign: 'center' }}>
-                                {meta.label}
-                              </span>
-                            )
+                            return <span key={t} style={{ background: meta.bg, color: meta.color, fontSize: '11px', borderRadius: '999px', padding: '3px 8px', whiteSpace: 'nowrap', display: 'inline-block', width: '88px', textAlign: 'center' }}>{meta.label}</span>
                           })}
                         </div>
                       )}
                     </div>
-
                   </div>
                 )
               })}

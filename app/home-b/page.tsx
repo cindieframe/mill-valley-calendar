@@ -15,7 +15,7 @@ const CATEGORY_IMAGES: Record<string, string> = {
   community: `${SUPABASE_ASSETS}/category-community-portrait.jpg`,
   classes:   `${SUPABASE_ASSETS}/category-classes-portrait.jpg`,
   gov:       `${SUPABASE_ASSETS}/category-gov-portrait.jpg`,
-    family:    `${SUPABASE_ASSETS}/category-family-portrait-2.jpg`,
+  family:    `${SUPABASE_ASSETS}/category-family-portrait-2.jpg`,
   youth:     `${SUPABASE_ASSETS}/category-family-portrait-2.jpg`,
 }
 
@@ -68,7 +68,6 @@ function buildFeatured(data: any[]): any[] {
     }
   }
 
-  // Enforce category diversity — max one event per category
   const usedEventCats = new Set<string>()
   const diverse: any[] = []
   for (const ev of [...withImages, ...withStock]) {
@@ -97,6 +96,7 @@ export default function HomeBPage() {
   const [featuredEvents, setFeaturedEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [searching, setSearching] = useState(false)
   const [townOpen, setTownOpen] = useState(false)
 
   useEffect(() => { loadFeaturedEvents() }, [])
@@ -113,14 +113,11 @@ export default function HomeBPage() {
       .limit(40)
 
     if (data) {
-      // Check image dimensions — swap landscape-unfriendly images to portrait stock
       const checked = await Promise.all(data.map(ev => {
         if (!ev.image_url) return Promise.resolve(ev)
         return new Promise<any>(resolve => {
           const img = new window.Image()
           img.onload = () => {
-            // For portrait cards, landscape images that are very wide look bad
-            // Keep images that are roughly square or portrait (height >= width * 0.6)
             if (img.naturalWidth < 400 || img.naturalHeight < 400 || img.naturalWidth > img.naturalHeight * 2) {
               resolve({ ...ev, image_url: null })
             } else {
@@ -136,9 +133,34 @@ export default function HomeBPage() {
     setLoading(false)
   }
 
-  function handleSearch(e: React.FormEvent) {
+  async function handleSearch(e: React.FormEvent) {
     e.preventDefault()
-    router.push(search.trim() ? `/?search=${encodeURIComponent(search.trim())}` : '/')
+    const q = search.trim()
+    if (!q) { router.push('/mill-valley'); return }
+
+    setSearching(true)
+    try {
+      const res = await fetch('/api/conversational-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q }),
+      })
+      const filters = await res.json()
+
+      const params = new URLSearchParams()
+      if (filters.cats?.length > 0) params.set('cats', filters.cats.join(','))
+      if (filters.tags?.length > 0) params.set('tags', filters.tags.join(','))
+      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
+      if (filters.dateTo) params.set('dateTo', filters.dateTo)
+      if (filters.keyword) params.set('keyword', filters.keyword)
+      params.set('search', filters.keyword || q)
+
+      router.push(`/mill-valley?${params.toString()}`)
+    } catch {
+      router.push(`/mill-valley?search=${encodeURIComponent(q)}`)
+    } finally {
+      setSearching(false)
+    }
   }
 
   function getCardImage(ev: any): string {
@@ -177,22 +199,22 @@ export default function HomeBPage() {
             <input type="text" placeholder="Search events, venues or towns…"
               value={search} onChange={e => setSearch(e.target.value)}
               style={{ flex: 1, border: 'none', outline: 'none', padding: '14px 22px', fontSize: '15px', color: '#1a2530', background: 'transparent', fontFamily: fonts.sans }} />
-            <button type="submit"
-              style={{ background: colors.primary, color: '#fff', border: 'none', padding: '14px 26px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', borderRadius: '0 999px 999px 0', fontFamily: fonts.sans, whiteSpace: 'nowrap' }}>
-              Search
+            <button type="submit" disabled={searching}
+              style={{ background: colors.primary, color: '#fff', border: 'none', padding: '14px 26px', fontSize: '14px', fontWeight: 500, cursor: searching ? 'not-allowed' : 'pointer', borderRadius: '0 999px 999px 0', fontFamily: fonts.sans, whiteSpace: 'nowrap', opacity: searching ? 0.7 : 1 }}>
+              {searching ? '…' : 'Search'}
             </button>
           </form>
           <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: colors.logoAccent, display: 'inline-block' }} />
             Mill Valley, CA &nbsp;·&nbsp;
-            <span onClick={() => router.push('/')} style={{ cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '2px' }}>change</span>
+            <span onClick={() => router.push('/mill-valley')} style={{ cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '2px' }}>change</span>
           </div>
         </div>
       </div>
 
       {/* CTA */}
       <div style={{ display: 'flex', justifyContent: 'center', padding: '28px 24px 0' }}>
-        <button onClick={() => router.push('/')}
+        <button onClick={() => router.push('/mill-valley')}
           style={{ background: colors.navBg, color: '#fff', border: 'none', padding: '13px 40px', borderRadius: '999px', fontSize: '15px', fontWeight: 500, cursor: 'pointer', fontFamily: fonts.sans }}>
           Go to Mill Valley calendar →
         </button>
@@ -222,7 +244,6 @@ export default function HomeBPage() {
           </div>
         </div>
 
-        {/* Portrait card grid */}
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px', color: colors.textSecondary }}>Loading…</div>
         ) : (
@@ -252,7 +273,7 @@ export default function HomeBPage() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: '28px' }}>
-          <button onClick={() => router.push('/')}
+          <button onClick={() => router.push('/mill-valley')}
             style={{ background: 'none', border: `1px solid ${colors.borderLight}`, color: colors.textSecondary, padding: '11px 36px', borderRadius: '999px', fontSize: '14px', cursor: 'pointer', fontFamily: fonts.sans }}>
             See all Mill Valley events →
           </button>

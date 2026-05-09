@@ -3,17 +3,17 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const client = new Anthropic()
 
-const TODAY = new Date()
-TODAY.setHours(0, 0, 0, 0)
 
 function getDateContext() {
+  const TODAY = new Date()
+TODAY.setHours(0, 0, 0, 0)
   const fmt = (d: Date) => d.toISOString().split('T')[0]
   const day = TODAY.getDay()
 
   const tomorrow = new Date(TODAY)
   tomorrow.setDate(TODAY.getDate() + 1)
 
-  const satOffset = ((6 - day + 7) % 7) || 7
+  const satOffset = day === 0 ? -1 : (6 - day + 7) % 7
   const sat = new Date(TODAY); sat.setDate(TODAY.getDate() + satOffset)
   const sun = new Date(TODAY); sun.setDate(TODAY.getDate() + satOffset + 1)
 
@@ -92,7 +92,7 @@ Rules:
 - If query mentions a specific named event or performer, put that name in keyword
 - "kids", "children", "toddler", "baby" -> add "family" tag AND "youth" category
 - "free" -> add "free" tag
-- "music", "concert", "band", "live music", "singer", "musician", "orchestra", "symphony", "choir", "jazz", "opera", "acoustic" -> DO NOT set cats. Set keyword = the most specific music term from the query (e.g. "music", "concert", "jazz", "band")
+- "music", "concert", "band", "live music", "singer", "musician", "orchestra", "symphony", "choir", "jazz", "opera", "acoustic" -> DO NOT set cats. Set tags = ["music"]. Set keyword = the most specific music term from the query (e.g. "music", "concert", "jazz", "band")
 - "hike", "hiking", "trail" -> "outdoors" category AND keyword = "hike" or "trail"
 - "yoga", "pilates", "tai chi" -> "outdoors" category AND keyword = the specific activity
 - "painting", "drawing", "sculpture", "pottery", "ceramics" -> "arts" category AND keyword = the specific activity

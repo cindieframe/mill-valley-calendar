@@ -93,6 +93,7 @@ export default function HomeBPage() {
   const [featuredEvents, setFeaturedEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [searching, setSearching] = useState(false)
   const [heroDropdownOpen, setHeroDropdownOpen] = useState(false)
   const [sectionDropdownOpen, setSectionDropdownOpen] = useState(false)
   const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
@@ -157,9 +158,34 @@ export default function HomeBPage() {
     setLoading(false)
   }
 
-  function handleSearch(e: React.FormEvent) {
+  async function handleSearch(e: React.FormEvent) {
     e.preventDefault()
-    router.push(search.trim() ? `/${DEFAULT_TOWN}?search=${encodeURIComponent(search.trim())}` : `/${DEFAULT_TOWN}`)
+    const q = search.trim()
+    if (!q) { router.push(`/${DEFAULT_TOWN}`); return }
+
+    setSearching(true)
+    try {
+      const res = await fetch('/api/conversational-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q }),
+      })
+      const filters = await res.json()
+
+      const params = new URLSearchParams()
+      if (filters.cats?.length > 0) params.set('cats', filters.cats.join(','))
+      if (filters.tags?.length > 0) params.set('tags', filters.tags.join(','))
+      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
+      if (filters.dateTo) params.set('dateTo', filters.dateTo)
+      if (filters.keyword) params.set('keyword', filters.keyword)
+      params.set('search', filters.keyword || q)
+
+      router.push(`/${DEFAULT_TOWN}?${params.toString()}`)
+    } catch {
+      router.push(`/${DEFAULT_TOWN}?search=${encodeURIComponent(q)}`)
+    } finally {
+      setSearching(false)
+    }
   }
 
   function getCardImage(ev: any): string {
@@ -232,9 +258,9 @@ export default function HomeBPage() {
             <input type="text" placeholder="Search events, venues or towns…"
               value={search} onChange={e => setSearch(e.target.value)}
               style={{ flex: 1, border: 'none', outline: 'none', padding: '14px 22px', fontSize: '15px', color: '#1a2530', background: 'transparent', fontFamily: fonts.sans }} />
-            <button type="submit"
-              style={{ background: colors.primary, color: '#fff', border: 'none', padding: '14px 26px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', borderRadius: '0 999px 999px 0', fontFamily: fonts.sans, whiteSpace: 'nowrap' }}>
-              Search
+            <button type="submit" disabled={searching}
+              style={{ background: colors.primary, color: '#fff', border: 'none', padding: '14px 26px', fontSize: '14px', fontWeight: 500, cursor: searching ? 'not-allowed' : 'pointer', borderRadius: '0 999px 999px 0', fontFamily: fonts.sans, whiteSpace: 'nowrap', opacity: searching ? 0.7 : 1 }}>
+              {searching ? '…' : 'Search'}
             </button>
           </form>
           <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
@@ -273,7 +299,6 @@ export default function HomeBPage() {
           </div>
         </div>
 
-        {/* Portrait card grid */}
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px', color: colors.textSecondary }}>Loading…</div>
         ) : (
