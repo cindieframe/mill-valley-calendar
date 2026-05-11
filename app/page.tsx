@@ -243,10 +243,7 @@ export default function HomeBPage() {
             <span style={{ fontSize: '22px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>town</span>
             <span style={{ fontSize: '22px', fontWeight: 400, color: colors.logoAccent, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>stir</span>
           </div>
-          <button onClick={() => router.push('/org/login')}
-            style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.35)', color: '#fff', padding: '7px 18px', borderRadius: '999px', fontSize: '13px', cursor: 'pointer', fontFamily: fonts.sans }}>
-            Log in
-          </button>
+          
         </div>
 
         {/* Hero content */}
