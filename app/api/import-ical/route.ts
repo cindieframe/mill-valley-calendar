@@ -6,84 +6,120 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
+// Returns the UTC offset in ms for America/Los_Angeles at a given UTC date
+function getPacificOffsetMs(utcDate: Date): number {
+  const utcStr = utcDate.toLocaleString('en-US', { timeZone: 'UTC' })
+  const ptStr = utcDate.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })
+  return new Date(utcStr).getTime() - new Date(ptStr).getTime()
+}
+
+// Parse a DTSTART or DTEND value given the TZID found in the block
+function parseICalDate(value: string, tzid: string | null): Date {
+  // Strip any trailing Z or timezone suffix — we handle it ourselves
+  const isoStr = value.replace(
+    /(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/,
+    '$1-$2-$3T$4:$5:$6'
+  )
+
+  if (tzid === 'America/Los_Angeles') {
+    // Time is already in Pacific — parse as UTC then shift by Pacific offset
+    const tempDate = new Date(isoStr + 'Z')
+    return new Date(tempDate.getTime() + getPacificOffsetMs(tempDate))
+  }
+
+  if (value.endsWith('Z')) {
+    // Explicit UTC
+    return new Date(isoStr + 'Z')
+  }
+
+  // No TZID, no Z — treat as Pacific (legacy feeds)
+  const tempDate = new Date(isoStr + 'Z')
+  return new Date(tempDate.getTime() + getPacificOffsetMs(tempDate))
+}
+
 // Parse iCal text into event objects
-function parseICal(text: string, feedUrl?: string) {
+function parseICal(text: string) {
   const events: any[] = []
   const eventBlocks = text.split('BEGIN:VEVENT')
-  
+
   for (let i = 1; i < eventBlocks.length; i++) {
     const block = eventBlocks[i]
+
     const get = (field: string) => {
       const match = block.match(new RegExp(`${field}[^:]*:([^\r\n]+)`))
       return match ? match[1].trim() : ''
     }
-    
+
     const dtstart = get('DTSTART')
-    const dtend = get('DTEND')   // NEW — reads the end time from the iCal block
+    const dtend = get('DTEND')
     const summary = get('SUMMARY')
     const rawDescField = get('DESCRIPTION').replace(/\\n/g, '\n').replace(/\\,/g, ',')
     const descIsUrl = /^https?:\/\/\S+$/.test(rawDescField.trim())
-    const url = descIsUrl ? rawDescField.trim() : (get('URL').startsWith('http') ? get('URL') : '')
-    const rawDesc = descIsUrl ? '' : rawDescField
-      .replace(/https?:\/\/\S+/g, '')
-      .replace(/#\S+/g, '')
-      .replace(/@\S+/g, '')
+    const url = descIsUrl
+      ? rawDescField.trim()
+      : get('URL').startsWith('http')
+      ? get('URL')
+      : ''
+    const rawDesc = descIsUrl
+      ? ''
+      : rawDescField
+          .replace(/https?:\/\/\S+/g, '')
+          .replace(/#\S+/g, '')
+          .replace(/@\S+/g, '')
 
-const junkPatterns = /add to cart|choose an option|sign up today|enroll|quantity|price range|materials fee|non-member|ohca member|see organizer|\$\d+\.\d+/i
+    const junkPatterns =
+      /add to cart|choose an option|sign up today|enroll|quantity|price range|materials fee|non-member|ohca member|see organizer|\$\d+\.\d+/i
 
-const lines = rawDesc.split('\n').map((l: string) => l.trim()).filter(Boolean)
-const cleanLines: string[] = []
-for (const line of lines) {
-  if (junkPatterns.test(line)) break
-  cleanLines.push(line)
-}
+    const lines = rawDesc
+      .split('\n')
+      .map((l: string) => l.trim())
+      .filter(Boolean)
+    const cleanLines: string[] = []
+    for (const line of lines) {
+      if (junkPatterns.test(line)) break
+      cleanLines.push(line)
+    }
 
-const description = cleanLines.join(' ').replace(/\s+/g, ' ').trim()
+    const description = cleanLines.join(' ').replace(/\s+/g, ' ').trim()
     const location = get('LOCATION').replace(/\\,/g, ',').replace(/<[^>]+>/g, '').trim()
-    
     const image = get('IMAGE') || get('X-IMAGE') || ''
     const uid = get('UID') || ''
-    
+
     if (!summary || !dtstart) continue
-    
+
     let dateStr = ''
     let timeStr = '12:00 PM'
-    let endTimeStr = ''   // NEW — will hold the parsed end time if one exists
+    let endTimeStr = ''
 
     if (dtstart.includes('T')) {
-      const hasTZID = block.includes('DTSTART;TZID=')
-      const fullDate = (hasTZID || feedUrl?.includes('ical=1'))
-  ? dtstart.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6')
-  : dtstart.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6Z')
+      // Extract TZID from the block (e.g. DTSTART;TZID=America/Los_Angeles:...)
+      const tzidMatch = block.match(/DTSTART;TZID=([^:]+):/)
+      const tzid = tzidMatch ? tzidMatch[1].trim() : null
 
-      const date = new Date(fullDate)
+      const date = parseICalDate(dtstart, tzid)
 
       dateStr = date.toLocaleDateString('en-CA', {
-        timeZone: 'America/Los_Angeles'
+        timeZone: 'America/Los_Angeles',
       })
 
       timeStr = date.toLocaleTimeString('en-US', {
         timeZone: 'America/Los_Angeles',
         hour: 'numeric',
         minute: '2-digit',
-        hour12: true
+        hour12: true,
       })
 
-      // NEW — parse the end time using the same timezone logic as the start time
       if (dtend && dtend.includes('T')) {
-        const fullEndDate = hasTZID
-          ? dtend.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6')
-          : dtend.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6Z')
-        const endDate = new Date(fullEndDate)
+        const endDate = parseICalDate(dtend, tzid)
         endTimeStr = endDate.toLocaleTimeString('en-US', {
           timeZone: 'America/Los_Angeles',
           hour: 'numeric',
           minute: '2-digit',
-          hour12: true
+          hour12: true,
         })
       }
-
     } else {
+      // All-day event — no time component
       dateStr = dtstart.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')
       timeStr = 'All day'
     }
@@ -93,10 +129,9 @@ const description = cleanLines.join(' ').replace(/\s+/g, ' ').trim()
     const eventDate = new Date(dateStr + 'T12:00:00')
     if (eventDate < today) continue
 
-    // NEW — endTimeStr added to the pushed object
-   events.push({ summary, description, location, dateStr, timeStr, endTimeStr, url, image, uid })
+    events.push({ summary, description, location, dateStr, timeStr, endTimeStr, url, image, uid })
   }
-  
+
   events.sort((a, b) => new Date(a.dateStr).getTime() - new Date(b.dateStr).getTime())
 
   return events
@@ -126,7 +161,6 @@ Also choose applicable tags (comma-separated, or leave blank):
 - wellness (if health or wellness focused)
 - volunteer (if volunteer opportunity)
 - reg (if registration required)
-- volunteer (if it's a volunteering opportunity)
 
 Respond in this exact format:
 CATEGORIES: category1,category2
@@ -135,17 +169,17 @@ TAGS: tag1,tag2`
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 100,
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     })
 
     const text = response.content[0].type === 'text' ? response.content[0].text : ''
-    
+
     const catMatch = text.match(/CATEGORIES:\s*([^\n]+)/)
     const tagMatch = text.match(/TAGS:\s*([^\n]*)/)
-    
+
     const categories = catMatch ? catMatch[1].trim() : 'community'
     const tags = tagMatch ? tagMatch[1].trim() : ''
-    
+
     return { categories, tags }
   } catch (err) {
     console.error('Categorization failed for:', summary, err)
@@ -156,94 +190,103 @@ TAGS: tag1,tag2`
 export async function POST(request: NextRequest) {
   try {
     const { feedUrl, organization, town } = await request.json()
-    
+
     if (!feedUrl || !organization) {
       return NextResponse.json({ error: 'feedUrl and organization required' }, { status: 400 })
     }
-    
+
     // Fetch iCal feed
     const response = await fetch(feedUrl)
     if (!response.ok) {
       return NextResponse.json({ error: 'Could not fetch iCal feed' }, { status: 400 })
     }
-    
+
     const icalText = await response.text()
-const events = parseICal(icalText, feedUrl)
+    const events = parseICal(icalText)
 
-if (events.length === 0) {
-  return NextResponse.json({ error: 'No upcoming events found in feed' }, { status: 400 })
-}
+    if (events.length === 0) {
+      return NextResponse.json({ error: 'No upcoming events found in feed' }, { status: 400 })
+    }
 
-// Check if an org account exists with this canonical name
-// If so, use their display name for events and save canonical_name
-const { data: matchingOrg } = await supabase
-  .from('organizations')
-  .select('id, name, canonical_name')
-  .ilike('canonical_name', organization)
-  .single()
+    // Check if an org account exists with this canonical name
+    const { data: matchingOrg } = await supabase
+      .from('organizations')
+      .select('id, name, canonical_name')
+      .ilike('canonical_name', organization)
+      .single()
 
-// Also check if org exists with this exact name but no canonical_name set yet
-const { data: exactOrg } = !matchingOrg ? await supabase
-  .from('organizations')
-  .select('id, name, canonical_name')
-  .ilike('name', organization)
-  .single() : { data: null }
+    const { data: exactOrg } = !matchingOrg
+      ? await supabase
+          .from('organizations')
+          .select('id, name, canonical_name')
+          .ilike('name', organization)
+          .single()
+      : { data: null }
 
-const linkedOrg = matchingOrg || exactOrg
+    const linkedOrg = matchingOrg || exactOrg
 
-// If we found a linked org, save canonical_name if not already set
-if (linkedOrg && !linkedOrg.canonical_name) {
-  await supabase
-    .from('organizations')
-    .update({ canonical_name: organization })
-    .eq('id', linkedOrg.id)
-}
+    if (linkedOrg && !linkedOrg.canonical_name) {
+      await supabase
+        .from('organizations')
+        .update({ canonical_name: organization })
+        .eq('id', linkedOrg.id)
+    }
 
-// Use display name if org is linked, otherwise use feed name
-const displayName = linkedOrg ? linkedOrg.name : organization
-    
+    const displayName = linkedOrg ? linkedOrg.name : organization
+
     // Process each event
     let imported = 0
     let skipped = 0
     const results = []
-    
+
     for (const ev of events) {
       try {
-        // Check if event already exists BEFORE calling Claude
-// Check by UID first (survives title/org name changes), fall back to title+date
-        const uidCheck = ev.uid ? await supabase
-          .from('events').select('id').eq('ical_uid', ev.uid).limit(1) : { data: null }
-        
-        if (uidCheck.data && uidCheck.data.length > 0) { skipped++; continue }
+        // Check by UID first (survives title/org name changes), fall back to title+date
+        const uidCheck = ev.uid
+          ? await supabase.from('events').select('id').eq('ical_uid', ev.uid).limit(1)
+          : { data: null }
+
+        if (uidCheck.data && uidCheck.data.length > 0) {
+          skipped++
+          continue
+        }
 
         const { data: existingEvents } = await supabase
-          .from('events').select('id').eq('title', ev.summary).eq('date', ev.dateStr).limit(1)
-        if (existingEvents && existingEvents.length > 0) { skipped++; continue }
-        
-  
+          .from('events')
+          .select('id')
+          .eq('title', ev.summary)
+          .eq('date', ev.dateStr)
+          .limit(1)
+
+        if (existingEvents && existingEvents.length > 0) {
+          skipped++
+          continue
+        }
 
         // Auto-categorize with Claude (only for new events)
         const { categories, tags } = await categorizeEvent(ev.summary, ev.description)
-        
+
         // Insert into events table as pending
-        const { error } = await supabase.from('events').insert([{
-  title: ev.summary,
-  date: ev.dateStr,
-  time: ev.timeStr,
-    end_time: ev.endTimeStr || null, 
-  location: ev.location || displayName,
-  address: ev.location || '',
-  organization: displayName,
-  category: categories,
-  tags,
-  description: ev.description || '',
-  website: ev.url || '',
-  image_url: ev.image || null,
-status: 'pending',
-  ical_uid: ev.uid || null,
-  town: town || 'Mill Valley',
-}])
-        
+        const { error } = await supabase.from('events').insert([
+          {
+            title: ev.summary,
+            date: ev.dateStr,
+            time: ev.timeStr,
+            end_time: ev.endTimeStr || null,
+            location: ev.location || displayName,
+            address: ev.location || '',
+            organization: displayName,
+            category: categories,
+            tags,
+            description: ev.description || '',
+            website: ev.url || '',
+            image_url: ev.image || null,
+            status: 'pending',
+            ical_uid: ev.uid || null,
+            town: town || 'Mill Valley',
+          },
+        ])
+
         if (!error) {
           imported++
           results.push({ title: ev.summary, date: ev.dateStr, categories, tags })
@@ -254,7 +297,7 @@ status: 'pending',
         console.error('Error processing event:', ev.summary, err)
       }
     }
-    
+
     // Update last_synced
     await supabase
       .from('ical_feeds')
@@ -263,16 +306,18 @@ status: 'pending',
     // Ensure org exists in organizations table so discovery can find it
     await supabase
       .from('organizations')
-      .upsert([{ name: organization, website_url: feedUrl }], { onConflict: 'name', ignoreDuplicates: true })
-    
-    return NextResponse.json({ 
-      success: true, 
-      imported, 
+      .upsert([{ name: organization, website_url: feedUrl }], {
+        onConflict: 'name',
+        ignoreDuplicates: true,
+      })
+
+    return NextResponse.json({
+      success: true,
+      imported,
       skipped,
       total: events.length,
-      results 
+      results,
     })
-    
   } catch (error) {
     console.error('Import error:', error)
     return NextResponse.json({ error: 'Import failed' }, { status: 500 })
