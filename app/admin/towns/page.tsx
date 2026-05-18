@@ -8,7 +8,7 @@ const EMPTY_TOWN = {
   name: '',
   slug: '',
   state: 'CA',
-  county: '',
+  county: 'Marin',
   tagline: '',
   header_color: '#1a3d2b',
   accent_color: '#C9952A',
@@ -244,7 +244,7 @@ export default function AdminTowns() {
               </div>
               <div>
                 <label style={labelStyle}>County</label>
-                <input style={inputStyle} placeholder="e.g. marin"
+                <input style={inputStyle} placeholder="e.g. Marin"
                   value={form.county} onChange={e => update('county', e.target.value)} />
               </div>
             </div>
