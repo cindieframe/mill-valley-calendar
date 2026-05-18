@@ -131,11 +131,10 @@ export default function Admin() {
         if (adminData.towns?.length === 1) setSelectedTown(adminData.towns[0])
         setAuthed(true)
         if (adminData.role === 'super_admin') {
-          const { data: townData } = await supabase.from('events').select('town').not('town', 'is', null)
-          if (townData) {
-            const unique = [...new Set(townData.map((t: any) => t.town).filter(Boolean))].sort()
-            setAllTowns(unique as string[])
-          }
+         const { data: townData } = await supabase.from('towns').select('name').eq('active', true).order('name')
+if (townData) {
+  setAllTowns(townData.map((t: any) => t.name))
+}
         }
       }
     }
