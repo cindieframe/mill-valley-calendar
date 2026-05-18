@@ -286,7 +286,7 @@ export default function HomeBPage() {
       <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '32px 24px 60px' }}>
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '22px', fontWeight: 500, color: colors.textPrimary }}>Things to do in</span>
+          <span style={{ fontSize: '22px', fontWeight: 500, color: colors.textPrimary }}>Featured events in</span>
           <div ref={sectionRef} style={{ position: 'relative', display: 'inline-block' }}>
             <span onClick={() => setSectionDropdownOpen(!sectionDropdownOpen)}
               style={{ fontSize: '22px', fontWeight: 500, color: colors.navBg, borderBottom: `2px solid ${colors.navBg}`, paddingBottom: '2px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>

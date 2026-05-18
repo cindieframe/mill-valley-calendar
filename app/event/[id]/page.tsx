@@ -1,7 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import BackButton from '../../components/BackButton'
 import ShareButtons from './ShareButtons'
+
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -133,12 +135,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
           <span style={{ color: '#fff', fontSize: '21px', fontWeight: 400 }}>town</span>
           <span style={{ color: '#7EC8A4', fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: '21px', fontWeight: 400 }}>stir</span>
         </div>
-        <Link
-          href="/"
-          style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px', textDecoration: 'none', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '999px', padding: '7px 16px' }}
-        >
-          ← Back
-        </Link>
+        <BackButton />
       </header>
 
       <div style={{ maxWidth: '720px', margin: '0 auto', padding: '0 16px 60px' }}>

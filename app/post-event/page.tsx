@@ -204,6 +204,7 @@ export default function PostEvent() {
       email: form.email,
       website: form.website,
       image_url: imageUrl || null,
+      town: 'Mill Valley',
       status: 'pending',
       recurrence: recurrence === 'none' ? 'none' : effectiveRecurrence,
       recurrence_end: (endsOn === 'on' && form.recurrence_end) ? form.recurrence_end : null,
