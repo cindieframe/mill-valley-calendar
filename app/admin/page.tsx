@@ -914,6 +914,9 @@ export default function Admin() {
           )}
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
+          {isSuperAdmin && (
+  <button onClick={() => router.push('/admin/towns')} style={hdrBtn}>Towns</button>
+)}
           <button onClick={() => router.push('/admin/import')} style={hdrBtn}>⬇ Import Events</button>
           <button onClick={() => router.push('/')} style={hdrBtn}>← Calendar</button>
           <button onClick={handleLogout} style={hdrBtn}>Log Out</button>
