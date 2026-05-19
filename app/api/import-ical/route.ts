@@ -15,20 +15,17 @@ function getPacificOffsetMs(utcDate: Date): number {
 
 // Parse a DTSTART or DTEND value given the TZID found in the block
 function parseICalDate(value: string, tzid: string | null): Date {
-  // Strip any trailing Z or timezone suffix — we handle it ourselves
   const isoStr = value.replace(
     /(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/,
     '$1-$2-$3T$4:$5:$6'
   )
 
   if (tzid === 'America/Los_Angeles') {
-    // Time is already in Pacific — parse as UTC then shift by Pacific offset
     const tempDate = new Date(isoStr + 'Z')
     return new Date(tempDate.getTime() + getPacificOffsetMs(tempDate))
   }
 
   if (value.endsWith('Z')) {
-    // Explicit UTC
     return new Date(isoStr + 'Z')
   }
 
@@ -45,22 +42,38 @@ function parseICal(text: string) {
   for (let i = 1; i < eventBlocks.length; i++) {
     const block = eventBlocks[i]
 
+    // Unfold iCal line folding: lines wrapped with newline + space/tab are continuations
+    const unfoldedBlock = block.replace(/\r?\n[ \t]/g, '')
+
     const get = (field: string) => {
-      const match = block.match(new RegExp(`${field}[^:]*:([^\r\n]+)`))
+      const match = unfoldedBlock.match(new RegExp(`${field}[^:]*:([^\r\n]+)`))
       return match ? match[1].trim() : ''
     }
 
     const dtstart = get('DTSTART')
     const dtend = get('DTEND')
     const summary = get('SUMMARY')
-    const rawDescField = get('DESCRIPTION').replace(/\\n/g, '\n').replace(/\\,/g, ',')
+
+    // Strip HTML entities FIRST, then convert iCal escape sequences
+    const rawDescField = get('DESCRIPTION')
+      .replace(/&nbsp\\;/g, ' ')   // iCal-escaped &nbsp\; (WordPress/Events Calendar)
+      .replace(/&nbsp;/g, ' ')     // standard &nbsp;
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#\d+;/g, '')
+      .replace(/\\n/g, '\n')
+      .replace(/\\,/g, ',')
+
     const descIsUrl = /^https?:\/\/\S+$/.test(rawDescField.trim())
     const url = descIsUrl
       ? rawDescField.trim()
       : get('URL').startsWith('http')
       ? get('URL')
       : ''
-    const rawDesc = descIsUrl
+
+    const cleanedDesc = descIsUrl
       ? ''
       : rawDescField
           .replace(/https?:\/\/\S+/g, '')
@@ -70,17 +83,33 @@ function parseICal(text: string) {
     const junkPatterns =
       /add to cart|choose an option|sign up today|enroll|quantity|price range|materials fee|non-member|ohca member|see organizer|\$\d+\.\d+/i
 
-    const lines = rawDesc
-      .split('\n')
-      .map((l: string) => l.trim())
-      .filter(Boolean)
-    const cleanLines: string[] = []
-    for (const line of lines) {
-      if (junkPatterns.test(line)) break
-      cleanLines.push(line)
+    // Split into paragraphs on double newlines
+    const paragraphs = cleanedDesc.split(/\n{2,}/)
+    const cleanParagraphs: string[] = []
+
+    for (const para of paragraphs) {
+      // Filter out blank lines and lines that are only whitespace/nbsp after trimming
+      const lines = para.split('\n').map((l: string) => l.trim()).filter((l: string) => l.replace(/[\s\u00a0•]/g, '').length > 0)
+      const cleanLines: string[] = []
+      let hitJunk = false
+
+      for (const line of lines) {
+        if (junkPatterns.test(line)) { hitJunk = true; break }
+        cleanLines.push(line)
+      }
+
+      if (cleanLines.length === 0) continue
+
+      // Multiple lines in a paragraph = bullet list
+      const paraText = cleanLines.length > 1
+        ? cleanLines.map((l: string) => `• ${l}`).join('\n')
+        : cleanLines[0]
+
+      cleanParagraphs.push(paraText)
+      if (hitJunk) break
     }
 
-    const description = cleanLines.join(' ').replace(/\s+/g, ' ').trim()
+    const description = cleanParagraphs.join('\n\n').trim()
     const location = get('LOCATION').replace(/\\,/g, ',').replace(/<[^>]+>/g, '').trim()
     const image = get('IMAGE') || get('X-IMAGE') || ''
     const uid = get('UID') || ''
@@ -92,8 +121,7 @@ function parseICal(text: string) {
     let endTimeStr = ''
 
     if (dtstart.includes('T')) {
-      // Extract TZID from the block (e.g. DTSTART;TZID=America/Los_Angeles:...)
-      const tzidMatch = block.match(/DTSTART;TZID=([^:]+):/)
+      const tzidMatch = unfoldedBlock.match(/DTSTART;TZID=([^:]+):/)
       const tzid = tzidMatch ? tzidMatch[1].trim() : null
 
       const date = parseICalDate(dtstart, tzid)
@@ -119,7 +147,6 @@ function parseICal(text: string) {
         })
       }
     } else {
-      // All-day event — no time component
       dateStr = dtstart.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')
       timeStr = 'All day'
     }
@@ -195,7 +222,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'feedUrl and organization required' }, { status: 400 })
     }
 
-    // Fetch iCal feed
     const response = await fetch(feedUrl)
     if (!response.ok) {
       return NextResponse.json({ error: 'Could not fetch iCal feed' }, { status: 400 })
@@ -208,7 +234,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No upcoming events found in feed' }, { status: 400 })
     }
 
-    // Check if an org account exists with this canonical name
     const { data: matchingOrg } = await supabase
       .from('organizations')
       .select('id, name, canonical_name')
@@ -234,14 +259,12 @@ export async function POST(request: NextRequest) {
 
     const displayName = linkedOrg ? linkedOrg.name : organization
 
-    // Process each event
     let imported = 0
     let skipped = 0
     const results = []
 
     for (const ev of events) {
       try {
-        // Check by UID first (survives title/org name changes), fall back to title+date
         const uidCheck = ev.uid
           ? await supabase.from('events').select('id').eq('ical_uid', ev.uid).limit(1)
           : { data: null }
@@ -263,10 +286,8 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // Auto-categorize with Claude (only for new events)
         const { categories, tags } = await categorizeEvent(ev.summary, ev.description)
 
-        // Insert into events table as pending
         const { error } = await supabase.from('events').insert([
           {
             title: ev.summary,
@@ -298,12 +319,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update last_synced
     await supabase
       .from('ical_feeds')
       .upsert([{ url: feedUrl, organization, last_synced: new Date().toISOString() }])
 
-    // Ensure org exists in organizations table so discovery can find it
     await supabase
       .from('organizations')
       .upsert([{ name: organization, website_url: feedUrl }], {

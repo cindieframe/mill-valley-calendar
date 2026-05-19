@@ -233,11 +233,22 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
             )}
           </div>
 
-          {ev.description && (
-            <p style={{ fontSize: '15px', color: '#4b5563', lineHeight: 1.75, marginBottom: '24px' }}>
-              {ev.description}
-            </p>
-          )}
+         
+            {ev.description && (
+  <div style={{ fontSize: '15px', color: '#4b5563', lineHeight: 1.75, marginBottom: '24px' }}>
+    {ev.description.split('\n\n').map((para: string, i: number) => (
+      <p key={i} style={{ marginBottom: '12px' }}>
+        {para.split('\n').map((line: string, j: number) => (
+          <span key={j}>
+            {line}
+            {j < para.split('\n').length - 1 && <br />}
+          </span>
+        ))}
+      </p>
+    ))}
+  </div>
+)}
+          
 
           {tags.length > 0 && (
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
