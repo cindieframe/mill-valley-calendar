@@ -39,7 +39,7 @@ function isWeekend(dateStr: string): boolean {
   return day === 0 || day === 6
 }
 
-function buildFeatured(data: any[]): any[] {
+function buildFeatured(data: any[], townSlug: string): any[] {
   const withImages = data.filter(e => e.image_url)
   const usedStockCats = new Set<string>()
   const withStock: any[] = []
@@ -65,9 +65,12 @@ function buildFeatured(data: any[]): any[] {
     }
   }
 
+  const allCandidates = [...withImages, ...withStock]
   const usedEventCats = new Set<string>()
   const diverse: any[] = []
-  for (const ev of [...withImages, ...withStock]) {
+
+  // First pass — prefer one event per category for visual diversity
+  for (const ev of allCandidates) {
     const cat = getFirstCat(ev)
     if (!usedEventCats.has(cat)) {
       usedEventCats.add(cat)
@@ -75,13 +78,38 @@ function buildFeatured(data: any[]): any[] {
     }
     if (diverse.length === 4) break
   }
-  const allCats = Object.keys(CATEGORY_IMAGES)
+
+  // Second pass — if fewer than 4 events (e.g. new towns), fill remaining slots
+  // allowing repeat categories rather than showing an incomplete grid
+  if (diverse.length < 4) {
+    const usedIds = new Set(diverse.map(e => e.id))
+    for (const ev of allCandidates) {
+      if (!usedIds.has(ev.id)) {
+        diverse.push(ev)
+        usedIds.add(ev.id)
+      }
+      if (diverse.length === 4) break
+    }
+  }
+
   const result = diverse
-  for (const ev of result) {
+
+  // If no real images at all, rotate stock images by town slug
+  // so different towns show a different image arrangement
+  const hasRealImages = result.some(e => e.image_url)
+  const seed = townSlug.length % CAT_PRIORITY.length
+  const rotatedCats = [...CAT_PRIORITY.slice(seed), ...CAT_PRIORITY.slice(0, seed)]
+
+  const allCats = Object.keys(CATEGORY_IMAGES)
+  for (let i = 0; i < result.length; i++) {
+    const ev = result[i]
     if (!ev.fallbackImage) {
       const unusedCat = allCats.find(c => !usedStockCats.has(c)) || allCats[0]
       usedStockCats.add(unusedCat)
       ev.fallbackImage = CATEGORY_IMAGES[unusedCat]
+    }
+    if (!hasRealImages) {
+      ev.fallbackImage = CATEGORY_IMAGES[rotatedCats[i % rotatedCats.length]] || CATEGORY_IMAGES.community
     }
   }
 
@@ -97,13 +125,20 @@ export default function HomeBPage() {
   const [heroDropdownOpen, setHeroDropdownOpen] = useState(false)
   const [sectionDropdownOpen, setSectionDropdownOpen] = useState(false)
   const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
+  const [selectedTown, setSelectedTown] = useState<{ slug: string; name: string }>({
+    slug: DEFAULT_TOWN,
+    name: DEFAULT_TOWN_NAME,
+  })
   const heroRef = useRef<HTMLDivElement>(null)
   const sectionRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    loadFeaturedEvents()
     loadTowns()
   }, [])
+
+  useEffect(() => {
+    loadFeaturedEvents(selectedTown)
+  }, [selectedTown])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -122,17 +157,19 @@ export default function HomeBPage() {
     const { data } = await supabase
       .from('towns')
       .select('slug, name')
+      .eq('active', true)
       .order('name')
     if (data) setTowns(data)
   }
 
-  async function loadFeaturedEvents() {
+  async function loadFeaturedEvents(town: { slug: string; name: string }) {
+    setLoading(true)
     const today = new Date().toISOString().split('T')[0]
     const { data } = await supabase
       .from('events')
       .select('id, title, date, time, organization, category, image_url')
       .eq('status', 'approved')
-      .or(`town.ilike.${DEFAULT_TOWN_NAME},town.ilike.${DEFAULT_TOWN}`)
+      .or(`town.ilike.${town.name},town.ilike.${town.slug}`)
       .gte('date', today)
       .order('date', { ascending: true })
       .limit(40)
@@ -153,7 +190,7 @@ export default function HomeBPage() {
           img.src = ev.image_url
         })
       }))
-      setFeaturedEvents(buildFeatured(checked))
+      setFeaturedEvents(buildFeatured(checked, town.slug))
     }
     setLoading(false)
   }
@@ -161,7 +198,7 @@ export default function HomeBPage() {
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault()
     const q = search.trim()
-    if (!q) { router.push(`/${DEFAULT_TOWN}`); return }
+    if (!q) { router.push(`/${selectedTown.slug}`); return }
 
     setSearching(true)
     try {
@@ -180,9 +217,9 @@ export default function HomeBPage() {
       if (filters.keyword) params.set('keyword', filters.keyword)
       params.set('search', filters.keyword || q)
 
-      router.push(`/${DEFAULT_TOWN}?${params.toString()}`)
+      router.push(`/${selectedTown.slug}?${params.toString()}`)
     } catch {
-      router.push(`/${DEFAULT_TOWN}?search=${encodeURIComponent(q)}`)
+      router.push(`/${selectedTown.slug}?search=${encodeURIComponent(q)}`)
     } finally {
       setSearching(false)
     }
@@ -190,8 +227,15 @@ export default function HomeBPage() {
 
   function getCardImage(ev: any): string {
     if (ev.image_url) return ev.image_url
+    if (ev.fallbackImage) return ev.fallbackImage
     const cat = getFirstCat(ev)
     return CATEGORY_IMAGES[cat] || CATEGORY_IMAGES.community
+  }
+
+  function selectTown(t: { slug: string; name: string }) {
+    setSelectedTown(t)
+    setHeroDropdownOpen(false)
+    setSectionDropdownOpen(false)
   }
 
   const dropdownMenu = (onSelect: () => void) => (
@@ -204,10 +248,10 @@ export default function HomeBPage() {
     }}>
       {towns.map((t, i) => (
         <div key={t.slug}
-          onClick={() => { router.push(`/${t.slug}`); onSelect() }}
+          onClick={() => { selectTown(t); onSelect() }}
           style={{
             padding: '12px 18px', fontSize: '14px', fontWeight: 500,
-            color: t.slug === DEFAULT_TOWN ? colors.navBg : '#374151',
+            color: t.slug === selectedTown.slug ? colors.navBg : '#374151',
             cursor: 'pointer',
             borderBottom: i < towns.length - 1 ? '1px solid #f3f4f6' : 'none',
             background: 'white',
@@ -216,10 +260,10 @@ export default function HomeBPage() {
           onMouseOver={e => (e.currentTarget.style.background = '#f9fafb')}
           onMouseOut={e => (e.currentTarget.style.background = 'white')}
         >
-          {t.slug === DEFAULT_TOWN && (
+          {t.slug === selectedTown.slug && (
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: colors.navBg, flexShrink: 0, display: 'inline-block' }} />
           )}
-          {t.slug !== DEFAULT_TOWN && (
+          {t.slug !== selectedTown.slug && (
             <span style={{ width: '6px', height: '6px', flexShrink: 0, display: 'inline-block' }} />
           )}
           {t.name}
@@ -243,7 +287,6 @@ export default function HomeBPage() {
             <span style={{ fontSize: '22px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>town</span>
             <span style={{ fontSize: '22px', fontWeight: 400, color: colors.logoAccent, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>stir</span>
           </div>
-          
         </div>
 
         {/* Hero content */}
@@ -262,7 +305,7 @@ export default function HomeBPage() {
           </form>
           <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: colors.logoAccent, display: 'inline-block' }} />
-            {DEFAULT_TOWN_NAME}, CA &nbsp;·&nbsp;
+            {selectedTown.name}, CA &nbsp;·&nbsp;
             <div ref={heroRef} style={{ position: 'relative', display: 'inline-block' }}>
               <span onClick={() => setHeroDropdownOpen(!heroDropdownOpen)}
                 style={{ cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '2px', color: 'rgba(255,255,255,0.8)' }}>
@@ -276,9 +319,9 @@ export default function HomeBPage() {
 
       {/* CTA */}
       <div style={{ display: 'flex', justifyContent: 'center', padding: '28px 24px 0' }}>
-        <button onClick={() => router.push(`/${DEFAULT_TOWN}`)}
+        <button onClick={() => router.push(`/${selectedTown.slug}`)}
           style={{ background: colors.navBg, color: '#fff', border: 'none', padding: '13px 40px', borderRadius: '999px', fontSize: '15px', fontWeight: 500, cursor: 'pointer', fontFamily: fonts.sans }}>
-          Browse all {DEFAULT_TOWN_NAME} events →
+          Browse all {selectedTown.name} events →
         </button>
       </div>
 
@@ -290,7 +333,7 @@ export default function HomeBPage() {
           <div ref={sectionRef} style={{ position: 'relative', display: 'inline-block' }}>
             <span onClick={() => setSectionDropdownOpen(!sectionDropdownOpen)}
               style={{ fontSize: '22px', fontWeight: 500, color: colors.navBg, borderBottom: `2px solid ${colors.navBg}`, paddingBottom: '2px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              {DEFAULT_TOWN_NAME} <span style={{ fontSize: '14px' }}>⌄</span>
+              {selectedTown.name} <span style={{ fontSize: '14px' }}>⌄</span>
             </span>
             {sectionDropdownOpen && dropdownMenu(() => setSectionDropdownOpen(false))}
           </div>
@@ -325,9 +368,9 @@ export default function HomeBPage() {
         )}
 
         <div style={{ textAlign: 'center', marginTop: '28px' }}>
-          <button onClick={() => router.push(`/${DEFAULT_TOWN}`)}
+          <button onClick={() => router.push(`/${selectedTown.slug}`)}
             style={{ background: 'none', border: `1px solid ${colors.borderLight}`, color: colors.textSecondary, padding: '11px 36px', borderRadius: '999px', fontSize: '14px', cursor: 'pointer', fontFamily: fonts.sans }}>
-            See all {DEFAULT_TOWN_NAME} events →
+            See all {selectedTown.name} events →
           </button>
         </div>
       </div>
