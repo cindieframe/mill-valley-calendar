@@ -42,11 +42,10 @@ export default function ImportPage() {
     if (adminData.role === 'super_admin') {
       setIsSuperAdmin(true)
       const { data: townData } = await supabase
-        .from('events').select('town').not('town', 'is', null)
-      if (townData) {
-        const unique = [...new Set(townData.map((t: any) => t.town).filter(Boolean))].sort() as string[]
-        setAllTowns(unique)
-      }
+  .from('towns').select('name').eq('active', true).order('name')
+if (townData) {
+  setAllTowns(townData.map((t: any) => t.name))
+}
     } else {
       if (adminData.towns?.length) setSelectedTown(adminData.towns[0])
     }
