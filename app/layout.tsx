@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   title: "Mill Valley Townstir — Community Calendar",
   description: "Everything happening in Mill Valley, CA — all in one place.",
   verification: {
-    google: "kdNDYphQewhkfrLIxkmlo4J9UOnjPirwgu6fL9WEYZU",
+    google: "uf1jmebJXluc-pzzJqJq5Cz5atYEV2jY06YcJGGwgF4",
   },
   openGraph: {
     title: "Mill Valley Townstir — Community Calendar",

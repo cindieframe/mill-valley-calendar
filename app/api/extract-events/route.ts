@@ -152,22 +152,70 @@ export async function POST(request: NextRequest) {
     let pageText = ''
     let imageContext = ''
     try {
-      const response = await fetch(websiteUrl, {
+      let html = ''
+
+      // First try normal fetch
+      const normalRes = await fetch(websiteUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)',
         },
         signal: AbortSignal.timeout(15000),
       })
-      if (!response.ok) {
-        return NextResponse.json({ error: `Could not fetch that URL (HTTP ${response.status}). Check the address and try again.` }, { status: 400 })
+
+      if (normalRes.ok) {
+        html = await normalRes.text()
       }
-      const html = await response.text()
-      const imgMatches = [...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)]
+
+      // If page looks JS-rendered (little visible text), try Browserless
+      const strippedPreview = html
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+
+      const looksEmpty = strippedPreview.length < 500
+
+      if (looksEmpty && process.env.BROWSERLESS_API_KEY) {
+        console.log('Normal fetch returned little content — trying Browserless for:', websiteUrl)
+        try {
+          const browserlessRes = await fetch(
+            `https://production-sfo.browserless.io/content?token=${process.env.BROWSERLESS_API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({
+                url: websiteUrl,
+                waitForTimeout: 6000,
+              }),
+              signal: AbortSignal.timeout(30000),
+            }
+          )
+          if (browserlessRes.ok) {
+            html = await browserlessRes.text()
+            console.log('Browserless fetch succeeded for:', websiteUrl)
+          }
+        } catch (bErr) {
+          console.error('Browserless fallback failed:', bErr)
+        }
+      }
+
+      if (!html || html.length < 100) {
+        return NextResponse.json({ error: `Could not fetch that URL. Make sure it is correct and publicly accessible.` }, { status: 400 })
+      }
+
+      const imgMatches = [
+        ...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi),
+        ...html.matchAll(/<img[^>]+data-src=["']([^"']+)["']/gi),
+        ...html.matchAll(/<img[^>]+srcset=["']([^"'\s,]+)/gi),
+      ]
+
       const imageUrls = imgMatches
         .map(m => m[1])
-        .filter(src => src.startsWith('http') && !src.includes('logo') && !src.includes('icon') && !src.includes('avatar'))
+         .filter(src => src.startsWith('http') && !src.includes('logo') && !src.includes('icon') && !src.includes('avatar') && !src.includes('favicon'))
         .slice(0, 20)
-       imageContext = imageUrls.length ? `\nAVAILABLE IMAGE URLS:\n${imageUrls.join('\n')}` : ''
+     
+      imageContext = imageUrls.length ? `\nAVAILABLE IMAGE URLS:\n${imageUrls.join('\n')}` : ''
       pageText = html
         .replace(/<script[\s\S]*?<\/script>/gi, '')
         .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -231,7 +279,8 @@ Return ONLY valid JSON, no markdown, no explanation. Use this exact shape:
       "website": "Direct URL to event page if available, or null",
       "category": "outdoors,arts",
       "tags": "free,family",
-      "image_url": "https://... or null",${aggregatorField}
+       "image_url": "https://... or null",
+      "cost": "e.g. $30 ADV / $35 DOS, or Free, or null if unknown",${aggregatorField}
     }
   ],
   "errors": ["reason if any events were skipped or uncertain"]
@@ -241,7 +290,9 @@ Rules:
 - date must be YYYY-MM-DD format
 - time should be human-readable like "7:00 PM" or "All day" or null if unknown
 - If a date is ambiguous or you cannot determine the year, skip that event and note it in errors
-- If you find no upcoming events, return an empty events array`
+- If you find no upcoming events, return an empty events array
+- For image_url: match the event poster or image to the correct event using the AVAILABLE IMAGE URLS list. Prefer images that contain the artist/event name in the URL. Do not reuse the same image for multiple events.
+- For cost: extract the ticket price or admission cost exactly as shown on the page (e.g. "$30 ADV / $35 DOS"). If free, use "Free". If unknown, use null.`
  
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -293,6 +344,7 @@ Rules:
         description: ev.description || '',
         website: ev.website || websiteUrl,
         image_url: ev.image_url || null,
+        cost: ev.cost || null,
         status: 'pending',
         is_aggregator: isAggregator,
         extracted_organizer: isAggregator ? (ev.extracted_organizer || null) : null,

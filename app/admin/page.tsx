@@ -1015,23 +1015,23 @@ if (townData) {
                           </div>
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <button
-                              onClick={async e => {
-                                e.stopPropagation()
-                                if (!confirm(`Delete the existing "${dup.title}" and approve this one instead?`)) return
-                                const { error: delError } = await supabase.from('events').delete().eq('id', dup.id)
-                                if (!delError) {
-                                  setApprovedEvents(prev => prev.filter(a => a.id !== dup.id))
-                                  await updateStatus(ev.id, 'approved')
-                                }
-                              }}
+  onClick={async e => {
+    e.stopPropagation()
+    if (!confirm(`Delete the existing "${dup.title}" and approve this one instead?`)) return
+    // Send rejection email to the existing event before deleting it
+    await updateStatus(dup.id, 'rejected', 'This event was marked as a duplicate of a newer submission.')
+    // Now approve the new one
+    await updateStatus(ev.id, 'approved')
+    setApprovedEvents(prev => prev.filter(a => a.id !== dup.id))
+  }}
                               style={{ background: '#16803c', color: 'white', border: 'none', padding: '5px 12px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>
                               ✓ Keep this one
                             </button>
                             <button
-                              onClick={async e => {
-                                e.stopPropagation()
-                                await updateStatus(ev.id, 'rejected')
-                              }}
+  onClick={async e => {
+    e.stopPropagation()
+    await updateStatus(ev.id, 'rejected', 'This event appears to be a duplicate of one already on the calendar.')
+  }}
                               style={{ background: 'white', color: '#92400e', border: '1.5px solid #fde68a', padding: '5px 12px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>
                               ✕ Keep existing
                             </button>
