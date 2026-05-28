@@ -265,14 +265,24 @@ export async function POST(request: NextRequest) {
 
     for (const ev of events) {
       try {
-        const uidCheck = ev.uid
-          ? await supabase.from('events').select('id').eq('ical_uid', ev.uid).limit(1)
-          : { data: null }
+       if (ev.uid) {
+  const { data: existingEvent } = await supabase
+    .from('events')
+    .select('id')
+    .eq('ical_uid', ev.uid)
+    .limit(1)
 
-        if (uidCheck.data && uidCheck.data.length > 0) {
-          skipped++
-          continue
-        }
+  const { data: rejectedUid } = await supabase
+    .from('rejected_uids')
+    .select('id')
+    .eq('ical_uid', ev.uid)
+    .limit(1)
+
+  if ((existingEvent && existingEvent.length > 0) || (rejectedUid && rejectedUid.length > 0)) {
+    skipped++
+    continue
+  }
+}
 
         const { data: existingEvents } = await supabase
           .from('events')
