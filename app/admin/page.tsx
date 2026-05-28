@@ -372,8 +372,14 @@ if (townData) {
   }
 
   // ─── Delete with series support ───────────────────────────────────────────
-
-  async function deleteEvent(id: number) {
+async function saveRejectedUids(ids: number[]) {
+  await fetch('/api/save-rejected-uids', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ eventIds: ids }),
+  })
+}
+async function deleteEvent(id: number) {
     const ev = events.find(e => e.id === id)
     if (ev?.recurrence_id) {
       // Has a series — ask which scope
@@ -383,17 +389,22 @@ if (townData) {
     }
     // No series — delete immediately
     if (!confirm('Permanently delete this event?')) return
+    await saveRejectedUids([id])
     const { error } = await supabase.from('events').delete().eq('id', id)
     if (!error) setEvents(prev => prev.filter(ev => ev.id !== id))
   }
-
-  async function executeDelete(scope: 'this' | 'all') {
+async function executeDelete(scope: 'this' | 'all') {
     if (!pendingSavePayload) return
     const { id, recurrence_id } = pendingSavePayload
     if (scope === 'all' && recurrence_id) {
+      const idsToDelete = events
+        .filter(ev => ev.recurrence_id === recurrence_id)
+        .map(ev => ev.id)
+      await saveRejectedUids(idsToDelete)
       const { error } = await supabase.from('events').delete().eq('recurrence_id', recurrence_id)
       if (!error) setEvents(prev => prev.filter(ev => ev.recurrence_id !== recurrence_id))
     } else {
+      await saveRejectedUids([id])
       const { error } = await supabase.from('events').delete().eq('id', id)
       if (!error) setEvents(prev => prev.filter(ev => ev.id !== id))
     }
@@ -986,6 +997,7 @@ if (townData) {
                       <button onClick={async () => {
                         if (selected.size === 0 || !confirm(`Permanently delete ${selected.size} events?`)) return
                         setBulkWorking(true)
+                        await saveRejectedUids(Array.from(selected))
                         const { error } = await supabase.from('events').delete().in('id', Array.from(selected))
                         if (!error) { setEvents(prev => prev.filter(ev => !selected.has(ev.id))); setSelected(new Set()) }
                         setBulkWorking(false)
