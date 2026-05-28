@@ -153,6 +153,11 @@ async function loadBlockedOrgs() {
       if (data.error) {
         setOrgStatus(index, 'error', data.error)
       } else {
+        await fetch('/api/save-org', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: org.name, website_url: org.website, place_id: org.place_id, town })
+        })
         setOrgStatus(index, 'done', `Connected — ${data.imported} events imported, ${data.skipped} skipped`)
       }
     } catch {
@@ -177,10 +182,10 @@ async function loadBlockedOrgs() {
       } else if (data.imported === 0 && data.skipped === 0) {
         setOrgStatus(index, 'error', data.message || 'No upcoming events found on that page.')
       } else {
-        await fetch('/api/save-org', {
+       await fetch('/api/save-org', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: org.name, website_url: urlToUse })
+          body: JSON.stringify({ name: org.name, website_url: urlToUse, place_id: org.place_id, town })
         })
         const feedNote = data.feedDetected ? ' (iCal feed found and used)' : ''
         setOrgStatus(index, 'done', `${data.imported} events imported, ${data.skipped} skipped${feedNote} — saved to Import Events`)

@@ -20,9 +20,8 @@ const EVENT_KEYWORDS = [
   'concerts', 'programming', 'schedule',
 ]
 
-// If the events page URL contains these, it's a private venue — skip
 const PRIVATE_URL_PATTERNS = [
-  'private-event', 'private_event', 'privateevents', 
+  'private-event', 'private_event', 'privateevents',
   'catering', 'rental', 'rent-a', 'wedding', 'banquet', 'buyout',
 ]
 
@@ -95,14 +94,12 @@ async function findEventPageUrl(website: string): Promise<string | null> {
   if (!website) return null
   const base = getBaseDomain(website)
 
-  // Step 1 — try fixed paths first
   for (const path of EVENT_PAGE_PATHS) {
     const candidate = `${base}${path}`
     if (isPrivateEventUrl(candidate)) continue
     if (await pathExists(base, path)) return candidate
   }
 
-  // Step 2 — fetch homepage and scan links
   const html = await fetchHtml(website)
   if (!html) return null
 
@@ -253,17 +250,16 @@ export async function POST(request: NextRequest) {
     const { data: existingFeeds } = await supabase
       .from('ical_feeds')
       .select('url, organization')
-    
-    // Fix: check for orgs that have actual events, not just an org record
+
     const { data: orgsWithEvents } = await supabase
       .from('events')
       .select('organization')
       .eq('status', 'approved')
       .eq('town', town)
-    
+
     const { data: existingOrgs } = await supabase
       .from('organizations')
-      .select('name, website_url')
+      .select('name, website_url, last_extracted_at, place_id')
 
     const existingFeedUrls = new Set((existingFeeds || []).map((f: any) => f.url))
     const orgsWithEventNames = new Set((orgsWithEvents || []).map((e: any) => e.organization?.toLowerCase()))
@@ -304,6 +300,26 @@ export async function POST(request: NextRequest) {
 
     const orgs = []
 
+    // Build lookup sets once before the loop
+    const knownPlaceIds = new Set(
+      (existingOrgs || []).map((o: any) => o.place_id).filter(Boolean)
+    )
+    const feedOrgNames = new Set(
+      (existingFeeds || []).map((f: any) => f.organization?.toLowerCase())
+    )
+    const extractedOrgWebsites = new Set(
+      (existingOrgs || [])
+        .filter((o: any) => o.last_extracted_at !== null)
+        .map((o: any) => { try { return getBaseDomain(o.website_url) } catch { return null } })
+        .filter(Boolean)
+    )
+    const extractedOrgNames = new Set(
+      (existingOrgs || [])
+        .filter((o: any) => o.last_extracted_at !== null)
+        .map((o: any) => o.name?.toLowerCase())
+        .filter(Boolean)
+    )
+
     for (const place of allPlaces) {
       try {
         const details = await getPlaceDetails(place.place_id, apiKey)
@@ -316,19 +332,20 @@ export async function POST(request: NextRequest) {
         const isTrusted = types.some((t: string) => TRUSTED_TYPES.has(t))
         const eventPageUrl = await findEventPageUrl(website)
 
-        // If only events page found is a private venue page, skip entirely
         if (!isTrusted && !eventPageUrl) continue
 
         const { likely, reason } = await assessOrg(name, types, website, eventPageUrl)
         if (!likely) continue
 
         const normalizedWebsite = website ? getBaseDomain(website) : null
-        
-        // Only mark as already imported if they have actual approved events
+
         const alreadyImported =
+          knownPlaceIds.has(place.place_id) ||
           orgsWithEventNames.has(name.toLowerCase()) ||
-          (normalizedWebsite !== null && existingOrgWebsites.has(normalizedWebsite) && 
-           orgsWithEventNames.has(name.toLowerCase()))
+          feedOrgNames.has(name.toLowerCase()) ||
+          extractedOrgNames.has(name.toLowerCase()) ||
+          (normalizedWebsite !== null && existingOrgWebsites.has(normalizedWebsite)) ||
+          (normalizedWebsite !== null && extractedOrgWebsites.has(normalizedWebsite))
 
         const feedUrl = await detectIcalFeed(website)
         const feedAlreadyConnected = feedUrl ? existingFeedUrls.has(feedUrl) : false
