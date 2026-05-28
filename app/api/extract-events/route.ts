@@ -2,16 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import ICAL from 'ical.js'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '../../supabase'
- 
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
- 
+
 async function detectIcalFeed(url: string): Promise<string | null> {
   const base = new URL(url)
   const origin = base.origin
   const pathname = base.pathname.replace(/\/$/, '')
- 
+
   const candidates = [
     `${origin}${pathname}?format=ical`,
     `${origin}/events?format=ical`,
@@ -23,7 +23,7 @@ async function detectIcalFeed(url: string): Promise<string | null> {
     `${origin}/feed.ics`,
     `${origin}${pathname}.ics`,
   ]
- 
+
   for (const candidate of candidates) {
     try {
       const res = await fetch(candidate, {
@@ -39,7 +39,7 @@ async function detectIcalFeed(url: string): Promise<string | null> {
       continue
     }
   }
- 
+
   try {
     const res = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
@@ -59,18 +59,36 @@ async function detectIcalFeed(url: string): Promise<string | null> {
   } catch {
     // ignore
   }
- 
+
   return null
 }
- 
+
+// Fetch og:image from an event's own page — works for SimpleTix, Eventbrite, and most ticketing platforms
+async function fetchOgImage(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const html = await res.text()
+    const match =
+      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
+    return match?.[1] || null
+  } catch {
+    return null
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { websiteUrl, organization, isAggregator: isAggregatorParam, town } = await request.json()
- 
+
     if (!websiteUrl || !organization) {
       return NextResponse.json({ error: 'websiteUrl and organization required' }, { status: 400 })
     }
- 
+
     // Check if this org is flagged as an aggregator in the organizations table
     // or if the caller explicitly passed isAggregator: true
     let isAggregator = isAggregatorParam === true
@@ -82,7 +100,7 @@ export async function POST(request: NextRequest) {
         .single()
       if (orgData?.is_aggregator) isAggregator = true
     }
- 
+
     // Step 1 — try to find an iCal feed first
     const detectedFeed = await detectIcalFeed(websiteUrl)
     if (detectedFeed) {
@@ -99,19 +117,19 @@ export async function POST(request: NextRequest) {
         let imported = 0
         let skipped = 0
         const results = []
- 
+
         for (const vevent of vevents) {
           const ev = new ICAL.Event(vevent)
           const start = ev.startDate?.toJSDate()
           const dateStr = start ? new Date(start).toISOString().split('T')[0] : null
           if (!dateStr || dateStr < today) { skipped++; continue }
- 
+
           const { data: existing } = await supabase
             .from('events').select('id').eq('title', ev.summary || '').eq('date', dateStr).single()
           if (existing) { skipped++; continue }
- 
+
           const timeStr = start ? new Date(start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : null
- 
+
           const { error } = await supabase.from('events').insert([{
             title: ev.summary || 'Untitled Event',
             date: dateStr,
@@ -128,7 +146,7 @@ export async function POST(request: NextRequest) {
             extracted_organizer: null,
             town: town || 'Mill Valley',
           }])
- 
+
           if (!error) {
             imported++
             results.push({ title: ev.summary, date: dateStr, time: timeStr, categories: 'community', tags: '' })
@@ -136,7 +154,7 @@ export async function POST(request: NextRequest) {
             skipped++
           }
         }
- 
+
         return NextResponse.json({
           success: true, imported, skipped,
           total: imported + skipped, results, errors: [],
@@ -147,7 +165,7 @@ export async function POST(request: NextRequest) {
         // iCal parse failed — fall through to Claude
       }
     }
- 
+
     // Step 2 — no feed found, fall back to Claude extraction
     let pageText = ''
     let imageContext = ''
@@ -179,21 +197,21 @@ export async function POST(request: NextRequest) {
       if (looksEmpty && process.env.BROWSERLESS_API_KEY) {
         console.log('Normal fetch returned little content — trying Browserless for:', websiteUrl)
         try {
-          const browserlessRes = await fetch(
+          const contentRes = await fetch(
             `https://production-sfo.browserless.io/content?token=${process.env.BROWSERLESS_API_KEY}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({
+              body: JSON.stringify({
                 url: websiteUrl,
                 waitForTimeout: 6000,
               }),
-              signal: AbortSignal.timeout(30000),
+              signal: AbortSignal.timeout(60000),
             }
           )
-          if (browserlessRes.ok) {
-            html = await browserlessRes.text()
-            console.log('Browserless fetch succeeded for:', websiteUrl)
+          if (contentRes.ok) {
+            html = await contentRes.text()
+            console.log('Browserless /content succeeded, html length:', html.length)
           }
         } catch (bErr) {
           console.error('Browserless fallback failed:', bErr)
@@ -208,13 +226,16 @@ export async function POST(request: NextRequest) {
         ...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi),
         ...html.matchAll(/<img[^>]+data-src=["']([^"']+)["']/gi),
         ...html.matchAll(/<img[^>]+srcset=["']([^"'\s,]+)/gi),
+        ...html.matchAll(/background-image:\s*url\(["']?(https?:[^"')]+)["']?\)/gi),
+        ...html.matchAll(/data-image=["']([^"']+)["']/gi),
+        ...html.matchAll(/data-bg=["']([^"']+)["']/gi),
       ]
 
       const imageUrls = imgMatches
         .map(m => m[1])
-         .filter(src => src.startsWith('http') && !src.includes('logo') && !src.includes('icon') && !src.includes('avatar') && !src.includes('favicon'))
+        .filter(src => src.startsWith('http') && !src.includes('logo') && !src.includes('icon') && !src.includes('avatar') && !src.includes('favicon'))
         .slice(0, 20)
-     
+
       imageContext = imageUrls.length ? `\nAVAILABLE IMAGE URLS:\n${imageUrls.join('\n')}` : ''
       pageText = html
         .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -228,29 +249,29 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       return NextResponse.json({ error: `Could not reach that URL. Make sure it is correct and publicly accessible.` }, { status: 400 })
     }
- 
+
     const today = new Date().toISOString().split('T')[0]
- 
+
     // If this is an aggregator, ask Claude to also identify the real organizer per event
     const aggregatorInstructions = isAggregator ? `
 IMPORTANT: "${organization}" is an event aggregator, not an event organizer. For each event, try to identify the actual organization hosting the event (e.g. the theater, school, nonprofit, or business running it). Put the real organizer name in the "extracted_organizer" field. If you cannot determine the real organizer, leave "extracted_organizer" as null.
 ` : ''
- 
+
     const aggregatorField = isAggregator ? `
       "extracted_organizer": "Name of the actual organizing org, or null if unknown",` : ''
- 
+
     const prompt = `You are extracting upcoming community events from a website for a local calendar in Mill Valley, CA.
- 
+
 Today's date is ${today}. Extract ONLY upcoming events (today or future). Ignore past events.
- 
+
 WEBSITE URL: ${websiteUrl}
 ORGANIZATION: ${organization}
 ${aggregatorInstructions}
 PAGE TEXT:
 ${pageText}${imageContext ?? ''}
- 
+
 Extract every event you can find. For each event return a JSON object.
- 
+
 Also assign categories (pick all that apply):
 - outdoors (hikes, sports, yoga, fitness, nature, running, dance)
 - arts (concerts, theater, film, art, music, performances)
@@ -259,14 +280,14 @@ Also assign categories (pick all that apply):
 - family (kids, children, youth, storytime, school)
 - classes (workshops, lectures, lessons, classes, learning)
 - gov (city council, planning, town hall, government meetings)
- 
+
 And tags (pick all that apply):
 - free (if the event is free)
 - family (if family-friendly)
 - wellness (if health or wellness focused)
 - reg (if registration required)
 - volunteer (if it's a volunteering opportunity)
- 
+
 Return ONLY valid JSON, no markdown, no explanation. Use this exact shape:
 {
   "events": [
@@ -276,16 +297,16 @@ Return ONLY valid JSON, no markdown, no explanation. Use this exact shape:
       "time": "7:00 PM",
       "location": "Venue name or address, or null",
       "description": "1-2 sentence description, or null",
-      "website": "Direct URL to event page if available, or null",
+            "website": "Direct URL to the individual event or ticket page (e.g. SimpleTix, Eventbrite, etc) — NOT the main calendar page. Look for buy ticket links or event detail links. null if not found.",
       "category": "outdoors,arts",
       "tags": "free,family",
-       "image_url": "https://... or null",
+      "image_url": "https://... or null",
       "cost": "e.g. $30 ADV / $35 DOS, or Free, or null if unknown",${aggregatorField}
     }
   ],
   "errors": ["reason if any events were skipped or uncertain"]
 }
- 
+
 Rules:
 - date must be YYYY-MM-DD format
 - time should be human-readable like "7:00 PM" or "All day" or null if unknown
@@ -293,16 +314,16 @@ Rules:
 - If you find no upcoming events, return an empty events array
 - For image_url: match the event poster or image to the correct event using the AVAILABLE IMAGE URLS list. Prefer images that contain the artist/event name in the URL. Do not reuse the same image for multiple events.
 - For cost: extract the ticket price or admission cost exactly as shown on the page (e.g. "$30 ADV / $35 DOS"). If free, use "Free". If unknown, use null.`
- 
+
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }],
     })
- 
+
     const rawText = aiResponse.content[0].type === 'text' ? aiResponse.content[0].text : ''
     const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
- 
+
     let parsed: { events: any[]; errors: string[] }
     try {
       parsed = JSON.parse(cleaned)
@@ -311,7 +332,7 @@ Rules:
         error: 'Claude could not parse the page into events. Try a more specific events page URL (e.g. /events or /calendar).',
       }, { status: 422 })
     }
- 
+
     if (!parsed.events || parsed.events.length === 0) {
       return NextResponse.json({
         imported: 0, skipped: 0, total: 0, results: [],
@@ -319,19 +340,28 @@ Rules:
         message: 'No upcoming events found on that page. Try linking directly to the events or calendar page.',
       })
     }
- 
+
     let imported = 0
     let skipped = 0
     const results = []
- 
+
     for (const ev of parsed.events) {
       if (!ev.date || !/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) { skipped++; continue }
       if (ev.date < today) { skipped++; continue }
- 
+
       const { data: existing } = await supabase
         .from('events').select('id').eq('title', ev.title).eq('date', ev.date).single()
       if (existing) { skipped++; continue }
- 
+
+      // If Claude found no image, try fetching og:image from the event's own URL.
+      // This works for SimpleTix, Eventbrite, and most ticketing platforms — free, no Browserless needed.
+      let imageUrl = ev.image_url || null
+      
+      if (!imageUrl && ev.website && ev.website.startsWith('http')) {
+        imageUrl = await fetchOgImage(ev.website)
+       
+      }
+
       const { error } = await supabase.from('events').insert([{
         title: ev.title,
         date: ev.date,
@@ -343,14 +373,14 @@ Rules:
         tags: ev.tags || '',
         description: ev.description || '',
         website: ev.website || websiteUrl,
-        image_url: ev.image_url || null,
+        image_url: imageUrl,
         cost: ev.cost || null,
         status: 'pending',
         is_aggregator: isAggregator,
         extracted_organizer: isAggregator ? (ev.extracted_organizer || null) : null,
         town: town || 'Mill Valley',
       }])
- 
+
       if (!error) {
         imported++
         results.push({ title: ev.title, date: ev.date, time: ev.time, categories: ev.category, tags: ev.tags })
@@ -358,9 +388,9 @@ Rules:
         skipped++
       }
     }
- 
+
     return NextResponse.json({ success: true, imported, skipped, total: parsed.events.length, results, errors: parsed.errors || [] })
- 
+
   } catch (error) {
     console.error('Extract events error:', error)
     return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
