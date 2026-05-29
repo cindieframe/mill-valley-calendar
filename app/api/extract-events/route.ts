@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import ICAL from 'ical.js'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '../../supabase'
+import { shouldAutoReject, AUTO_REJECT_NOTE } from '../../lib/moderation'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -348,6 +349,27 @@ Rules:
     for (const ev of parsed.events) {
       if (!ev.date || !/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) { skipped++; continue }
       if (ev.date < today) { skipped++; continue }
+
+      // Auto-moderation — reject administrative events
+      if (shouldAutoReject(ev.title)) {
+        await supabase.from('events').insert([{
+          title: ev.title,
+          date: ev.date,
+          time: ev.time || null,
+          location: ev.location || organization,
+          address: ev.location || '',
+          organization: organization,
+          category: 'gov',
+          tags: '',
+          description: ev.description || '',
+          website: ev.website || websiteUrl,
+          status: 'rejected',
+          rejected_note: AUTO_REJECT_NOTE,
+          town: town || 'Mill Valley',
+        }])
+        skipped++
+        continue
+      }
 
       const { data: existing } = await supabase
         .from('events').select('id').eq('title', ev.title).eq('date', ev.date).single()

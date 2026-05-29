@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '../../supabase'
+import { shouldAutoReject, AUTO_REJECT_NOTE } from '../../lib/moderation'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -263,9 +264,38 @@ export async function POST(request: NextRequest) {
     let skipped = 0
     const results = []
 
-    for (const ev of events) {
+     for (const ev of events) {
       try {
-       if (ev.uid) {
+        // Auto-moderation — reject administrative events before dedup check
+        if (shouldAutoReject(ev.summary)) {
+          if (ev.uid) {
+            await supabase.from('rejected_uids').upsert(
+              [{ ical_uid: ev.uid, organization: displayName }],
+              { onConflict: 'ical_uid', ignoreDuplicates: true }
+            )
+          }
+          await supabase.from('events').insert([{
+            title: ev.summary,
+            date: ev.dateStr,
+            time: ev.timeStr,
+            end_time: ev.endTimeStr || null,
+            location: ev.location || displayName,
+            address: ev.location || '',
+            organization: displayName,
+            category: 'gov',
+            tags: '',
+            description: ev.description || '',
+            website: ev.url || '',
+            status: 'rejected',
+            rejected_note: AUTO_REJECT_NOTE,
+            ical_uid: ev.uid || null,
+            town: town || 'Mill Valley',
+          }])
+          skipped++
+          continue
+        }
+
+        if (ev.uid) {
   const { data: existingEvent } = await supabase
     .from('events')
     .select('id')
