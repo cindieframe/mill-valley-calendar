@@ -10,6 +10,8 @@ const BLOCKED_TITLE_PATTERNS = [
   /\bobserved\b/i,
   /\boffice closed\b/i,
   /\bholiday closure\b/i,
+    /\bboard of directors\b/i,
+  /\bboard of trustees\b/i,
 ]
 
 export const AUTO_REJECT_NOTE = 'Auto-rejected: administrative event not suitable for public calendar.'
