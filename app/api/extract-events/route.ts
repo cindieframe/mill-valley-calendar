@@ -317,7 +317,7 @@ Rules:
 - For cost: extract the ticket price or admission cost exactly as shown on the page (e.g. "$30 ADV / $35 DOS"). If free, use "Free". If unknown, use null.`
 
     const aiResponse = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }],
     })
