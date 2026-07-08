@@ -64,6 +64,155 @@ async function detectIcalFeed(url: string): Promise<string | null> {
   return null
 }
 
+// Detect and import Squarespace events by scraping individual event iCal links
+// Squarespace exposes ?format=ical on every event page but not as a full feed
+async function importSquarespaceEvents(websiteUrl: string, organization: string, isAggregator: boolean, town: string): Promise<{ imported: number, skipped: number, results: any[] } | null> {
+  try {
+    // Fetch the events page
+    const res = await fetch(websiteUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!res.ok) return null
+    const html = await res.text()
+
+    // Check if this is a Squarespace site
+    const isSquarespace = html.includes('squarespace') || html.includes('sqsp')
+    if (!isSquarespace) return null
+
+    // Extract all individual event page URLs
+    const base = new URL(websiteUrl)
+    const origin = base.origin
+    const eventsPath = base.pathname.replace(/\/$/, '')
+
+    // Squarespace event URLs follow the pattern /events/slug
+    const eventUrlPattern = new RegExp(`href=["'](${eventsPath}/[^"'?#]+)["']`, 'gi')
+    const absolutePattern = new RegExp(`href=["'](https?://${base.host}${eventsPath}/[^"'?#]+)["']`, 'gi')
+
+    const eventSlugs = new Set<string>()
+
+    for (const match of html.matchAll(eventUrlPattern)) {
+      const path = match[1]
+      if (!path.includes('.') && path !== eventsPath) {
+        eventSlugs.add(`${origin}${path}`)
+      }
+    }
+
+    for (const match of html.matchAll(absolutePattern)) {
+      const url = match[1]
+      if (!url.includes('.')) {
+        eventSlugs.add(url)
+      }
+    }
+
+    if (eventSlugs.size === 0) return null
+
+    console.log(`Squarespace: found ${eventSlugs.size} event URLs for ${organization}`)
+
+    const today = new Date().toISOString().split('T')[0]
+    let imported = 0
+    let skipped = 0
+    const results: any[] = []
+
+    for (const eventUrl of eventSlugs) {
+      try {
+        const icalUrl = `${eventUrl}?format=ical`
+        const icalRes = await fetch(icalUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
+          signal: AbortSignal.timeout(8000),
+        })
+        if (!icalRes.ok) continue
+        const icalText = await icalRes.text()
+        if (!icalText.includes('BEGIN:VCALENDAR')) continue
+
+        const jcalData = ICAL.parse(icalText)
+        const comp = new ICAL.Component(jcalData)
+        const vevents = comp.getAllSubcomponents('vevent')
+
+        for (const vevent of vevents) {
+          const ev = new ICAL.Event(vevent)
+          const start = ev.startDate?.toJSDate()
+          const dateStr = start ? new Date(start).toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' }) : null
+           
+          if (!dateStr || dateStr < today) { skipped++; continue }
+
+          const title = ev.summary || 'Untitled Event'
+
+          if (shouldAutoReject(title)) {
+            await supabase.from('events').insert([{
+              title,
+              date: dateStr,
+              organization,
+              category: 'gov',
+              tags: '',
+              status: 'rejected',
+              rejected_note: AUTO_REJECT_NOTE,
+              town: town || 'Mill Valley',
+            }])
+            skipped++
+            continue
+          }
+
+          // Dedup check
+          const { data: existing } = await supabase
+            .from('events').select('id').eq('title', title).eq('date', dateStr).limit(1)
+          if (existing && existing.length > 0) { skipped++; continue }
+
+          const timeStr = start ? new Date(start).toLocaleTimeString('en-US', {
+            timeZone: 'America/Los_Angeles',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+          }) : null
+
+          const end = ev.endDate?.toJSDate()
+          const endTimeStr = end ? new Date(end).toLocaleTimeString('en-US', {
+            timeZone: 'America/Los_Angeles',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+          }) : null
+
+          // Get og:image from the event page
+          const imageUrl = await fetchOgImage(eventUrl)
+
+          const { error } = await supabase.from('events').insert([{
+            title,
+            date: dateStr,
+            time: timeStr,
+            end_time: endTimeStr || null,
+            location: ev.location || organization,
+            address: ev.location || '',
+            organization,
+            category: 'community',
+            tags: '',
+            description: ev.description || '',
+            website: eventUrl,
+            image_url: imageUrl,
+            status: 'pending',
+            is_aggregator: isAggregator,
+            town: town || 'Mill Valley',
+          }])
+
+          if (!error) {
+            imported++
+            results.push({ title, date: dateStr, time: timeStr, categories: 'community', tags: '' })
+          } else {
+            skipped++
+          }
+        }
+      } catch (err) {
+        console.error('Squarespace: error processing event URL:', eventUrl, err)
+      }
+    }
+
+    return { imported, skipped, results }
+  } catch (err) {
+    console.error('Squarespace import failed:', err)
+    return null
+  }
+}
+
 // Fetch og:image from an event's own page — works for SimpleTix, Eventbrite, and most ticketing platforms
 async function fetchOgImage(url: string): Promise<string | null> {
   try {
@@ -90,8 +239,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'websiteUrl and organization required' }, { status: 400 })
     }
 
-    // Check if this org is flagged as an aggregator in the organizations table
-    // or if the caller explicitly passed isAggregator: true
     let isAggregator = isAggregatorParam === true
     if (!isAggregator) {
       const { data: orgData } = await supabase
@@ -163,7 +310,20 @@ export async function POST(request: NextRequest) {
           message: `✅ Found iCal feed automatically! Used ${detectedFeed} instead of scraping.`
         })
       } catch {
-        // iCal parse failed — fall through to Claude
+        // iCal parse failed — fall through
+      }
+    }
+
+    // Step 1.5 — try Squarespace individual event iCal import
+    const squarespaceResult = await importSquarespaceEvents(websiteUrl, organization, isAggregator, town || 'Mill Valley')
+    if (squarespaceResult !== null) {
+      const { imported, skipped, results } = squarespaceResult
+      if (imported > 0 || skipped > 0) {
+        return NextResponse.json({
+          success: true, imported, skipped,
+          total: imported + skipped, results, errors: [],
+          message: `✅ Imported ${imported} events from Squarespace (${skipped} skipped).`
+        })
       }
     }
 
@@ -173,7 +333,6 @@ export async function POST(request: NextRequest) {
     try {
       let html = ''
 
-      // First try normal fetch
       const normalRes = await fetch(websiteUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)',
@@ -185,7 +344,6 @@ export async function POST(request: NextRequest) {
         html = await normalRes.text()
       }
 
-      // If page looks JS-rendered (little visible text), try Browserless
       const strippedPreview = html
         .replace(/<script[\s\S]*?<\/script>/gi, '')
         .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -193,7 +351,7 @@ export async function POST(request: NextRequest) {
         .replace(/\s+/g, ' ')
         .trim()
 
-      const looksEmpty = strippedPreview.length < 500
+      const looksEmpty = strippedPreview.length < 200
 
       if (looksEmpty && process.env.BROWSERLESS_API_KEY) {
         console.log('Normal fetch returned little content — trying Browserless for:', websiteUrl)
@@ -253,7 +411,6 @@ export async function POST(request: NextRequest) {
 
     const today = new Date().toISOString().split('T')[0]
 
-    // If this is an aggregator, ask Claude to also identify the real organizer per event
     const aggregatorInstructions = isAggregator ? `
 IMPORTANT: "${organization}" is an event aggregator, not an event organizer. For each event, try to identify the actual organization hosting the event (e.g. the theater, school, nonprofit, or business running it). Put the real organizer name in the "extracted_organizer" field. If you cannot determine the real organizer, leave "extracted_organizer" as null.
 ` : ''
@@ -298,7 +455,7 @@ Return ONLY valid JSON, no markdown, no explanation. Use this exact shape:
       "time": "7:00 PM",
       "location": "Venue name or address, or null",
       "description": "1-2 sentence description, or null",
-            "website": "Direct URL to the individual event or ticket page (e.g. SimpleTix, Eventbrite, etc) — NOT the main calendar page. Look for buy ticket links or event detail links. null if not found.",
+      "website": "Direct URL to the individual event or ticket page (e.g. SimpleTix, Eventbrite, etc) — NOT the main calendar page. Look for buy ticket links or event detail links. null if not found.",
       "category": "outdoors,arts",
       "tags": "free,family",
       "image_url": "https://... or null",
@@ -350,7 +507,6 @@ Rules:
       if (!ev.date || !/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) { skipped++; continue }
       if (ev.date < today) { skipped++; continue }
 
-      // Auto-moderation — reject administrative events
       if (shouldAutoReject(ev.title)) {
         await supabase.from('events').insert([{
           title: ev.title,
@@ -375,13 +531,9 @@ Rules:
         .from('events').select('id').eq('title', ev.title).eq('date', ev.date).single()
       if (existing) { skipped++; continue }
 
-      // If Claude found no image, try fetching og:image from the event's own URL.
-      // This works for SimpleTix, Eventbrite, and most ticketing platforms — free, no Browserless needed.
       let imageUrl = ev.image_url || null
-      
       if (!imageUrl && ev.website && ev.website.startsWith('http')) {
         imageUrl = await fetchOgImage(ev.website)
-       
       }
 
       const { error } = await supabase.from('events').insert([{
