@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
 import { AdminHeader } from '../../components/Header'
@@ -24,6 +24,14 @@ type OrgResult = {
   confirmingDismiss: boolean
 }
 
+type RunProgress = {
+  status: 'running' | 'completed' | 'failed'
+  total_orgs: number
+  processed_count: number
+  blocked_skipped: number
+  already_known_skipped: number
+}
+
 function DiscoverOrgsInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -32,26 +40,113 @@ function DiscoverOrgsInner() {
   const [state, setState] = useState('CA')
   const [loading, setLoading] = useState(false)
   const [orgs, setOrgs] = useState<OrgResult[]>([])
-  const [summary, setSummary] = useState<{ total_found: number; town: string; orgs_with_events: number } | null>(null)
+  const [runId, setRunId] = useState<string | null>(null)
+  const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [error, setError] = useState('')
   const [blockedOrgs, setBlockedOrgs] = useState<any[]>([])
   const [showBlocked, setShowBlocked] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const knownPlaceIdsRef = useRef<Set<string>>(new Set())
+  const isStartingRef = useRef(false)
+  const isRunningRef = useRef(false)
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [])
+
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }
+
+  async function markRunFailed(id: string) {
+    try {
+      await fetch('/api/discover-orgs/fail-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: id })
+      })
+    } catch {
+      // best-effort — if this fails too, the run just sits as 'running'
+      // until manually cleared, same as before this fix
+    }
+  }
+
+  async function refreshStatus(id: string) {
+    const res = await fetch('/api/discover-orgs/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run_id: id })
+    })
+    const data = await res.json()
+    if (data.error) throw new Error(data.error)
+
+    setRunProgress(data.run)
+
+    const incoming: any[] = data.orgs || []
+    const newOnes = incoming.filter(o => !knownPlaceIdsRef.current.has(o.place_id))
+    if (newOnes.length > 0) {
+      newOnes.forEach(o => knownPlaceIdsRef.current.add(o.place_id))
+      setOrgs(prev => [
+        ...prev,
+        ...newOnes.map((o: any) => ({
+          ...o,
+          selected: !o.already_imported && !o.feed_already_connected,
+          status: 'idle' as const,
+          statusMessage: '',
+          dismissed: false,
+          confirmingDismiss: false,
+        }))
+      ])
+    }
+    return data.run
+  }
+
+  async function runDiscoveryLoop(id: string) {
+    try {
+      while (true) {
+        const batchRes = await fetch('/api/discover-orgs/process-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ run_id: id })
+        })
+        const batchData = await batchRes.json()
+        if (batchData.error) {
+          setError(batchData.error)
+          await markRunFailed(id)
+          break
+        }
+
+        const run = await refreshStatus(id)
+
+        if (run.status !== 'running') break
+      }
+    } catch {
+      setError('Discovery stopped unexpectedly. Please try again.')
+      await markRunFailed(id)
+    }
+    isRunningRef.current = false
+    setLoading(false)
+  }
 
   async function handleDiscover() {
+    if (isStartingRef.current || isRunningRef.current) return
+    isStartingRef.current = true
+
     setLoading(true)
     setError('')
     setOrgs([])
-    setSummary(null)
-    try {
-      const blockedRes = await fetch('/api/get-blocked-orgs', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ town })
-})
-const blockedData = await blockedRes.json()
-const blockedIds = new Set((blockedData.data || []).map((b: any) => b.place_id))
+    setRunId(null)
+    setRunProgress(null)
+    knownPlaceIdsRef.current = new Set()
+    stopPolling()
 
-      const res = await fetch('/api/discover-orgs', {
+    try {
+      const res = await fetch('/api/discover-orgs/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ town, state })
@@ -59,25 +154,34 @@ const blockedIds = new Set((blockedData.data || []).map((b: any) => b.place_id))
       const data = await res.json()
       if (data.error) {
         setError(data.error)
-      } else {
-        setSummary({ total_found: data.total_found, town: data.town, orgs_with_events: data.orgs_with_events })
-        setOrgs(
-          data.orgs
-            .filter((o: any) => !blockedIds.has(o.place_id))
-            .map((o: any) => ({
-              ...o,
-              selected: !o.already_imported && !o.feed_already_connected,
-              status: 'idle',
-              statusMessage: '',
-              dismissed: false,
-              confirmingDismiss: false,
-            }))
-        )
+        isStartingRef.current = false
+        setLoading(false)
+        return
       }
+
+      setRunId(data.run_id)
+      setRunProgress({
+        status: 'running',
+        total_orgs: data.total_orgs,
+        processed_count: 0,
+        blocked_skipped: 0,
+        already_known_skipped: 0,
+      })
+
+      if (data.total_orgs === 0) {
+        isStartingRef.current = false
+        setLoading(false)
+        return
+      }
+
+      isRunningRef.current = true
+      isStartingRef.current = false
+      runDiscoveryLoop(data.run_id)
     } catch {
       setError('Discovery failed. Please try again.')
+      isStartingRef.current = false
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   function toggleSelect(index: number) {
@@ -103,37 +207,35 @@ const blockedIds = new Set((blockedData.data || []).map((b: any) => b.place_id))
   }
 
   async function blockOrg(index: number) {
-  const org = orgs[index]
-  const res = await fetch('/api/block-org', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ place_id: org.place_id, name: org.name, town, website: org.website })
-  })
-  const data = await res.json()
-  if (data.error) { alert('Block failed: ' + data.error); return }
-  setOrgs(prev => prev.map((o, i) => i === index ? { ...o, dismissed: true, confirmingDismiss: false } : o))
-}
+    const org = orgs[index]
+    const res = await fetch('/api/block-org', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ place_id: org.place_id, name: org.name, town, website: org.website })
+    })
+    const data = await res.json()
+    if (data.error) { alert('Block failed: ' + data.error); return }
+    setOrgs(prev => prev.map((o, i) => i === index ? { ...o, dismissed: true, confirmingDismiss: false } : o))
+  }
 
-async function unblockOrg(id: string) {
-  await fetch('/api/unblock-org', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id })
-  })
-  setBlockedOrgs(prev => prev.filter(b => b.id !== id))
-}
+  async function unblockOrg(id: string) {
+    await fetch('/api/unblock-org', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    })
+    setBlockedOrgs(prev => prev.filter(b => b.id !== id))
+  }
 
-async function loadBlockedOrgs() {
-  const res = await fetch('/api/get-blocked-orgs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ town })
-  })
-  const { data } = await res.json()
-  if (data) setBlockedOrgs(data)
-}
-
-
+  async function loadBlockedOrgs() {
+    const res = await fetch('/api/get-blocked-orgs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ town })
+    })
+    const { data } = await res.json()
+    if (data) setBlockedOrgs(data)
+  }
 
   function setOrgStatus(index: number, status: OrgResult['status'], message: string) {
     setOrgs(prev => prev.map((o, i) => i === index ? { ...o, status, statusMessage: message } : o))
@@ -182,7 +284,7 @@ async function loadBlockedOrgs() {
       } else if (data.imported === 0 && data.skipped === 0) {
         setOrgStatus(index, 'error', data.message || 'No upcoming events found on that page.')
       } else {
-       await fetch('/api/save-org', {
+        await fetch('/api/save-org', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: org.name, website_url: urlToUse, place_id: org.place_id, town })
@@ -396,10 +498,24 @@ async function loadBlockedOrgs() {
           </button>
         </div>
 
-        {loading && (
-          <div style={{ background: 'white', borderRadius: '12px', padding: '40px', textAlign: 'center', border: '1.5px solid #e5e7eb' }}>
-            <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '8px' }}>Searching Google Places, checking for iCal feeds, and assessing orgs…</p>
-            <p style={{ fontSize: '12px', color: '#9ca3af' }}>This can take up to 5 minutes</p>
+        {loading && runProgress && (
+          <div style={{ background: 'white', borderRadius: '12px', padding: '24px', textAlign: 'center', border: '1.5px solid #e5e7eb', marginBottom: '16px' }}>
+            <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '10px' }}>
+              Checked {runProgress.processed_count} of {runProgress.total_orgs} candidates…
+            </p>
+            <div style={{ height: '6px', borderRadius: '999px', background: '#f2f3f5', overflow: 'hidden', marginBottom: '10px' }}>
+              <div style={{
+                height: '100%',
+                width: runProgress.total_orgs > 0 ? `${Math.min(100, (runProgress.processed_count / runProgress.total_orgs) * 100)}%` : '0%',
+                background: '#1a3d2b',
+                transition: 'width 0.3s ease',
+              }} />
+            </div>
+            <p style={{ fontSize: '12px', color: '#9ca3af' }}>
+              {runProgress.blocked_skipped > 0 && `${runProgress.blocked_skipped} blocked skipped · `}
+              {runProgress.already_known_skipped > 0 && `${runProgress.already_known_skipped} already known · `}
+              Results appear below as they're found
+            </p>
           </div>
         )}
 
@@ -409,13 +525,13 @@ async function loadBlockedOrgs() {
           </div>
         )}
 
-        {summary && orgs.length > 0 && (
+        {orgs.length > 0 && (
           <div>
             <div style={{ fontSize: '15px', fontWeight: 500, color: '#1f2937', marginBottom: '2px' }}>
-              Found {summary.orgs_with_events ?? visible.length} orgs likely to have events
+              Found {visible.length} orgs likely to have events
             </div>
             <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '20px' }}>
-              out of {summary.total_found} places searched in {summary.town}
+              {runProgress && `out of ${runProgress.total_orgs} places searched in ${town}`}
               {withFeed.length > 0 && ` · iCal feed found for ${withFeed.length}`}
               {withoutFeed.length > 0 && ` · AI extraction available for ${withoutFeed.length}`}
             </div>

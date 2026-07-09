@@ -261,6 +261,14 @@ export async function POST(request: NextRequest) {
       .from('organizations')
       .select('name, website_url, last_extracted_at, place_id')
 
+    // NEW: pull blocked orgs for this town so we can skip them before doing any work
+    const { data: blockedOrgsData } = await supabase
+      .from('blocked_orgs')
+      .select('place_id')
+      .eq('town', town)
+
+    const blockedPlaceIds = new Set((blockedOrgsData || []).map((b: any) => b.place_id))
+
     const existingFeedUrls = new Set((existingFeeds || []).map((f: any) => f.url))
     const orgsWithEventNames = new Set((orgsWithEvents || []).map((e: any) => e.organization?.toLowerCase()))
     const existingOrgWebsites = new Set(
@@ -299,8 +307,9 @@ export async function POST(request: NextRequest) {
     }
 
     const orgs = []
+    let blockedSkipped = 0
+    let alreadyKnownSkipped = 0
 
-    // Build lookup sets once before the loop
     const knownPlaceIds = new Set(
       (existingOrgs || []).map((o: any) => o.place_id).filter(Boolean)
     )
@@ -322,6 +331,39 @@ export async function POST(request: NextRequest) {
 
     for (const place of allPlaces) {
       try {
+        // --- SKIP CHECK 1: blocked (place_id only, no fetch needed) ---
+        if (blockedPlaceIds.has(place.place_id)) {
+          blockedSkipped++
+          continue
+        }
+
+        // --- SKIP CHECK 2: already known by place_id or by name from the text-search result ---
+        // (place.name comes free from the text search — no need to call getPlaceDetails to check this)
+        const searchName = (place.name || '').toLowerCase()
+        const knownByPlaceId = knownPlaceIds.has(place.place_id)
+        const knownByName =
+          orgsWithEventNames.has(searchName) ||
+          feedOrgNames.has(searchName) ||
+          extractedOrgNames.has(searchName)
+
+        if (knownByPlaceId || knownByName) {
+          orgs.push({
+            name: place.name,
+            website: '',
+            extraction_url: '',
+            address: place.formatted_address || '',
+            phone: '',
+            reason: '',
+            place_id: place.place_id,
+            feed_url: null,
+            already_imported: true,
+            feed_already_connected: false,
+          })
+          alreadyKnownSkipped++
+          continue
+        }
+
+        // From here on we need official details (name/website/types) — one fetch, unavoidable.
         const details = await getPlaceDetails(place.place_id, apiKey)
         const types: string[] = details.types || []
         const website = details.website || ''
@@ -329,6 +371,30 @@ export async function POST(request: NextRequest) {
 
         if (types.some((t: string) => SKIP_ALWAYS_TYPES.has(t))) continue
 
+        // --- SKIP CHECK 3: already known by website, now that we have it ---
+        const normalizedWebsite = website ? getBaseDomain(website) : null
+        const knownByWebsite =
+          (normalizedWebsite !== null && existingOrgWebsites.has(normalizedWebsite)) ||
+          (normalizedWebsite !== null && extractedOrgWebsites.has(normalizedWebsite))
+
+        if (knownByWebsite) {
+          orgs.push({
+            name,
+            website,
+            extraction_url: website,
+            address: details.formatted_address || place.formatted_address || '',
+            phone: details.formatted_phone_number || '',
+            reason: '',
+            place_id: place.place_id,
+            feed_url: null,
+            already_imported: true,
+            feed_already_connected: false,
+          })
+          alreadyKnownSkipped++
+          continue
+        }
+
+        // Not blocked, not already known — do the expensive work.
         const isTrusted = types.some((t: string) => TRUSTED_TYPES.has(t))
         const eventPageUrl = await findEventPageUrl(website)
 
@@ -336,16 +402,6 @@ export async function POST(request: NextRequest) {
 
         const { likely, reason } = await assessOrg(name, types, website, eventPageUrl)
         if (!likely) continue
-
-        const normalizedWebsite = website ? getBaseDomain(website) : null
-
-        const alreadyImported =
-          knownPlaceIds.has(place.place_id) ||
-          orgsWithEventNames.has(name.toLowerCase()) ||
-          feedOrgNames.has(name.toLowerCase()) ||
-          extractedOrgNames.has(name.toLowerCase()) ||
-          (normalizedWebsite !== null && existingOrgWebsites.has(normalizedWebsite)) ||
-          (normalizedWebsite !== null && extractedOrgWebsites.has(normalizedWebsite))
 
         const feedUrl = await detectIcalFeed(website)
         const feedAlreadyConnected = feedUrl ? existingFeedUrls.has(feedUrl) : false
@@ -359,7 +415,7 @@ export async function POST(request: NextRequest) {
           reason,
           place_id: place.place_id,
           feed_url: feedUrl,
-          already_imported: alreadyImported,
+          already_imported: false,
           feed_already_connected: feedAlreadyConnected,
         })
 
@@ -375,6 +431,8 @@ export async function POST(request: NextRequest) {
       town: location,
       total_found: allPlaces.length,
       orgs_with_events: orgs.length,
+      blocked_skipped: blockedSkipped,
+      already_known_skipped: alreadyKnownSkipped,
       orgs,
     })
 
