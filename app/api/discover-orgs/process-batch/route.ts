@@ -57,8 +57,11 @@ async function withRetry<T>(fn: () => PromiseLike<T>, attempts = 3, delayMs = 80
 }
 
 export async function POST(request: NextRequest) {
+  let run_id: string | undefined
+
   try {
-    const { run_id } = await request.json()
+    const body = await request.json()
+    run_id = body.run_id
     if (!run_id) {
       return NextResponse.json({ error: 'run_id is required' }, { status: 400 })
     }
@@ -68,8 +71,8 @@ export async function POST(request: NextRequest) {
     )
 
     if (runError) {
-      console.error('Process-batch Supabase error (run fetch):', runError)
-      return NextResponse.json({ error: `Database error: ${runError.message}` }, { status: 500 })
+      console.error(`[process-batch:${run_id}] Stage "fetch run" failed:`, runError)
+      return NextResponse.json({ error: `Database error (fetch run): ${runError.message}` }, { status: 500 })
     }
     if (!run) {
       return NextResponse.json({ error: 'Run not found' }, { status: 404 })
@@ -89,37 +92,55 @@ export async function POST(request: NextRequest) {
     )
 
     if (batchError) {
-      console.error('Process-batch Supabase error (batch fetch):', batchError)
-      return NextResponse.json({ error: `Database error: ${batchError.message}` }, { status: 500 })
+      console.error(`[process-batch:${run_id}] Stage "fetch batch" failed:`, batchError)
+      return NextResponse.json({ error: `Database error (fetch batch): ${batchError.message}` }, { status: 500 })
     }
 
     if (!batch || batch.length === 0) {
-      await withRetry(() =>
-        supabase.from('discovery_runs').update({
-          status: 'completed',
-          updated_at: new Date().toISOString(),
-        }).eq('id', run_id)
-      )
+      try {
+        await withRetry(() =>
+          supabase.from('discovery_runs').update({
+            status: 'completed',
+            updated_at: new Date().toISOString(),
+          }).eq('id', run_id)
+        )
+      } catch (err) {
+        console.error(`[process-batch:${run_id}] Stage "mark completed (empty batch)" failed:`, err)
+        return NextResponse.json({ error: `Database error (mark completed): ${err instanceof Error ? err.message : String(err)}` }, { status: 500 })
+      }
       return NextResponse.json({ success: true, status: 'completed' })
     }
 
     const apiKey = process.env.GOOGLE_PLACES_API_KEY
     if (!apiKey) {
-      await withRetry(() =>
-        supabase.from('discovery_runs').update({ status: 'failed' }).eq('id', run_id)
-      )
+      try {
+        await withRetry(() =>
+          supabase.from('discovery_runs').update({ status: 'failed' }).eq('id', run_id)
+        )
+      } catch (err) {
+        console.error(`[process-batch:${run_id}] Stage "mark failed (no api key)" failed:`, err)
+      }
       return NextResponse.json({ error: 'Google Places API key not configured' }, { status: 500 })
     }
 
     const town = run.town
 
-    const [{ data: blockedOrgsData }, { data: existingFeeds }, { data: orgsWithEvents }, { data: existingOrgs }] =
-      await Promise.all([
+    let blockedOrgsData, existingFeeds, orgsWithEvents, existingOrgs
+    try {
+      const results = await Promise.all([
         withRetry(() => supabase.from('blocked_orgs').select('place_id').eq('town', town)),
         withRetry(() => supabase.from('ical_feeds').select('url, organization')),
         withRetry(() => supabase.from('events').select('organization').eq('status', 'approved').eq('town', town)),
         withRetry(() => supabase.from('organizations').select('name, website_url, last_extracted_at, place_id')),
       ])
+      blockedOrgsData = results[0].data
+      existingFeeds = results[1].data
+      orgsWithEvents = results[2].data
+      existingOrgs = results[3].data
+    } catch (err) {
+      console.error(`[process-batch:${run_id}] Stage "fetch lookup tables" failed:`, err)
+      return NextResponse.json({ error: `Database error (fetch lookup tables): ${err instanceof Error ? err.message : String(err)}` }, { status: 500 })
+    }
 
     const blockedPlaceIds = new Set((blockedOrgsData || []).map((b: any) => b.place_id))
     const existingFeedUrls = new Set((existingFeeds || []).map((f: any) => f.url))
@@ -240,7 +261,7 @@ export async function POST(request: NextRequest) {
           skip: false,
         }
       } catch (err) {
-        console.error('Error processing place in batch:', place.name, err)
+        console.error(`[process-batch:${run_id}] Stage "process org" failed for "${place.name}" (place_id: ${place.place_id}):`, err)
         return { row, result: null, skip: true }
       }
     }
@@ -251,42 +272,61 @@ export async function POST(request: NextRequest) {
 
     const processed = await Promise.all(batch.map(processOne))
 
-    await Promise.all(processed.map(({ row, result, skip }) => {
-      if (skip) {
-        return withRetry(() =>
-          supabase.from('discovery_run_orgs').update({
-            status: 'done',
-            result: null,
-            processed_at: new Date().toISOString(),
-          }).eq('id', row.id)
-        )
-      }
-      return withRetry(() =>
-        supabase.from('discovery_run_orgs').update({
-          status: 'done',
-          result,
-          processed_at: new Date().toISOString(),
-        }).eq('id', row.id)
+    try {
+      // Single batch upsert instead of N individual update() calls.
+      // Previously each org in the batch got its own withRetry-wrapped
+      // update() (up to 3 attempts x 8s timeout EACH), meaning up to 9
+      // separate network round-trips per batch of 3 — any one of which
+      // stalling could time out the whole request. One batched call means
+      // one round-trip, with retry still covering the whole batch as a unit.
+      const rows = processed.map(({ row, result, skip }) => ({
+        id: row.id,
+        status: 'done',
+        result: skip ? null : result,
+        processed_at: new Date().toISOString(),
+      }))
+
+      const { error: writeError } = await withRetry(() =>
+        supabase.from('discovery_run_orgs').upsert(rows, { onConflict: 'id' })
       )
-    }))
 
-    const { count: remainingPending } = await withRetry(() =>
-      supabase
-        .from('discovery_run_orgs')
-        .select('id', { count: 'exact', head: true })
-        .eq('run_id', run_id)
-        .eq('status', 'pending')
-    )
+      if (writeError) {
+        throw writeError
+      }
+    } catch (err) {
+      console.error(`[process-batch:${run_id}] Stage "write org results" failed:`, err)
+      return NextResponse.json({ error: `Database error (write org results): ${err instanceof Error ? err.message : String(err)}` }, { status: 500 })
+    }
 
-    await withRetry(() =>
-      supabase.from('discovery_runs').update({
-        processed_count: run.processed_count + batch.length,
-        blocked_skipped: run.blocked_skipped + blockedSkippedThisBatch,
-        already_known_skipped: run.already_known_skipped + alreadyKnownSkippedThisBatch,
-        status: (remainingPending === null || remainingPending === undefined || remainingPending > 0) ? 'running' : 'completed',
-        updated_at: new Date().toISOString(),
-      }).eq('id', run_id)
-    )
+    let remainingPending
+    try {
+      const result = await withRetry(() =>
+        supabase
+          .from('discovery_run_orgs')
+          .select('id', { count: 'exact', head: true })
+          .eq('run_id', run_id)
+          .eq('status', 'pending')
+      )
+      remainingPending = result.count
+    } catch (err) {
+      console.error(`[process-batch:${run_id}] Stage "count remaining" failed:`, err)
+      return NextResponse.json({ error: `Database error (count remaining): ${err instanceof Error ? err.message : String(err)}` }, { status: 500 })
+    }
+
+    try {
+      await withRetry(() =>
+        supabase.from('discovery_runs').update({
+          processed_count: run.processed_count + batch.length,
+          blocked_skipped: run.blocked_skipped + blockedSkippedThisBatch,
+          already_known_skipped: run.already_known_skipped + alreadyKnownSkippedThisBatch,
+          status: (remainingPending === null || remainingPending === undefined || remainingPending > 0) ? 'running' : 'completed',
+          updated_at: new Date().toISOString(),
+        }).eq('id', run_id)
+      )
+    } catch (err) {
+      console.error(`[process-batch:${run_id}] Stage "update run progress" failed:`, err)
+      return NextResponse.json({ error: `Database error (update run progress): ${err instanceof Error ? err.message : String(err)}` }, { status: 500 })
+    }
 
     return NextResponse.json({
       success: true,
@@ -295,7 +335,9 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Process batch error:', error)
-    return NextResponse.json({ error: 'Batch processing failed' }, { status: 500 })
+    console.error(`[process-batch:${run_id ?? 'unknown'}] Unhandled error:`, error)
+    return NextResponse.json({
+      error: `Batch processing failed: ${error instanceof Error ? error.message : String(error)}`
+    }, { status: 500 })
   }
 }

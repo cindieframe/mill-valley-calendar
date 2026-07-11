@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '../../supabase'
 import { AdminHeader } from '../../components/Header'
 import { useSearchParams } from 'next/navigation'
 
@@ -24,14 +23,6 @@ type OrgResult = {
   confirmingDismiss: boolean
 }
 
-type RunProgress = {
-  status: 'running' | 'completed' | 'failed'
-  total_orgs: number
-  processed_count: number
-  blocked_skipped: number
-  already_known_skipped: number
-}
-
 function DiscoverOrgsInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -40,148 +31,52 @@ function DiscoverOrgsInner() {
   const [state, setState] = useState('CA')
   const [loading, setLoading] = useState(false)
   const [orgs, setOrgs] = useState<OrgResult[]>([])
-  const [runId, setRunId] = useState<string | null>(null)
-  const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
+  const [totalFound, setTotalFound] = useState(0)
+  const [blockedSkipped, setBlockedSkipped] = useState(0)
+  const [alreadyKnownSkipped, setAlreadyKnownSkipped] = useState(0)
   const [error, setError] = useState('')
   const [blockedOrgs, setBlockedOrgs] = useState<any[]>([])
   const [showBlocked, setShowBlocked] = useState(false)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const knownPlaceIdsRef = useRef<Set<string>>(new Set())
-  const isStartingRef = useRef(false)
-  const isRunningRef = useRef(false)
-
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
-    }
-  }, [])
-
-  function stopPolling() {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
-    }
-  }
-
-  async function markRunFailed(id: string) {
-    try {
-      await fetch('/api/discover-orgs/fail-run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ run_id: id })
-      })
-    } catch {
-      // best-effort — if this fails too, the run just sits as 'running'
-      // until manually cleared, same as before this fix
-    }
-  }
-
-  async function refreshStatus(id: string) {
-    const res = await fetch('/api/discover-orgs/status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ run_id: id })
-    })
-    const data = await res.json()
-    if (data.error) throw new Error(data.error)
-
-    setRunProgress(data.run)
-
-    const incoming: any[] = data.orgs || []
-    const newOnes = incoming.filter(o => !knownPlaceIdsRef.current.has(o.place_id))
-    if (newOnes.length > 0) {
-      newOnes.forEach(o => knownPlaceIdsRef.current.add(o.place_id))
-      setOrgs(prev => [
-        ...prev,
-        ...newOnes.map((o: any) => ({
-          ...o,
-          selected: !o.already_imported && !o.feed_already_connected,
-          status: 'idle' as const,
-          statusMessage: '',
-          dismissed: false,
-          confirmingDismiss: false,
-        }))
-      ])
-    }
-    return data.run
-  }
-
-  async function runDiscoveryLoop(id: string) {
-    try {
-      while (true) {
-        const batchRes = await fetch('/api/discover-orgs/process-batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ run_id: id })
-        })
-        const batchData = await batchRes.json()
-        if (batchData.error) {
-          setError(batchData.error)
-          await markRunFailed(id)
-          break
-        }
-
-        const run = await refreshStatus(id)
-
-        if (run.status !== 'running') break
-      }
-    } catch {
-      setError('Discovery stopped unexpectedly. Please try again.')
-      await markRunFailed(id)
-    }
-    isRunningRef.current = false
-    setLoading(false)
-  }
 
   async function handleDiscover() {
-    if (isStartingRef.current || isRunningRef.current) return
-    isStartingRef.current = true
+    if (loading) return
 
     setLoading(true)
     setError('')
     setOrgs([])
-    setRunId(null)
-    setRunProgress(null)
-    knownPlaceIdsRef.current = new Set()
-    stopPolling()
+    setTotalFound(0)
+    setBlockedSkipped(0)
+    setAlreadyKnownSkipped(0)
 
     try {
-      const res = await fetch('/api/discover-orgs/start', {
+      const res = await fetch('/api/discover-orgs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ town, state })
       })
       const data = await res.json()
+
       if (data.error) {
         setError(data.error)
-        isStartingRef.current = false
         setLoading(false)
         return
       }
 
-      setRunId(data.run_id)
-      setRunProgress({
-        status: 'running',
-        total_orgs: data.total_orgs,
-        processed_count: 0,
-        blocked_skipped: 0,
-        already_known_skipped: 0,
-      })
-
-      if (data.total_orgs === 0) {
-        isStartingRef.current = false
-        setLoading(false)
-        return
-      }
-
-      isRunningRef.current = true
-      isStartingRef.current = false
-      runDiscoveryLoop(data.run_id)
+      setTotalFound(data.total_found || 0)
+      setBlockedSkipped(data.blocked_skipped || 0)
+      setAlreadyKnownSkipped(data.already_known_skipped || 0)
+      setOrgs((data.orgs || []).map((o: any) => ({
+        ...o,
+        selected: !o.already_imported && !o.feed_already_connected,
+        status: 'idle' as const,
+        statusMessage: '',
+        dismissed: false,
+        confirmingDismiss: false,
+      })))
     } catch {
       setError('Discovery failed. Please try again.')
-      isStartingRef.current = false
-      setLoading(false)
     }
+    setLoading(false)
   }
 
   function toggleSelect(index: number) {
@@ -498,23 +393,13 @@ function DiscoverOrgsInner() {
           </button>
         </div>
 
-        {loading && runProgress && (
+        {loading && (
           <div style={{ background: 'white', borderRadius: '12px', padding: '24px', textAlign: 'center', border: '1.5px solid #e5e7eb', marginBottom: '16px' }}>
-            <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '10px' }}>
-              Checked {runProgress.processed_count} of {runProgress.total_orgs} candidates…
+            <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '4px' }}>
+              Searching {town} for organizations that likely host events…
             </p>
-            <div style={{ height: '6px', borderRadius: '999px', background: '#f2f3f5', overflow: 'hidden', marginBottom: '10px' }}>
-              <div style={{
-                height: '100%',
-                width: runProgress.total_orgs > 0 ? `${Math.min(100, (runProgress.processed_count / runProgress.total_orgs) * 100)}%` : '0%',
-                background: '#1a3d2b',
-                transition: 'width 0.3s ease',
-              }} />
-            </div>
             <p style={{ fontSize: '12px', color: '#9ca3af' }}>
-              {runProgress.blocked_skipped > 0 && `${runProgress.blocked_skipped} blocked skipped · `}
-              {runProgress.already_known_skipped > 0 && `${runProgress.already_known_skipped} already known · `}
-              Results appear below as they're found
+              This can take up to a couple of minutes for towns with many candidates.
             </p>
           </div>
         )}
@@ -531,7 +416,9 @@ function DiscoverOrgsInner() {
               Found {visible.length} orgs likely to have events
             </div>
             <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '20px' }}>
-              {runProgress && `out of ${runProgress.total_orgs} places searched in ${town}`}
+              out of {totalFound} places searched in {town}
+              {blockedSkipped > 0 && ` · ${blockedSkipped} blocked skipped`}
+              {alreadyKnownSkipped > 0 && ` · ${alreadyKnownSkipped} already known`}
               {withFeed.length > 0 && ` · iCal feed found for ${withFeed.length}`}
               {withoutFeed.length > 0 && ` · AI extraction available for ${withoutFeed.length}`}
             </div>
