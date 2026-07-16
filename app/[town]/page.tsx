@@ -213,8 +213,18 @@ function HomeInner() {
     }
     loadEvents()
     async function loadTowns() {
-      const { data } = await supabase.from('towns').select('slug, name').order('name')
-      if (data) setTowns(data)
+      // Only show towns marked active in the switcher — an inactive town
+      // isn't ready for its own page yet, even though its events still
+      // count toward the Marin aggregate below.
+      const { data } = await supabase
+        .from('towns')
+        .select('slug, name')
+        .eq('active', true)
+        .order('name')
+      const activeTowns = data || []
+      // Marin is a synthetic aggregate entry, not a row in `towns` — always
+      // available regardless of which individual towns are active.
+      setTowns([{ slug: 'marin', name: 'Marin' }, ...activeTowns])
     }
     loadTowns()
     async function loadOrgList() {
@@ -368,13 +378,24 @@ function HomeInner() {
               <span style={{ fontSize: '13px', color: '#888', fontStyle: 'normal' }}>&#8964;</span>
             </span>
             {townOpen && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, minWidth: '200px', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '4px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, minWidth: '220px', overflow: 'hidden', textAlign: 'left' }}>
                 {towns.map(t => (
-                  <div key={t.slug}
-                    onClick={() => { router.push(`/${t.slug}`); setTownOpen(false) }}
-                    style={{ padding: '11px 16px', fontSize: '15px', fontWeight: t.slug === townSlug ? 600 : 400, color: t.slug === townSlug ? '#1a3d2b' : '#374151', cursor: 'pointer', borderBottom: '1px solid #f3f4f6', background: t.slug === townSlug ? '#f0fdf4' : 'white' }}>
-                    {t.name}
-                  </div>
+                  t.slug === 'marin' ? (
+                    <div key={t.slug}
+                      onClick={() => { router.push(`/${t.slug}`); setTownOpen(false) }}
+                      style={{ padding: '11px 16px', fontSize: '15px', fontWeight: t.slug === townSlug ? 600 : 500, color: t.slug === townSlug ? '#1a3d2b' : '#374151', cursor: 'pointer', borderBottom: '1.5px solid #e5e7eb', background: t.slug === townSlug ? '#f0fdf4' : '#fafdfb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', textAlign: 'left' }}>
+                      {t.name}
+                      <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '999px', background: '#e1f5ee', color: '#04342c' }}>
+                        County view
+                      </span>
+                    </div>
+                  ) : (
+                    <div key={t.slug}
+                      onClick={() => { router.push(`/${t.slug}`); setTownOpen(false) }}
+                      style={{ padding: '11px 16px', fontSize: '15px', fontWeight: t.slug === townSlug ? 600 : 400, color: t.slug === townSlug ? '#1a3d2b' : '#374151', cursor: 'pointer', borderBottom: '1px solid #f3f4f6', background: t.slug === townSlug ? '#f0fdf4' : 'white', textAlign: 'left' }}>
+                      {t.name}
+                    </div>
+                  )
                 ))}
               </div>
             )}
@@ -626,6 +647,9 @@ function HomeInner() {
                             onClick={e => e.stopPropagation()}>
                             {ev.organization}
                           </a>
+                        )}
+                        {townSlug === 'marin' && ev.town && (
+                          <span style={{ color: '#6b7280', fontWeight: 500 }}> · 📍 {ev.town}</span>
                         )}
                       </div>
                       {desc && <div style={{ fontSize: '12px', color: '#767e8a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{desc}</div>}

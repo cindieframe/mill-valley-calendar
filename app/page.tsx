@@ -24,6 +24,10 @@ const CAT_PRIORITY = ['arts', 'outdoors', 'food', 'family', 'youth', 'community'
 const DEFAULT_TOWN = 'mill-valley'
 const DEFAULT_TOWN_NAME = 'Mill Valley'
 
+// The county this aggregate covers. If Townstir ever expands beyond Marin,
+// this would need to become per-town rather than a single constant.
+const AGGREGATE_COUNTY = 'Marin'
+
 function formatEventDate(dateStr: string) {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
@@ -125,6 +129,9 @@ export default function HomeBPage() {
   const [heroDropdownOpen, setHeroDropdownOpen] = useState(false)
   const [sectionDropdownOpen, setSectionDropdownOpen] = useState(false)
   const [towns, setTowns] = useState<{ slug: string; name: string }[]>([])
+  // Every Marin town on file, active or not — used only to build the
+  // aggregate query, never shown as its own switcher option.
+  const [aggregateTownNames, setAggregateTownNames] = useState<string[]>([])
   const [selectedTown, setSelectedTown] = useState<{ slug: string; name: string }>({
     slug: DEFAULT_TOWN,
     name: DEFAULT_TOWN_NAME,
@@ -134,6 +141,7 @@ export default function HomeBPage() {
 
   useEffect(() => {
     loadTowns()
+    loadAggregateTownNames()
   }, [])
 
   useEffect(() => {
@@ -159,20 +167,47 @@ export default function HomeBPage() {
       .select('slug, name')
       .eq('active', true)
       .order('name')
-    if (data) setTowns(data)
+    const activeTowns = data || []
+    // Marin is a synthetic aggregate entry, always available regardless of
+    // which individual towns are active.
+    setTowns([{ slug: 'marin', name: 'Marin' }, ...activeTowns])
+  }
+
+  async function loadAggregateTownNames() {
+    // Deliberately no `active` filter — the aggregate should include events
+    // from towns not yet ready for their own page.
+    const { data } = await supabase
+      .from('towns')
+      .select('name')
+      .eq('county', AGGREGATE_COUNTY)
+    setAggregateTownNames((data || []).map((t: any) => t.name))
   }
 
   async function loadFeaturedEvents(town: { slug: string; name: string }) {
     setLoading(true)
     const today = new Date().toISOString().split('T')[0]
-    const { data } = await supabase
+
+    let query = supabase
       .from('events')
       .select('id, title, date, time, organization, category, image_url')
       .eq('status', 'approved')
-      .or(`town.ilike.${town.name},town.ilike.${town.slug}`)
       .gte('date', today)
       .order('date', { ascending: true })
       .limit(40)
+
+    if (town.slug === 'marin') {
+      if (aggregateTownNames.length === 0) {
+        setFeaturedEvents([])
+        setLoading(false)
+        return
+      }
+      const orParts = aggregateTownNames.map(name => `town.ilike.${name}`).join(',')
+      query = query.or(orParts)
+    } else {
+      query = query.or(`town.ilike.${town.name},town.ilike.${town.slug}`)
+    }
+
+    const { data } = await query
 
     if (data) {
       const checked = await Promise.all(data.map(ev => {
@@ -382,3 +417,4 @@ export default function HomeBPage() {
     </div>
   )
 }
+
