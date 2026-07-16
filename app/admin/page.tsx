@@ -86,6 +86,10 @@ export default function Admin() {
   const [selectedTown, setSelectedTown] = useState<string | null>(null)
   const [allTowns, setAllTowns] = useState<string[]>([])
   const [unverifiedOrgs, setUnverifiedOrgs] = useState<any[]>([])
+  // Every Marin town on file (active or not) — used for the per-event town
+  // reassignment dropdown, since an admin may want to move an event to a
+  // town that isn't publicly live yet.
+  const [marinTowns, setMarinTowns] = useState<string[]>([])
 
   // Recurrence edit state
   const [editRecurrence, setEditRecurrence] = useState('none')
@@ -136,9 +140,17 @@ if (townData) {
   setAllTowns(townData.map((t: any) => t.name))
 }
         }
+        loadMarinTowns()
       }
     }
     setAuthLoading(false)
+  }
+
+  async function loadMarinTowns() {
+    // No `active` filter — an admin should be able to reassign an event to
+    // a town that isn't publicly live yet.
+    const { data } = await supabase.from('towns').select('name').eq('county', 'Marin').order('name')
+    if (data) setMarinTowns(data.map((t: any) => t.name))
   }
 
   useEffect(() => { if (authed) loadPendingCounts() }, [authed, selectedTown])
@@ -178,6 +190,7 @@ if (townData) {
     setAdminRole(adminData.role); setAdminTowns(adminData.towns)
     if (adminData.towns?.length === 1) setSelectedTown(adminData.towns[0])
     setAuthed(true); setLoginLoading(false)
+    loadMarinTowns()
   }
 
   async function handleLogout() {
@@ -369,6 +382,27 @@ if (townData) {
 
   function openNoteModal(eventId: number, action: 'unpublished' | 'rejected') {
     setNoteText(''); setNoteModal({ eventId, action })
+  }
+
+  // ─── Town reassignment ────────────────────────────────────────────────────
+  // Lets an admin correct an event's town (e.g. discovery/extraction guessed
+  // wrong) before approving it. Saves immediately on change — separate from
+  // the approve/reject actions, so you fix the town first, then approve
+  // normally. If the event no longer matches the current town scope
+  // (selectedTown filter, or a regional admin's assigned towns), it drops
+  // out of the current list, same as if it had been actioned.
+  async function reassignEventTown(id: number, newTown: string) {
+    const { error } = await supabase.from('events').update({ town: newTown }).eq('id', id)
+    if (error) { alert('Could not update town. Please try again.'); return }
+    setEvents(prev => {
+      const updated = prev.map(ev => ev.id === id ? { ...ev, town: newTown } : ev)
+      return updated.filter(ev => {
+        if (ev.id !== id) return true
+        if (selectedTown) return ev.town === selectedTown
+        if (!isSuperAdmin && adminTowns?.length) return adminTowns.includes(ev.town)
+        return true
+      })
+    })
   }
 
   // ─── Delete with series support ───────────────────────────────────────────
@@ -1061,6 +1095,20 @@ async function executeDelete(scope: 'this' | 'all') {
                       </h3>
                       <div style={{ fontSize: '13px', color: '#6b7280' }}>{ev.date} &nbsp;·&nbsp; {ev.time} &nbsp;·&nbsp; {ev.location}</div>
                       <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '2px' }}>{ev.organization} &nbsp;·&nbsp; {ev.category}{ev.cost && <>&nbsp;·&nbsp; {ev.cost}</>}</div>
+                      {marinTowns.length > 0 && (
+                        <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={e => e.stopPropagation()}>
+                          <span style={{ fontSize: '11px', color: '#9ca3af' }}>Town:</span>
+                          <select
+                            value={ev.town || ''}
+                            onChange={e => reassignEventTown(ev.id, e.target.value)}
+                            style={{ fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '3px 8px', color: '#374151', background: 'white', cursor: 'pointer', fontFamily: 'sans-serif' }}>
+                            {!marinTowns.includes(ev.town) && ev.town && (
+                              <option value={ev.town}>{ev.town}</option>
+                            )}
+                            {marinTowns.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </div>
+                      )}
                     </div>
                     <div style={{ fontSize: '11px', color: '#9ca3af', flexShrink: 0, marginLeft: '12px' }}>#{ev.id}</div>
                   </div>
