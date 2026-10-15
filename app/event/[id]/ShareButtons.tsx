@@ -1,66 +1,38 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-export default function ShareButtons({ eventId, title, date, time, location, description, address, website, meetingLink }: {
+// Calendar links are built on the server (app/lib/calendar.ts) so times are
+// always correct Pacific time, regardless of the visitor's browser or timezone.
+export default function ShareButtons({ eventId, title, date, time, location, address, website, meetingLink, googleCalendarUrl, icsUrl }: {
   eventId: string, title: string, date: string, time: string, location: string,
-  description?: string, address?: string, website?: string, meetingLink?: string
+  address?: string, website?: string, meetingLink?: string,
+  googleCalendarUrl: string, icsUrl: string
 }) {
   const [copied, setCopied] = useState(false)
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  const calendarRef = useRef<HTMLDivElement>(null)
   const url = `https://www.townstir.com/event/${eventId}`
   const text = `Check out this event!\n\n${title}\n${date}${time ? ' · ' + time : ''}\n${location}\n\n${url}`
+
+  // Close the calendar menu on outside click or Escape
+  useEffect(() => {
+    if (!calendarOpen) return
+    const onClick = (e: MouseEvent) => {
+      if (calendarRef.current && !calendarRef.current.contains(e.target as Node)) setCalendarOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCalendarOpen(false) }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [calendarOpen])
 
   function copyLink() {
     navigator.clipboard.writeText(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-  }
-
-  function downloadIcs() {
-    const formatDate = (dateStr: string, timeStr: string) => {
-      const d = new Date(dateStr + 'T12:00:00')
-      if (!timeStr || timeStr === 'All day' || timeStr === 'See organizer') {
-        return d.toISOString().replace(/[-:]/g, '').split('.')[0].slice(0, 8)
-      }
-      const combined = new Date(`${dateStr} ${timeStr}`)
-      if (isNaN(combined.getTime())) return d.toISOString().replace(/[-:]/g, '').split('.')[0].slice(0, 8)
-      return combined.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
-    }
-
-    const isAllDay = !time || time === 'All day' || time === 'See organizer'
-    const dtStart = isAllDay
-      ? `DTSTART;VALUE=DATE:${date.replace(/-/g, '')}`
-      : `DTSTART:${formatDate(date, time)}`
-
-    const endDate = new Date(date + 'T12:00:00')
-    endDate.setDate(endDate.getDate() + 1)
-    const dtEnd = isAllDay
-      ? `DTEND;VALUE=DATE:${endDate.toISOString().split('T')[0].replace(/-/g, '')}`
-      : `DTEND:${formatDate(date, time)}`
-
-    const escape = (s: string) => (s || '').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n')
-
-    const ics = [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//Townstir//Mill Valley Calendar//EN',
-      'BEGIN:VEVENT',
-      `UID:${eventId}@townstir.com`,
-      dtStart,
-      dtEnd,
-      `SUMMARY:${escape(title)}`,
-      `DESCRIPTION:${escape(description || '')}\\n\\n${escape(url)}`,
-      `LOCATION:${escape(address || location)}`,
-      website ? `URL:${website}` : '',
-      `STATUS:CONFIRMED`,
-      'END:VEVENT',
-      'END:VCALENDAR',
-    ].filter(Boolean).join('\r\n')
-
-    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `${title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.ics`
-    link.click()
   }
 
   const primaryBtn: React.CSSProperties = {
@@ -90,6 +62,12 @@ export default function ShareButtons({ eventId, title, date, time, location, des
     textDecoration: 'none',
   }
 
+  const menuItem: React.CSSProperties = {
+    display: 'block', padding: '10px 14px',
+    fontSize: '13px', color: '#1a2530',
+    textDecoration: 'none', whiteSpace: 'nowrap',
+  }
+
   return (
     <div>
       {/* Actions band */}
@@ -98,10 +76,48 @@ export default function ShareButtons({ eventId, title, date, time, location, des
           Actions
         </div>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <button onClick={downloadIcs} style={primaryBtn}>
-            Add to Calendar
-          </button>
-          
+
+          <div ref={calendarRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setCalendarOpen(o => !o)}
+              aria-haspopup="menu"
+              aria-expanded={calendarOpen}
+              style={primaryBtn}
+            >
+              Add to Calendar <span aria-hidden="true" style={{ fontSize: '10px' }}>▾</span>
+            </button>
+
+            {calendarOpen && (
+              <div
+                role="menu"
+                style={{
+                  position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50,
+                  background: '#fff', border: '1px solid #e8eaed', borderRadius: '10px',
+                  boxShadow: '0 6px 20px rgba(0,0,0,0.12)', overflow: 'hidden', minWidth: '200px',
+                }}
+              >
+                <a
+                  role="menuitem"
+                  href={googleCalendarUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setCalendarOpen(false)}
+                  style={menuItem}
+                >
+                  Google Calendar
+                </a>
+                <a
+                  role="menuitem"
+                  href={icsUrl}
+                  onClick={() => setCalendarOpen(false)}
+                  style={{ ...menuItem, borderTop: '1px solid #f0f1f3' }}
+                >
+                  Apple / Outlook (.ics)
+                </a>
+              </div>
+            )}
+          </div>
+
          <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address || location)}`} target="_blank" rel="noopener noreferrer" style={secondaryBtn}>Get Directions</a>
           {website && (
             <a href={website} target="_blank" rel="noopener noreferrer" style={secondaryBtn}>
@@ -134,9 +150,9 @@ export default function ShareButtons({ eventId, title, date, time, location, des
           <a href={`mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text)}`} style={shareBtn}>
             Email
           </a>
-          
+
             <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer" style={{ ...shareBtn, background: '#1877f2', color: '#fff', border: 'none' }}>Facebook</a>
-          
+
             <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer" style={{ ...shareBtn, background: '#000', color: '#fff', border: 'none' }}>X</a>
 
         </div>

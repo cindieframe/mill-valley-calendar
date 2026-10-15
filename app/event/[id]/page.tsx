@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import BackButton from '../../components/BackButton'
 import ShareButtons from './ShareButtons'
+import { getEventTiming, googleCalendarUrl, eventIcsUrl } from '../../lib/calendar'
 
 
 const supabase = createClient(
@@ -90,6 +91,8 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   })
   const orgSlug = ev.organization?.toLowerCase().replace(/ /g, '-')
   const tags = ev.tags ? ev.tags.split(',').map((t: string) => t.trim()) : []
+  const timing = getEventTiming(ev)
+  const townLabel = ev.town ? `${ev.town}, CA` : 'Marin County, CA'
 
   const infoCell = (label: string, value: string, sub?: string) => (
     <div style={{ padding: '14px 16px' }}>
@@ -111,12 +114,12 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
     "@context": "https://schema.org",
     "@type": "Event",
     "name": ev.title,
-    "startDate": ev.time ? `${ev.date}T${ev.time}` : ev.date,
-    "endDate": ev.end_time ? `${ev.date}T${ev.end_time}` : undefined,
+    "startDate": timing.allDay ? timing.startDate : timing.startIsoPacific,
+    "endDate": timing.allDay ? undefined : timing.endIsoPacific,
     "location": {
       "@type": "Place",
-      "name": ev.location || "Mill Valley, CA",
-      "address": ev.address || "Mill Valley, CA"
+      "name": ev.location || townLabel,
+      "address": ev.address || townLabel
     },
     "description": ev.description || "",
     "organizer": {
@@ -273,10 +276,11 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
           date={ev.date}
           time={ev.time || ''}
           location={ev.location || ''}
-          description={ev.description || ''}
           address={ev.address || ''}
           website={ev.website || ''}
           meetingLink={ev.meeting_link || ''}
+          googleCalendarUrl={googleCalendarUrl(ev)}
+          icsUrl={eventIcsUrl(ev.id)}
         />
 
       </div>
