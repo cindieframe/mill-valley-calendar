@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '../../supabase'
 import { shouldAutoReject, AUTO_REJECT_NOTE } from '../../lib/moderation'
+import {
+  findSquarespaceEventList,
+  isSquarespaceEventList,
+  parseSquarespaceEvents,
+  SQUARESPACE_UID_PREFIX,
+} from '../../lib/squarespace'
+
+const UA = 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -223,15 +231,51 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'feedUrl and organization required' }, { status: 400 })
     }
 
-    const response = await fetch(feedUrl)
+    const response = await fetch(feedUrl, {
+      headers: { 'User-Agent': UA },
+      signal: AbortSignal.timeout(20000),
+    })
     if (!response.ok) {
       return NextResponse.json({ error: 'Could not fetch iCal feed' }, { status: 400 })
     }
 
-    const icalText = await response.text()
-    const events = parseICal(icalText)
+    const feedText = await response.text()
 
-    if (events.length === 0) {
+    // A source is either a real iCal feed, or a Squarespace events page
+    // (read directly from the public page — see app/lib/squarespace.ts)
+    let sourceUrl: string = feedUrl
+    let isSquarespace = false
+    let events: any[] = []
+
+    if (feedText.includes('BEGIN:VCALENDAR')) {
+      events = parseICal(feedText)
+    } else {
+      const listUrl = isSquarespaceEventList(feedText)
+        ? feedUrl
+        : await findSquarespaceEventList(feedUrl, feedText)
+      if (!listUrl) {
+        return NextResponse.json({
+          error: 'That URL is not an iCal feed or a Squarespace events page.',
+        }, { status: 400 })
+      }
+      isSquarespace = true
+      sourceUrl = listUrl
+      let pageHtml = feedText
+      if (listUrl !== feedUrl) {
+        const pageRes = await fetch(listUrl, {
+          headers: { 'User-Agent': UA },
+          signal: AbortSignal.timeout(20000),
+        })
+        if (!pageRes.ok) {
+          return NextResponse.json({ error: 'Could not fetch the Squarespace events page' }, { status: 400 })
+        }
+        pageHtml = await pageRes.text()
+      }
+      events = parseSquarespaceEvents(pageHtml, listUrl)
+    }
+
+    // A Squarespace org with nothing upcoming is normal — keep the source connected
+    if (events.length === 0 && !isSquarespace) {
       return NextResponse.json({ error: 'No upcoming events found in feed' }, { status: 400 })
     }
 
@@ -262,6 +306,7 @@ export async function POST(request: NextRequest) {
 
     let imported = 0
     let skipped = 0
+    let updated = 0
     const results = []
 
      for (const ev of events) {
@@ -280,7 +325,7 @@ export async function POST(request: NextRequest) {
             time: ev.timeStr,
             end_time: ev.endTimeStr || null,
             location: ev.location || displayName,
-            address: ev.location || '',
+            address: ev.address ?? ev.location ?? '',
             organization: displayName,
             category: 'gov',
             tags: '',
@@ -296,32 +341,61 @@ export async function POST(request: NextRequest) {
         }
 
         if (ev.uid) {
-  const { data: existingEvent } = await supabase
-    .from('events')
-    .select('id')
-    .eq('ical_uid', ev.uid)
-    .limit(1)
+          const { data: existingEvent } = await supabase
+            .from('events')
+            .select('id, date, time, end_time, status')
+            .eq('ical_uid', ev.uid)
+            .limit(1)
 
-  const { data: rejectedUid } = await supabase
-    .from('rejected_uids')
-    .select('id')
-    .eq('ical_uid', ev.uid)
-    .limit(1)
+          const { data: rejectedUid } = await supabase
+            .from('rejected_uids')
+            .select('id')
+            .eq('ical_uid', ev.uid)
+            .limit(1)
 
-  if ((existingEvent && existingEvent.length > 0) || (rejectedUid && rejectedUid.length > 0)) {
-    skipped++
-    continue
-  }
-}
+          if (rejectedUid && rejectedUid.length > 0) {
+            skipped++
+            continue
+          }
+
+          if (existingEvent && existingEvent.length > 0) {
+            // Squarespace: keep the schedule in sync if the org changed the date/time.
+            // Only date/time fields — titles, descriptions and categories edited by
+            // admins are never overwritten.
+            const current = existingEvent[0]
+            const scheduleChanged =
+              current.date !== ev.dateStr ||
+              (current.time || '') !== (ev.timeStr || '') ||
+              (current.end_time || '') !== (ev.endTimeStr || '')
+            if (isSquarespace && scheduleChanged && current.status !== 'rejected') {
+              const { error: updateError } = await supabase
+                .from('events')
+                .update({ date: ev.dateStr, time: ev.timeStr, end_time: ev.endTimeStr || null })
+                .eq('id', current.id)
+              if (!updateError) {
+                updated++
+                continue
+              }
+            }
+            skipped++
+            continue
+          }
+        }
 
         const { data: existingEvents } = await supabase
           .from('events')
-          .select('id')
+          .select('id, ical_uid')
           .eq('title', ev.summary)
           .eq('date', ev.dateStr)
           .limit(1)
 
         if (existingEvents && existingEvents.length > 0) {
+          // Event imported earlier without a source ID (e.g. the old Squarespace
+          // importer) — attach the ID so future schedule changes sync to it.
+          const match = existingEvents[0]
+          if (isSquarespace && !match.ical_uid && ev.uid?.startsWith(SQUARESPACE_UID_PREFIX)) {
+            await supabase.from('events').update({ ical_uid: ev.uid }).eq('id', match.id)
+          }
           skipped++
           continue
         }
@@ -335,7 +409,7 @@ export async function POST(request: NextRequest) {
             time: ev.timeStr,
             end_time: ev.endTimeStr || null,
             location: ev.location || displayName,
-            address: ev.location || '',
+            address: ev.address ?? ev.location ?? '',
             organization: displayName,
             category: categories,
             tags,
@@ -359,13 +433,35 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await supabase
-      .from('ical_feeds')
-      .upsert([{ url: feedUrl, organization, last_synced: new Date().toISOString() }])
+    if (isSquarespace) {
+      // Register the events page as a synced source so the cron picks it up.
+      // Look up by URL first (works whether or not ical_feeds.url is unique).
+      const now = new Date().toISOString()
+      const { data: existingFeed } = await supabase
+        .from('ical_feeds')
+        .select('id')
+        .eq('url', sourceUrl)
+        .limit(1)
+      if (existingFeed && existingFeed.length > 0) {
+        await supabase.from('ical_feeds').update({ last_synced: now }).eq('id', existingFeed[0].id)
+      } else {
+        await supabase.from('ical_feeds').insert([{
+          url: sourceUrl,
+          organization,
+          town: town || 'Mill Valley',
+          active: true,
+          last_synced: now,
+        }])
+      }
+    } else {
+      await supabase
+        .from('ical_feeds')
+        .upsert([{ url: feedUrl, organization, last_synced: new Date().toISOString() }])
+    }
 
     await supabase
       .from('organizations')
-      .upsert([{ name: organization, website_url: feedUrl }], {
+      .upsert([{ name: organization, website_url: sourceUrl }], {
         onConflict: 'name',
         ignoreDuplicates: true,
       })
@@ -374,8 +470,11 @@ export async function POST(request: NextRequest) {
       success: true,
       imported,
       skipped,
+      updated,
       total: events.length,
       results,
+      source: isSquarespace ? 'squarespace' : 'ical',
+      feedUrl: sourceUrl,
     })
   } catch (error) {
     console.error('Import error:', error)

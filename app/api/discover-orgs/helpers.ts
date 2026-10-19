@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { findSquarespaceEventList } from '../../lib/squarespace'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -134,6 +135,9 @@ export async function findEventPageUrl(website: string): Promise<string | null> 
 }
 
 // PARALLELIZED: all candidate feed URLs are checked concurrently instead of one at a time.
+// Also returns a Squarespace events page (list view) when there's no iCal feed —
+// the iCal import route reads those pages directly, so they connect like a feed.
+// (Squarespace's ?format=ical URLs are not used: its robots.txt disallows them.)
 export async function detectIcalFeed(website: string): Promise<string | null> {
   if (!website) return null
   try {
@@ -142,8 +146,6 @@ export async function detectIcalFeed(website: string): Promise<string | null> {
     const pathname = base.pathname.replace(/\/$/, '')
 
     const candidates = [
-      `${origin}${pathname}?format=ical`,
-      `${origin}/events?format=ical`,
       `${origin}/events/?ical=1`,
       `${origin}${pathname}/?ical=1`,
       `${origin}/events/feed/ical`,
@@ -192,6 +194,9 @@ export async function detectIcalFeed(website: string): Promise<string | null> {
         }
       }
     } catch { }
+
+    const squarespaceList = await findSquarespaceEventList(website)
+    if (squarespaceList) return squarespaceList
   } catch { }
   return null
 }
