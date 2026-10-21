@@ -303,6 +303,7 @@ export async function POST(request: NextRequest) {
     let imported = 0
     let skipped = 0
     let updated = 0
+    let restored = 0
     const results = []
 
     for (const ev of events) {
@@ -313,7 +314,7 @@ export async function POST(request: NextRequest) {
         if (ev.uid) {
           const { data: existingEvent } = await supabase
             .from('events')
-            .select('id, date, time, end_time, status, feed_id')
+            .select('id, date, time, end_time, status, feed_id, status_before_removal')
             .eq('ical_uid', ev.uid)
             .limit(1)
 
@@ -333,6 +334,15 @@ export async function POST(request: NextRequest) {
             // Only date/time fields — titles, descriptions and categories edited by
             // admins are never overwritten.
             const current = existingEvent[0]
+            // Back in the source after being hidden as "removed by source" and not yet
+            // reviewed → restore it automatically.
+            if (current.status_before_removal) {
+              await supabase.from('events')
+                .update({ status: current.status_before_removal, status_before_removal: null, removed_from_source_at: null })
+                .eq('id', current.id)
+              current.status = current.status_before_removal
+              restored++
+            }
             // Link events imported before feed_id existed (never re-link another feed's event)
             if (current.feed_id == null) {
               await supabase.from('events').update({ feed_id: feedId }).eq('id', current.id)
@@ -445,6 +455,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Removed by source: upcoming events from this feed that are no longer in it.
+    // They're hidden (unpublished) and listed in the Moderation Queue for review.
+    // Safeguards: needs a non-empty feed; only dates the feed still covers;
+    // and a feed that suddenly drops most of its events is treated as broken.
+    let hidden = 0
+    const feedUids = new Set(events.map((e: any) => e.uid).filter(Boolean))
+    if (feedUids.size > 0) {
+      const lastFeedDate = events.reduce((max: string, e: any) => (e.dateStr > max ? e.dateStr : max), '')
+      const { data: linked } = await supabase
+        .from('events')
+        .select('id, ical_uid, status')
+        .eq('feed_id', feedId)
+        .in('status', ['approved', 'pending'])
+        .eq('keep_despite_source', false)
+        .not('ical_uid', 'is', null)
+        .gte('date', todayPT())
+        .lte('date', lastFeedDate)
+      const missing = (linked || []).filter((e: any) => !feedUids.has(e.ical_uid))
+      const looksBroken = missing.length >= 5 && missing.length > (linked || []).length / 2
+      if (looksBroken) {
+        console.warn(`Feed ${feedId} (${organization}) dropped ${missing.length} of ${(linked || []).length} events — not hiding any; feed may be broken.`)
+      } else {
+        for (const e of missing) {
+          const { error: hideError } = await supabase
+            .from('events')
+            .update({ status: 'unpublished', status_before_removal: e.status, removed_from_source_at: now })
+            .eq('id', e.id)
+          if (!hideError) hidden++
+        }
+      }
+    }
+
     await supabase
       .from('organizations')
       .upsert([{ name: organization, website_url: sourceUrl, town }], {
@@ -463,6 +505,8 @@ export async function POST(request: NextRequest) {
       feedUrl: sourceUrl,
       feedId,
       town,
+      hidden,
+      restored,
     })
   } catch (error) {
     console.error('Import error:', error)

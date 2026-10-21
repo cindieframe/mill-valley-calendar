@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
         .update({ last_synced: new Date().toISOString() })
         .eq('id', feed.id)
 
-      results.push({ org: orgNameToUse, imported: data.imported, skipped: data.skipped })
+      results.push({ org: orgNameToUse, imported: data.imported, skipped: data.skipped, hidden: data.hidden, restored: data.restored, error: data.error })
     } catch (err) {
       results.push({ org: feed.organization, error: 'Failed' })
     }

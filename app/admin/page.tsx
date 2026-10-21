@@ -78,6 +78,7 @@ export default function Admin() {
   const [approvedEvents, setApprovedEvents] = useState<any[]>([])
   const [opportunities, setOpportunities] = useState<any[]>([])
   const [pendingEventCount, setPendingEventCount] = useState(0)
+  const [removedBySourceCount, setRemovedBySourceCount] = useState(0)
   const [pendingVolCount, setPendingVolCount] = useState(0)
   const [editingOpp, setEditingOpp] = useState<any>(null)
   const [adminRole, setAdminRole] = useState<'super_admin' | 'regional_admin' | null>(null)
@@ -170,6 +171,10 @@ if (townData) {
       supabase.from('events').select('*', { count: 'exact', head: true }).eq('status', 'pending')
     )
     setPendingEventCount(evCount || 0)
+    const { count: removedCount } = await applyTownFilter(
+      supabase.from('events').select('*', { count: 'exact', head: true }).not('status_before_removal', 'is', null)
+    )
+    setRemovedBySourceCount(removedCount || 0)
     const { count: volCount } = await supabase
       .from('opportunities').select('*', { count: 'exact', head: true }).eq('status', 'pending')
     setPendingVolCount(volCount || 0)
@@ -208,9 +213,14 @@ if (townData) {
 
   async function loadEvents() {
     setLoading(true)
+    // "Removed by source" = hidden by the sync because the org removed it from
+    // their own calendar, waiting for an admin to confirm or keep it.
+    const base = supabase.from('events').select('*')
+    const filtered = eventFilter === 'removed'
+      ? base.not('status_before_removal', 'is', null)
+      : base.eq('status', eventFilter)
     const { data, error } = await applyTownFilter(
-      supabase.from('events').select('*').eq('status', eventFilter)
-        .order('date', { ascending: true }).order('time', { ascending: true })
+      filtered.order('date', { ascending: true }).order('time', { ascending: true })
     )
     if (!error) setEvents(data || [])
     const { data: approved } = await applyTownFilter(
@@ -331,8 +341,34 @@ if (townData) {
     setTimeout(() => { setMessageModal(null); setMessageSubject(''); setMessageBody(''); setMessageSent(false) }, 2000)
   }
 
+  // Removed by source → "Confirm cancel": stays hidden for good.
+  async function confirmSourceRemoval(id: number) {
+    const { error } = await supabase.from('events').update({ status_before_removal: null }).eq('id', id)
+    if (error) { alert('Could not update the event. Please try again.'); return }
+    setEvents(prev => prev.filter(e => e.id !== id))
+    setRemovedBySourceCount(c => Math.max(0, c - 1))
+  }
+
+  // Removed by source → "Keep it": back on the calendar; future syncs won't hide it again.
+  async function keepDespiteSource(ev: any) {
+    const { error } = await supabase.from('events').update({
+      status: ev.status_before_removal || 'approved',
+      status_before_removal: null,
+      removed_from_source_at: null,
+      keep_despite_source: true,
+    }).eq('id', ev.id)
+    if (error) { alert('Could not update the event. Please try again.'); return }
+    setEvents(prev => prev.filter(e => e.id !== ev.id))
+    setRemovedBySourceCount(c => Math.max(0, c - 1))
+  }
+
   async function updateStatus(id: number, status: string, note?: string) {
     const updatePayload: any = { status }
+    // Re-publishing an event the sync hid as removed-by-source means "keep it".
+    const evBeingUpdated = events.find(e => e.id === id)
+    if (status === 'approved' && evBeingUpdated?.removed_from_source_at) {
+      Object.assign(updatePayload, { status_before_removal: null, removed_from_source_at: null, keep_despite_source: true })
+    }
     if (status === 'unpublished') updatePayload.unpublished_note = note || null
     if (status === 'rejected') updatePayload.rejected_note = note || null
     const { error } = await supabase.from('events').update(updatePayload).eq('id', id)
@@ -994,6 +1030,9 @@ async function executeDelete(scope: 'this' | 'all') {
                   {s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
               ))}
+              <button style={subTabStyle(eventFilter === 'removed')} onClick={() => setEventFilter('removed')}>
+                Removed by source{removedBySourceCount > 0 ? ` (${removedBySourceCount})` : ''}
+              </button>
             </div>
             <div style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '12px', padding: '12px 20px', marginBottom: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
               <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={{ border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '6px 12px', fontSize: '13px', outline: 'none', color: '#374151' }} />
@@ -1133,6 +1172,13 @@ async function executeDelete(scope: 'this' | 'all') {
                       <button onClick={() => updateStatus(ev.id, 'approved')} style={{ background: '#16803c', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>✓ Re-publish</button>
                       <button onClick={() => openNoteModal(ev.id, 'rejected')} style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>✕ Reject</button>
                       <button onClick={() => deleteEvent(ev.id)} style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>🗑 Delete permanently</button>
+                    </>}
+                    {eventFilter === 'removed' && <>
+                      <div style={{ width: '100%', fontSize: '12px', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '8px 12px', marginBottom: '4px' }}>
+                        No longer on {ev.organization}&apos;s calendar (noticed {ev.removed_from_source_at ? new Date(ev.removed_from_source_at).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric' }) : 'recently'}). Hidden from Townstir until you decide.
+                      </div>
+                      <button onClick={() => confirmSourceRemoval(ev.id)} style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>✕ Confirm cancel</button>
+                      <button onClick={() => keepDespiteSource(ev)} style={{ background: '#16803c', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>✓ Keep it</button>
                     </>}
                     {eventFilter === 'rejected' && <>
                       <button onClick={() => updateStatus(ev.id, 'approved')} style={{ background: '#16803c', color: 'white', border: 'none', padding: '9px 22px', borderRadius: '999px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>✓ Approve anyway</button>
