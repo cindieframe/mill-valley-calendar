@@ -1279,15 +1279,26 @@ async function executeDelete(scope: 'this' | 'all') {
                             </button>
                             <div style={{ height: '0.5px', background: '#f3f4f6', margin: '2px 0' }} />
                             <button onClick={async () => {
-                              if (!confirm(`Permanently delete ${org.name}? This cannot be undone.`)) return
-                              const res = await fetch('/api/delete-org', {
+                              setOpenMenuId(null)
+                              if (org.user_id) {
+                                alert(`${org.name} has its own login account. Unlink or delete that account before removing the org.`)
+                                return
+                              }
+                              if (!confirm(`Remove ${org.name}?\n\nThis permanently deletes all of its events, disconnects its feeds, and blocks it from Discovery in its town. This cannot be undone.`)) return
+                              const { data: { session } } = await supabase.auth.getSession()
+                              const res = await fetch('/api/admin/remove-org', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
                                 body: JSON.stringify({ id: org.id })
                               })
-                              if (res.ok) { setOrgs(prev => prev.filter(o => o.id !== org.id)); setOpenMenuId(null) }
+                              const result = await res.json().catch(() => ({ error: 'Unexpected server response' }))
+                              if (!res.ok || result.error) { alert(result.error || `Remove failed (${res.status})`); return }
+                              setOrgs(prev => prev.filter(o => o.id !== org.id))
+                              const blockedBy = [result.blocked?.domain, result.blocked?.placeId && 'Google place'].filter(Boolean).join(' + ')
+                              alert(`Removed ${result.name}: ${result.eventsDeleted} event${result.eventsDeleted === 1 ? '' : 's'} deleted, ${result.feedsRemoved} feed${result.feedsRemoved === 1 ? '' : 's'} disconnected.` +
+                                (blockedBy ? `\nBlocked in ${result.town} Discovery by ${blockedBy}.` : `\nNo website or Google place on file, so Discovery blocks it by name only.`))
                             }} style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 14px', fontSize: '13px', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'sans-serif' }}>
-                              Delete org
+                              Remove org
                             </button>
                           </div>
                         )}

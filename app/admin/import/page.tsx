@@ -25,13 +25,20 @@ export default function ImportPage() {
   const [icalError, setIcalError] = useState('')
 
   const [savedSources, setSavedSources] = useState<any[]>([])
-  const [savedFeeds, setSavedFeeds] = useState<any[]>([])
+  const [myTowns, setMyTowns] = useState<string[]>([])
+
+  // Connected feeds panel — loaded through /api/admin/feeds (admin-checked)
+  const [feeds, setFeeds] = useState<any[]>([])
+  const [feedsLoading, setFeedsLoading] = useState(false)
+  const [feedsError, setFeedsError] = useState('')
+  const [feedNotice, setFeedNotice] = useState('')
+  const [busyFeedId, setBusyFeedId] = useState<number | null>(null)
   const [reextractingId, setReextractingId] = useState<string | null>(null)
   const [reextractResult, setReextractResult] = useState<any>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => { checkSession() }, [])
-  useEffect(() => { loadSavedSources(); loadSavedFeeds() }, [selectedTown])
+  useEffect(() => { loadSavedSources(); loadFeeds() }, [selectedTown])
 
   async function checkSession() {
     const { data: { session } } = await supabase.auth.getSession()
@@ -42,13 +49,31 @@ export default function ImportPage() {
     if (adminData.role === 'super_admin') {
       setIsSuperAdmin(true)
       const { data: townData } = await supabase
-  .from('towns').select('name').eq('active', true).order('name')
-if (townData) {
-  setAllTowns(townData.map((t: any) => t.name))
-}
+        .from('towns').select('name').eq('active', true).order('name')
+      if (townData) {
+        setAllTowns(townData.map((t: any) => t.name))
+        setMyTowns(townData.map((t: any) => t.name))
+      }
     } else {
       if (adminData.towns?.length) setSelectedTown(adminData.towns[0])
+      setMyTowns(adminData.towns || [])
     }
+  }
+
+  // POST to an admin API route with the signed-in admin's session token.
+  async function adminPost(url: string, body: any) {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token || ''}`,
+      },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json().catch(() => ({ error: 'Unexpected server response' }))
+    if (!res.ok && !data.error) data.error = `Request failed (${res.status})`
+    return data
   }
 
   async function loadSavedSources() {
@@ -61,14 +86,53 @@ if (townData) {
     if (data) setSavedSources(data)
   }
 
-  async function loadSavedFeeds() {
-    const { data } = await supabase
-      .from('ical_feeds')
-      .select('*')
-      .eq('active', true)
-      .eq('town', selectedTown)
-      .order('organization')
-    if (data) setSavedFeeds(data)
+  async function loadFeeds() {
+    setFeedsLoading(true)
+    setFeedsError('')
+    const data = await adminPost('/api/admin/feeds', { town: selectedTown })
+    if (data.error) setFeedsError(data.error)
+    else setFeeds(data.feeds || [])
+    setFeedsLoading(false)
+  }
+
+  async function togglePause(feed: any) {
+    setBusyFeedId(feed.id)
+    setFeedNotice('')
+    const data = await adminPost('/api/admin/feeds/update', { id: feed.id, action: feed.active ? 'pause' : 'resume' })
+    if (data.error) alert(data.error)
+    else setFeeds(prev => prev.map(f => f.id === feed.id ? { ...f, active: data.feed.active } : f))
+    setBusyFeedId(null)
+  }
+
+  async function changeFeedTown(feed: any, newTown: string) {
+    if (!newTown || newTown === selectedTown) return
+    const n = feed.upcoming.approved + feed.upcoming.pending
+    if (!confirm(`Move "${feed.organization}" to ${newTown}?\n\nIts ${n} upcoming event${n === 1 ? '' : 's'} will move to the ${newTown} calendar too.`)) return
+    setBusyFeedId(feed.id)
+    setFeedNotice('')
+    const data = await adminPost('/api/admin/feeds/update', { id: feed.id, action: 'set_town', town: newTown })
+    if (data.error) {
+      alert(data.error)
+    } else {
+      setFeeds(prev => prev.filter(f => f.id !== feed.id))
+      setFeedNotice(`Moved "${feed.organization}" and ${data.eventsMoved} upcoming event${data.eventsMoved === 1 ? '' : 's'} to ${newTown}.`)
+    }
+    setBusyFeedId(null)
+  }
+
+  async function removeFeed(feed: any) {
+    const n = feed.upcoming.approved + feed.upcoming.pending
+    if (!confirm(`Remove the feed for "${feed.organization}"?\n\nThis disconnects the feed and deletes its ${n} upcoming event${n === 1 ? '' : 's'}. Reconnecting it later brings them back.`)) return
+    setBusyFeedId(feed.id)
+    setFeedNotice('')
+    const data = await adminPost('/api/admin/feeds/remove', { id: feed.id })
+    if (data.error) {
+      alert(data.error)
+    } else {
+      setFeeds(prev => prev.filter(f => f.id !== feed.id))
+      setFeedNotice(`Removed "${feed.organization}" and deleted ${data.eventsDeleted} event${data.eventsDeleted === 1 ? '' : 's'}.`)
+    }
+    setBusyFeedId(null)
   }
 
   const inputStyle = {
@@ -118,6 +182,7 @@ if (townData) {
             .insert([{ name: aiOrg, website_url: websiteUrl, last_extracted_at: new Date().toISOString(), town: selectedTown }])
         }
         loadSavedSources()
+        loadFeeds()
       }
     } catch {
       setAiError('Something went wrong. Please try again.')
@@ -191,15 +256,9 @@ if (townData) {
       if (data.error) {
         setIcalError(data.error)
       } else {
+        // import-ical saves the feed (with its town) — just refresh the panel
         setIcalResult(data)
-        await supabase.from('ical_feeds').upsert([{
-          organization: icalOrg,
-          url: feedUrl,
-          last_synced: new Date().toISOString(),
-          active: true,
-          town: selectedTown,
-        }])
-        loadSavedFeeds()
+        loadFeeds()
       }
     } catch {
       setIcalError('Something went wrong. Please try again.')
@@ -431,46 +490,81 @@ if (townData) {
               </div>
             )}
 
-            {savedFeeds.length > 0 && (
-              <div style={{ marginTop: '32px' }}>
-                <hr style={{ border: 'none', borderTop: '1.5px solid #e5e7eb', margin: '24px 0' }} />
-                <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', marginBottom: '12px' }}>
-                  📅 Active iCal Feeds — Auto-synced every 6 hours
-                </h3>
-                {savedFeeds.map((feed, i) => (
-                  <div key={i} style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '14px 16px', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{feed.organization}</div>
-                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{feed.url}</div>
-                        {feed.last_synced && (
-                          <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
-                            Last synced: {new Date(feed.last_synced).toLocaleDateString()}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button
-                          onClick={async () => {
-                            const newVal = !feed.is_aggregator
-                            await supabase.from('ical_feeds').update({ is_aggregator: newVal }).eq('id', feed.id)
-                            await supabase.from('events').update({ is_aggregator: newVal }).eq('organization', feed.organization)
-                            setSavedFeeds(prev => prev.map(f => f.id === feed.id ? { ...f, is_aggregator: newVal } : f))
-                          }}
-                          style={{ background: 'none', border: 'none', fontSize: '11px', color: feed.is_aggregator ? '#854F0B' : '#9ca3af', fontWeight: feed.is_aggregator ? 600 : 400, cursor: 'pointer', padding: '0 4px', whiteSpace: 'nowrap' as const }}>
-                          {feed.is_aggregator ? 'Aggregator ✓' : 'Aggregator'}
-                        </button>
-                        <div style={{ fontSize: '11px', background: '#f0fdf4', color: '#16803c', border: '1.5px solid #86efac', padding: '4px 10px', borderRadius: '999px', fontWeight: 700 }}>
-                          ✓ Active
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
+
+        {/* CONNECTED FEEDS — every synced source for this town (iCal and web pages) */}
+        <hr style={{ border: 'none', borderTop: '1.5px solid #e5e7eb', margin: '36px 0 24px' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+          <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: 0 }}>Connected feeds</h2>
+          <button onClick={loadFeeds} disabled={feedsLoading}
+            style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}>
+            {feedsLoading ? 'Loading…' : 'Refresh'}
+          </button>
+        </div>
+        <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0 0 16px' }}>
+          Active feeds sync every 6 hours. Paused feeds keep their events but stop syncing.
+        </p>
+
+        {feedNotice && (
+          <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', fontSize: '13px', color: '#166534' }}>
+            {feedNotice}
+          </div>
+        )}
+        {feedsError && (
+          <div style={{ background: '#fee2e2', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', fontSize: '13px', color: '#dc2626' }}>
+            ⚠️ {feedsError}
+          </div>
+        )}
+        {!feedsLoading && !feedsError && feeds.length === 0 && (
+          <div style={{ fontSize: '13px', color: '#9ca3af' }}>No feeds connected for {selectedTown} yet.</div>
+        )}
+
+        {feeds.map(feed => {
+          const busy = busyFeedId === feed.id
+          return (
+            <div key={feed.id} style={{ background: feed.active ? 'white' : '#f9fafb', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '14px 16px', marginBottom: '8px', opacity: busy ? 0.6 : 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 0, flex: '1 1 260px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{feed.organization}</span>
+                    <span style={{
+                      fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', border: '1px solid',
+                      ...(feed.active
+                        ? { background: '#f0fdf4', color: '#16803c', borderColor: '#86efac' }
+                        : { background: '#f3f4f6', color: '#6b7280', borderColor: '#d1d5db' }),
+                    }}>
+                      {feed.active ? 'Active' : 'Paused'}
+                    </span>
+                    <span style={{ fontSize: '10px', color: '#9ca3af' }}>{feed.source === 'ical' ? 'iCal' : 'Web page'}</span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{feed.url}</div>
+                  <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '3px' }}>
+                    {feed.upcoming.approved} approved · {feed.upcoming.pending} pending upcoming
+                    {feed.last_synced && <> · synced {new Date(feed.last_synced).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                  {myTowns.length > 1 && (
+                    <select value="" disabled={busy} onChange={e => changeFeedTown(feed, e.target.value)}
+                      style={{ border: '1.5px solid #e5e7eb', borderRadius: '999px', padding: '6px 10px', fontSize: '12px', color: '#374151', background: 'white', cursor: 'pointer' }}>
+                      <option value="">Move to…</option>
+                      {myTowns.filter(t => t !== selectedTown).map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  )}
+                  <button onClick={() => togglePause(feed)} disabled={busy}
+                    style={{ background: 'white', color: '#374151', border: '1.5px solid #d1d5db', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer' }}>
+                    {feed.active ? 'Pause' : 'Resume'}
+                  </button>
+                  <button onClick={() => removeFeed(feed)} disabled={busy}
+                    style={{ background: 'white', color: '#dc2626', border: '1.5px solid #dc2626', padding: '6px 14px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer' }}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

@@ -9,6 +9,8 @@ import {
   detectIcalFeed,
   assessOrg,
 } from './helpers'
+import { loadTowns, matchTown } from '../../lib/towns'
+import { toDomain } from '../../lib/domains'
 
 // Vercel Hobby plan's function duration ceiling — matches what we hit
 // with the old synchronous route. Bounded concurrency below is sized to
@@ -89,10 +91,18 @@ export async function POST(request: NextRequest) {
       supabase.from('ical_feeds').select('url, organization'),
       supabase.from('events').select('organization').eq('status', 'approved').eq('town', town),
       supabase.from('organizations').select('name, website_url, last_extracted_at, place_id'),
-      supabase.from('blocked_orgs').select('place_id').eq('town', town),
+      supabase.from('blocked_orgs').select('place_id, domain, name, town'),
     ])
 
-    const blockedPlaceIds = new Set((blockedOrgsData || []).map((b: any) => b.place_id))
+    // Blocks match the town however it was typed ("San Anselmo", "San Anselmo, CA", "san-anselmo").
+    const allTowns = await loadTowns()
+    const searchTown = matchTown(allTowns, town)?.name ?? town
+    const blockedHere = (blockedOrgsData || []).filter((b: any) =>
+      (matchTown(allTowns, b.town)?.name ?? b.town) === searchTown
+    )
+    const blockedPlaceIds = new Set(blockedHere.map((b: any) => b.place_id).filter(Boolean))
+    const blockedDomains = new Set(blockedHere.map((b: any) => b.domain).filter(Boolean))
+    const blockedNames = new Set(blockedHere.map((b: any) => b.name?.toLowerCase()).filter(Boolean))
     const existingFeedUrls = new Set((existingFeeds || []).map((f: any) => f.url))
     const orgsWithEventNames = new Set((orgsWithEvents || []).map((e: any) => e.organization?.toLowerCase()))
     const knownPlaceIds = new Set((existingOrgs || []).map((o: any) => o.place_id).filter(Boolean))
@@ -154,7 +164,7 @@ export async function POST(request: NextRequest) {
     let timedOut = 0
 
     async function processOneInner(place: any) {
-      if (blockedPlaceIds.has(place.place_id)) {
+      if (blockedPlaceIds.has(place.place_id) || blockedNames.has((place.name || '').toLowerCase())) {
         blockedSkipped++
         return null
       }
@@ -189,6 +199,13 @@ export async function POST(request: NextRequest) {
         const name = details.name || place.name
 
         if (types.some((t: string) => SKIP_ALWAYS_TYPES.has(t))) return null
+
+        // Orgs removed with "Remove org" are blocked by website domain too.
+        const domain = toDomain(website)
+        if (domain && blockedDomains.has(domain)) {
+          blockedSkipped++
+          return null
+        }
 
         const normalizedWebsite = website ? getBaseDomain(website) : null
         const knownByWebsite =

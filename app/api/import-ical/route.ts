@@ -8,6 +8,7 @@ import {
   parseSquarespaceEvents,
   SQUARESPACE_UID_PREFIX,
 } from '../../lib/squarespace'
+import { resolveTown } from '../../lib/towns'
 
 const UA = 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)'
 
@@ -225,10 +226,18 @@ TAGS: tag1,tag2`
 
 export async function POST(request: NextRequest) {
   try {
-    const { feedUrl, organization, town } = await request.json()
+    const { feedUrl, organization, town: rawTown } = await request.json()
 
     if (!feedUrl || !organization) {
       return NextResponse.json({ error: 'feedUrl and organization required' }, { status: 400 })
+    }
+
+    // Town is required and must exist in the towns table — never defaulted.
+    const town = await resolveTown(rawTown)
+    if (!town) {
+      return NextResponse.json({
+        error: rawTown ? `Unknown town "${rawTown}". Add it under Admin → Towns first.` : 'town required',
+      }, { status: 400 })
     }
 
     const response = await fetch(feedUrl, {
@@ -304,46 +313,63 @@ export async function POST(request: NextRequest) {
 
     const displayName = linkedOrg ? linkedOrg.name : organization
 
+    // Register the source once, before importing, so every event can carry
+    // its feed_id. ical_feeds.url is unique; http/https variants count as
+    // the same feed. A feed already connected to a different town is refused
+    // rather than silently imported into the wrong calendar.
+    const now = new Date().toISOString()
+    const altUrl = sourceUrl.startsWith('https://')
+      ? sourceUrl.replace(/^https:\/\//, 'http://')
+      : sourceUrl.replace(/^http:\/\//, 'https://')
+    const { data: existingFeeds, error: feedLookupError } = await supabase
+      .from('ical_feeds')
+      .select('id, town, organization')
+      .in('url', [sourceUrl, altUrl])
+      .limit(1)
+    if (feedLookupError) {
+      console.error('Feed lookup failed:', feedLookupError)
+      return NextResponse.json({ error: 'Could not save feed' }, { status: 500 })
+    }
+
+    let feedId: number
+    if (existingFeeds && existingFeeds.length > 0) {
+      const existing = existingFeeds[0]
+      const existingTown = await resolveTown(existing.town)
+      if (existingTown && existingTown !== town) {
+        return NextResponse.json({
+          error: `This feed is already connected for ${existingTown} (as "${existing.organization}").`,
+        }, { status: 409 })
+      }
+      feedId = existing.id
+      // Normalizes legacy town values like "mill-valley"; never changes active/paused.
+      await supabase.from('ical_feeds').update({ town, last_synced: now }).eq('id', feedId)
+    } else {
+      const { data: newFeed, error: feedInsertError } = await supabase
+        .from('ical_feeds')
+        .insert([{ url: sourceUrl, organization, town, active: true, last_synced: now }])
+        .select('id')
+        .single()
+      if (feedInsertError || !newFeed) {
+        console.error('Feed insert failed:', feedInsertError)
+        return NextResponse.json({ error: 'Could not save feed' }, { status: 500 })
+      }
+      feedId = newFeed.id
+    }
+
     let imported = 0
     let skipped = 0
     let updated = 0
     const results = []
 
-     for (const ev of events) {
+    for (const ev of events) {
       try {
-        // Auto-moderation — reject administrative events before dedup check
-        if (shouldAutoReject(ev.summary)) {
-          if (ev.uid) {
-            await supabase.from('rejected_uids').upsert(
-              [{ ical_uid: ev.uid, organization: displayName }],
-              { onConflict: 'ical_uid', ignoreDuplicates: true }
-            )
-          }
-          await supabase.from('events').insert([{
-            title: ev.summary,
-            date: ev.dateStr,
-            time: ev.timeStr,
-            end_time: ev.endTimeStr || null,
-            location: ev.location || displayName,
-            address: ev.address ?? ev.location ?? '',
-            organization: displayName,
-            category: 'gov',
-            tags: '',
-            description: ev.description || '',
-            website: ev.url || '',
-            status: 'rejected',
-            rejected_note: AUTO_REJECT_NOTE,
-            ical_uid: ev.uid || null,
-            town: town || 'Mill Valley',
-          }])
-          skipped++
-          continue
-        }
-
+        // Dedup checks run BEFORE auto-moderation. Previously auto-rejected
+        // events were inserted on every sync, creating a new rejected copy
+        // every 6 hours.
         if (ev.uid) {
           const { data: existingEvent } = await supabase
             .from('events')
-            .select('id, date, time, end_time, status')
+            .select('id, date, time, end_time, status, feed_id')
             .eq('ical_uid', ev.uid)
             .limit(1)
 
@@ -363,6 +389,10 @@ export async function POST(request: NextRequest) {
             // Only date/time fields — titles, descriptions and categories edited by
             // admins are never overwritten.
             const current = existingEvent[0]
+            // Link events imported before feed_id existed (never re-link another feed's event)
+            if (current.feed_id == null) {
+              await supabase.from('events').update({ feed_id: feedId }).eq('id', current.id)
+            }
             const scheduleChanged =
               current.date !== ev.dateStr ||
               (current.time || '') !== (ev.timeStr || '') ||
@@ -400,6 +430,37 @@ export async function POST(request: NextRequest) {
           continue
         }
 
+        // Auto-moderation — new administrative events are stored once as rejected,
+        // and their uid is recorded so later syncs skip them above.
+        if (shouldAutoReject(ev.summary)) {
+          if (ev.uid) {
+            await supabase.from('rejected_uids').upsert(
+              [{ ical_uid: ev.uid, organization: displayName }],
+              { onConflict: 'ical_uid', ignoreDuplicates: true }
+            )
+          }
+          await supabase.from('events').insert([{
+            title: ev.summary,
+            date: ev.dateStr,
+            time: ev.timeStr,
+            end_time: ev.endTimeStr || null,
+            location: ev.location || displayName,
+            address: ev.address ?? ev.location ?? '',
+            organization: displayName,
+            category: 'gov',
+            tags: '',
+            description: ev.description || '',
+            website: ev.url || '',
+            status: 'rejected',
+            rejected_note: AUTO_REJECT_NOTE,
+            ical_uid: ev.uid || null,
+            town,
+            feed_id: feedId,
+          }])
+          skipped++
+          continue
+        }
+
         const { categories, tags } = await categorizeEvent(ev.summary, ev.description)
 
         const { error } = await supabase.from('events').insert([
@@ -418,7 +479,8 @@ export async function POST(request: NextRequest) {
             image_url: ev.image || null,
             status: 'pending',
             ical_uid: ev.uid || null,
-            town: town || 'Mill Valley',
+            town,
+            feed_id: feedId,
           },
         ])
 
@@ -433,35 +495,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (isSquarespace) {
-      // Register the events page as a synced source so the cron picks it up.
-      // Look up by URL first (works whether or not ical_feeds.url is unique).
-      const now = new Date().toISOString()
-      const { data: existingFeed } = await supabase
-        .from('ical_feeds')
-        .select('id')
-        .eq('url', sourceUrl)
-        .limit(1)
-      if (existingFeed && existingFeed.length > 0) {
-        await supabase.from('ical_feeds').update({ last_synced: now }).eq('id', existingFeed[0].id)
-      } else {
-        await supabase.from('ical_feeds').insert([{
-          url: sourceUrl,
-          organization,
-          town: town || 'Mill Valley',
-          active: true,
-          last_synced: now,
-        }])
-      }
-    } else {
-      await supabase
-        .from('ical_feeds')
-        .upsert([{ url: feedUrl, organization, last_synced: new Date().toISOString() }])
-    }
-
     await supabase
       .from('organizations')
-      .upsert([{ name: organization, website_url: sourceUrl }], {
+      .upsert([{ name: organization, website_url: sourceUrl, town }], {
         onConflict: 'name',
         ignoreDuplicates: true,
       })
@@ -475,6 +511,8 @@ export async function POST(request: NextRequest) {
       results,
       source: isSquarespace ? 'squarespace' : 'ical',
       feedUrl: sourceUrl,
+      feedId,
+      town,
     })
   } catch (error) {
     console.error('Import error:', error)
