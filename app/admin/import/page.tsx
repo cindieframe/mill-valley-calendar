@@ -599,7 +599,7 @@ export default function ImportPage() {
         <hr style={{ border: 'none', borderTop: '1.5px solid #e5e7eb', margin: '32px 0 20px' }} />
         <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', margin: '0 0 4px' }}>Re-check tags</h3>
         <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0 0 12px' }}>
-          Adds missing tags (like Live Music) to upcoming {selectedTown} events. Never removes anything. New imports are tagged automatically — this is only for events already on the calendar.
+          Adds missing tags (like Live Music) to <strong>every</strong> upcoming {selectedTown} event, from any source — feeds, AI extract (e.g. Depot), CSV and posted events. Never removes anything. New imports are tagged automatically; this is for events already on the calendar.
         </p>
         <button onClick={recheckTags} disabled={retagRunning}
           style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '8px 18px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: retagRunning ? 'not-allowed' : 'pointer', opacity: retagRunning ? 0.6 : 1 }}>

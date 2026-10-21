@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getEvents } from '../events'
 import { supabase } from '../supabase'
+import { todayPT, addDays, dayOfWeek, noonDate } from '../lib/dates'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import Header from '../components/Header'
@@ -56,24 +57,22 @@ function fmt(d: Date) {
 }
 
 function getDateStrings() {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const todayStr = today.toISOString().split('T')[0]
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const day = today.getDay()
+  // Pacific calendar dates, whatever time zone the visitor is in.
+  const todayStr = todayPT()
+  const day = dayOfWeek(todayStr)
   const satOffset = day === 0 ? -1 : (6 - day + 7) % 7
-  const sat = new Date(today); sat.setDate(today.getDate() + satOffset)
-  const sun = new Date(today); sun.setDate(today.getDate() + satOffset + 1)
+  const tomorrowStr = addDays(todayStr, 1)
+  const satStr = addDays(todayStr, satOffset)
+  const sunStr = addDays(todayStr, satOffset + 1)
   return {
     todayStr,
-    tomorrowStr: tomorrow.toISOString().split('T')[0],
-    satStr: sat.toISOString().split('T')[0],
-    sunStr: sun.toISOString().split('T')[0],
-    todayLabel:    fmt(today),
-    tomorrowLabel: fmt(tomorrow),
-    satLabel:      fmt(sat),
-    sunLabel:      fmt(sun),
+    tomorrowStr,
+    satStr,
+    sunStr,
+    todayLabel:    fmt(noonDate(todayStr)),
+    tomorrowLabel: fmt(noonDate(tomorrowStr)),
+    satLabel:      fmt(noonDate(satStr)),
+    sunLabel:      fmt(noonDate(sunStr)),
   }
 }
 
@@ -227,18 +226,18 @@ function HomeInner() {
       setTowns([{ slug: 'marin', name: 'Marin' }, ...activeTowns])
     }
     loadTowns()
-    async function loadOrgList() {
-      const { data } = await supabase.from('events').select('organization').eq('status', 'approved')
-      if (data) {
-        const counts: Record<string, number> = {}
-        data.forEach((e: any) => {
-          if (e.organization) counts[e.organization] = (counts[e.organization] || 0) + 1
-        })
-        setOrgList(Object.keys(counts).filter(o => counts[o] >= 2).sort())
-      }
-    }
-    loadOrgList()
   }, [])
+
+  // Organization dropdown: built from this calendar's own events, so a town
+  // only lists orgs that have events in that town (previously it listed
+  // every org in every town).
+  useEffect(() => {
+    const counts: Record<string, number> = {}
+    events.forEach((e: any) => {
+      if (e.organization) counts[e.organization] = (counts[e.organization] || 0) + 1
+    })
+    setOrgList(Object.keys(counts).filter(o => counts[o] >= 2).sort())
+  }, [events])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { todayPT } from './lib/dates'
 
 function timeTo24(t: string): string {
   if (!t) return '99:99'
@@ -63,7 +64,7 @@ async function getMarinEvents() {
     .select('*')
     .eq('status', 'approved')
     .or(orParts)
-    .gte('date', new Date().toISOString().split('T')[0])
+    .gte('date', todayPT())
 
   if (error) {
     console.error('Error fetching Marin events:', error)
@@ -88,7 +89,7 @@ export async function getEvents(townSlug: string = 'mill-valley') {
     .select('*')
     .eq('status', 'approved')
     .or(`town.ilike.${townName},town.ilike.${townSlug}`)
-    .gte('date', new Date().toISOString().split('T')[0])
+    .gte('date', todayPT())
     .order('date', { ascending: true })
     .order('time', { ascending: true })
 

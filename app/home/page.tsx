@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
 import { colors, fonts } from '../lib/tokens'
+import { todayPT } from '../lib/dates'
 
 const SUPABASE_ASSETS = 'https://uacthqlmxhslqzddfxwt.supabase.co/storage/v1/object/public/site-assets'
 const HERO_IMAGE = `${SUPABASE_ASSETS}/aranxa-esteve-pOXHU0UEDcg-unsplash.jpg`
@@ -105,7 +106,7 @@ const [townOpen, setTownOpen] = useState(false)
   useEffect(() => { loadFeaturedEvents() }, [])
 
   async function loadFeaturedEvents() {
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayPT()
     const { data } = await supabase
       .from('events')
       .select('id, title, date, time, organization, category, image_url')

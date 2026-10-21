@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '../../supabase'
 import { resolveTown } from '../../lib/towns'
 import { categorizeEvent } from '../../lib/categorize'
+import { todayPT } from '../../lib/dates'
 
 function parseCSVLine(line: string): string[] {
   const result: string[] = []
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
 
     // Map headers
     const headers = parseCSVLine(lines[0]).map(mapHeader)
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayPT()
 
     let imported = 0
     let skipped = 0

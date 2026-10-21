@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
+import { todayPT } from '../../lib/dates'
 import Header from '../../components/Header'
 
 export default function OrgProfilePage() {
@@ -38,7 +39,7 @@ export default function OrgProfilePage() {
         .select('*')
         .eq('organization', orgData.name)
         .eq('status', 'approved')
-        .gte('date', new Date().toISOString().split('T')[0])
+        .gte('date', todayPT())
         .order('date', { ascending: true })
 
       setEvents(eventsData || [])

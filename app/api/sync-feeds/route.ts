@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '../../supabase'
+import { todayPT } from '../../lib/dates'
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -9,7 +10,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Delete past events automatically
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayPT()
   await supabase.from('events').delete().lt('date', today)
 
   // Load all active iCal feeds

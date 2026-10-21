@@ -9,6 +9,7 @@ import {
 } from '../../lib/squarespace'
 import { resolveTown } from '../../lib/towns'
 import { categorizeEvent } from '../../lib/categorize'
+import { todayPT } from '../../lib/dates'
 
 const UA = 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)'
 
@@ -157,10 +158,7 @@ function parseICal(text: string) {
       timeStr = 'All day'
     }
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const eventDate = new Date(dateStr + 'T12:00:00')
-    if (eventDate < today) continue
+    if (dateStr < todayPT()) continue
 
     events.push({ summary, description, location, dateStr, timeStr, endTimeStr, url, image, uid })
   }

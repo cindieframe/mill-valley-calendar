@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from './supabase'
 import { colors, fonts } from './lib/tokens'
+import { todayPT } from './lib/dates'
 
 const SUPABASE_ASSETS = 'https://uacthqlmxhslqzddfxwt.supabase.co/storage/v1/object/public/site-assets'
 const HERO_IMAGE = `${SUPABASE_ASSETS}/aranxa-esteve-pOXHU0UEDcg-unsplash.jpg`
@@ -185,7 +186,7 @@ export default function HomeBPage() {
 
   async function loadFeaturedEvents(town: { slug: string; name: string }) {
     setLoading(true)
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayPT()
 
     let query = supabase
       .from('events')

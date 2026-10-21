@@ -1,36 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { todayPT, addDays, dayOfWeek } from '../../lib/dates'
 import Anthropic from '@anthropic-ai/sdk'
 
 const client = new Anthropic()
 
 
 function getDateContext() {
-  const TODAY = new Date()
-TODAY.setHours(0, 0, 0, 0)
-  const fmt = (d: Date) => d.toISOString().split('T')[0]
-  const day = TODAY.getDay()
-
-  const tomorrow = new Date(TODAY)
-  tomorrow.setDate(TODAY.getDate() + 1)
-
+  // Pacific calendar dates — the server runs in UTC.
+  const today = todayPT()
+  const day = dayOfWeek(today)
   const satOffset = day === 0 ? -1 : (6 - day + 7) % 7
-  const sat = new Date(TODAY); sat.setDate(TODAY.getDate() + satOffset)
-  const sun = new Date(TODAY); sun.setDate(TODAY.getDate() + satOffset + 1)
-
-  const nextSat = new Date(sat); nextSat.setDate(sat.getDate() + 7)
-  const nextSun = new Date(sun); nextSun.setDate(sun.getDate() + 7)
-
-  const weekEnd = new Date(TODAY)
-  weekEnd.setDate(TODAY.getDate() + (7 - day))
-
+  const sat = addDays(today, satOffset)
+  const sun = addDays(today, satOffset + 1)
   return {
-    today: fmt(TODAY),
-    tomorrow: fmt(tomorrow),
-    thisWeekendSat: fmt(sat),
-    thisWeekendSun: fmt(sun),
-    nextWeekendSat: fmt(nextSat),
-    nextWeekendSun: fmt(nextSun),
-    thisWeekEnd: fmt(weekEnd),
+    today,
+    tomorrow: addDays(today, 1),
+    thisWeekendSat: sat,
+    thisWeekendSun: sun,
+    nextWeekendSat: addDays(sat, 7),
+    nextWeekendSun: addDays(sun, 7),
+    thisWeekEnd: addDays(today, 7 - day),
   }
 }
 
