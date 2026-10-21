@@ -36,7 +36,7 @@ export default function ImportPage() {
 
   // One-time "Re-check tags" for events already on the calendar
   const [retagRunning, setRetagRunning] = useState(false)
-  const [retagProgress, setRetagProgress] = useState<{ checked: number; updated: number; changes: { title: string; added: string[] }[]; done: boolean; error?: string } | null>(null)
+  const [retagProgress, setRetagProgress] = useState<{ checked: number; updated: number; failed: number; changes: { title: string; added: string[] }[]; done: boolean; error?: string } | null>(null)
   const [reextractingId, setReextractingId] = useState<string | null>(null)
   const [reextractResult, setReextractResult] = useState<any>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -128,17 +128,18 @@ export default function ImportPage() {
     if (!confirm(`Re-check tags on every upcoming event in ${selectedTown}?\n\nThis only ADDS missing tags (like Live Music). It never removes tags or categories you set. Costs well under $1 in AI usage.`)) return
     setRetagRunning(true)
     let after: string | null = null
-    let checked = 0, updated = 0
+    let checked = 0, updated = 0, failed = 0
     let changes: { title: string; added: string[] }[] = []
-    setRetagProgress({ checked, updated, changes, done: false })
+    setRetagProgress({ checked, updated, failed, changes, done: false })
     while (true) {
       const data: any = await adminPost('/api/admin/retag', { town: selectedTown, after })
-      if (data.error) { setRetagProgress({ checked, updated, changes, done: true, error: data.error }); break }
+      if (data.error) { setRetagProgress({ checked, updated, failed, changes, done: true, error: data.error }); break }
       checked += data.checked
       updated += data.updated
+      failed += data.failed || 0
       changes = [...changes, ...data.changes]
       after = data.next
-      setRetagProgress({ checked, updated, changes, done: !after })
+      setRetagProgress({ checked, updated, failed, changes, done: !after })
       if (!after) break
     }
     setRetagRunning(false)
@@ -610,6 +611,11 @@ export default function ImportPage() {
             {retagProgress.error
               ? `⚠️ ${retagProgress.error} (checked ${retagProgress.checked} so far)`
               : `${retagProgress.done ? '✅ Done — ' : ''}checked ${retagProgress.checked} events, added tags to ${retagProgress.updated}.`}
+            {retagProgress.failed > 0 && (
+              <div style={{ marginTop: '6px', color: '#b45309' }}>
+                ⚠️ The AI couldn&apos;t check {retagProgress.failed} event{retagProgress.failed === 1 ? '' : 's'} (busy or rate-limited). Events that mention live music were still tagged. Run it again later to finish the rest.
+              </div>
+            )}
             {retagProgress.changes.length > 0 && (
               <div style={{ marginTop: '8px', maxHeight: '220px', overflowY: 'auto', color: '#374151' }}>
                 {retagProgress.changes.map((c, i) => (

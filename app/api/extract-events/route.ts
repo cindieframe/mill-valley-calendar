@@ -403,7 +403,7 @@ Rules:
         imageUrl = await fetchOgImage(ev.website)
       }
 
-      const tagged = finalize(cleanCategories(ev.category), cleanTags(ev.tags))
+      const tagged = finalize(cleanCategories(ev.category), cleanTags(ev.tags), `${ev.title} ${ev.description || ''}`)
 
       const { error } = await supabase.from('events').insert([{
         title: ev.title,

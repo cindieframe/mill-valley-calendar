@@ -15,11 +15,11 @@ export const CATEGORY_GUIDE: { key: string; means: string }[] = [
 
 export const TAG_GUIDE: { key: string; means: string }[] = [
   { key: 'free',      means: 'free to attend' },
-  { key: 'family',    means: 'family-friendly' },
+  { key: 'family',    means: 'aimed at kids and families (storytime, kids activities, family days) — not just any social or adult event' },
   { key: 'wellness',  means: 'health or wellness focused' },
   { key: 'reg',       means: 'registration or tickets required in advance' },
   { key: 'volunteer', means: 'a volunteering opportunity' },
-  { key: 'music',     means: 'LIVE MUSIC: musicians, a band, singer, DJ set, jazz/folk/rock night, concert, or open mic with music. NOT music lessons, lectures about music, or film screenings' },
+  { key: 'music',     means: 'LIVE MUSIC performance for an audience: musicians, a band, singer, DJ set, jazz/folk/rock night, concert, or open mic with music. NOT music lessons or classes, kids sing-alongs or music-and-movement sessions, lectures about music, or film screenings' },
 ]
 
 const CATEGORY_KEYS = new Set(CATEGORY_GUIDE.map(c => c.key))
@@ -59,14 +59,26 @@ export function cleanTags(raw: unknown): string {
   return cleanList(raw, TAG_KEYS).join(',')
 }
 
-// Music tag implies the arts category.
-export function finalize(categories: string, tags: string): { categories: string; tags: string } {
-  const cats = categories.split(',').filter(Boolean)
-  if (tags.split(',').includes('music') && !cats.includes('arts')) cats.push('arts')
-  return { categories: cats.join(','), tags }
+// Free, deterministic rule: events that say they are live music are live
+// music, whatever the AI answered (or if the AI call failed).
+const LIVE_MUSIC_WORDS = /\blive music\b|\bconcerts?\b|\blive band\b|\bband\b.*\b(plays?|performs?|performance|live)\b|\bopen mic\b|\bmusic performance\b/i
+const NOT_LIVE_MUSIC = /\b(lessons?|class(es)?|workshop|lecture|sing[- ]?along|storytime|music (and|&) movement)\b/i
+
+export function looksLikeLiveMusic(text: string): boolean {
+  return LIVE_MUSIC_WORDS.test(text) && !NOT_LIVE_MUSIC.test(text)
 }
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+// Applies the live-music rule, and music → arts.
+export function finalize(categories: string, tags: string, text = ''): { categories: string; tags: string } {
+  const cats = categories.split(',').filter(Boolean)
+  const tagList = tags.split(',').filter(Boolean)
+  if (text && looksLikeLiveMusic(text) && !tagList.includes('music')) tagList.push('music')
+  if (tagList.includes('music') && !cats.includes('arts')) cats.push('arts')
+  return { categories: cats.join(','), tags: tagList.join(',') }
+}
+
+// Retries with backoff when the API is busy or rate-limited.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 5 })
 
 // Small, cheap model: classification only. ~$0.0005 per event.
 const CATEGORIZE_MODEL = 'claude-haiku-4-5-20251001'
@@ -77,7 +89,8 @@ export async function categorizeEvent(ev: {
   organization?: string | null
   location?: string | null
   town?: string | null
-}): Promise<{ categories: string; tags: string }> {
+}): Promise<{ categories: string; tags: string; ok: boolean }> {
+  const text = `${ev.title} ${ev.description || ''}`
   try {
     const prompt = `You are categorizing a community event for a local events calendar${ev.town ? ` in ${ev.town}, CA` : ''}.
 
@@ -100,9 +113,10 @@ TAGS: key1,key2`
     const text = response.content[0].type === 'text' ? response.content[0].text : ''
     const catMatch = text.match(/CATEGORIES:\s*([^\n]*)/)
     const tagMatch = text.match(/TAGS:\s*([^\n]*)/)
-    return finalize(cleanCategories(catMatch?.[1]), cleanTags(tagMatch?.[1]))
+    return { ...finalize(cleanCategories(catMatch?.[1]), cleanTags(tagMatch?.[1]), text), ok: true }
   } catch (err) {
+    // ok: false lets callers report it instead of failing silently.
     console.error('Categorization failed for:', ev.title, err)
-    return { categories: 'community', tags: '' }
+    return { ...finalize('community', '', text), ok: false }
   }
 }

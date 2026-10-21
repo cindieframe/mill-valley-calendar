@@ -4,9 +4,10 @@ import { requireAdmin, canManageTown, forbiddenTown } from '../../../lib/adminAu
 import { findTown, townFilter } from '../../../lib/towns'
 import { categorizeEvent } from '../../../lib/categorize'
 
-export const maxDuration = 120
+export const maxDuration = 300
 
-const BATCH = 25
+const BATCH = 20
+const AT_ONCE = 2 // stays under the AI account's rate limit
 
 // Re-checks tags on upcoming events in a town, one batch per call.
 // Only ADDS missing tags (and "arts" when music is added) — never removes
@@ -36,11 +37,11 @@ export async function POST(request: NextRequest) {
 
   const split = (v: string | null) => (v || '').split(',').map(x => x.trim()).filter(Boolean)
   const changes: { title: string; added: string[] }[] = []
+  let failed = 0
 
-  // Five at a time keeps this well inside the time limit.
   const list = events || []
-  for (let i = 0; i < list.length; i += 5) {
-    await Promise.all(list.slice(i, i + 5).map(async ev => {
+  for (let i = 0; i < list.length; i += AT_ONCE) {
+    await Promise.all(list.slice(i, i + AT_ONCE).map(async ev => {
       const suggested = await categorizeEvent({
         title: ev.title,
         description: ev.description,
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest) {
         location: ev.location,
         town: town.name,
       })
+      if (!suggested.ok) failed++
       const tags = split(ev.tags)
       const cats = split(ev.category)
       const addedTags = split(suggested.tags).filter(t => !tags.includes(t))
@@ -65,6 +67,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     checked: list.length,
     updated: changes.length,
+    failed,
     changes,
     next: list.length === BATCH ? list[list.length - 1].id : null,
   })
