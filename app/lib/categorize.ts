@@ -17,9 +17,9 @@ export const TAG_GUIDE: { key: string; means: string }[] = [
   { key: 'free',      means: 'free to attend' },
   { key: 'family',    means: 'aimed at kids and families (storytime, kids activities, family days) — not just any social or adult event' },
   { key: 'wellness',  means: 'health or wellness focused' },
-  { key: 'reg',       means: 'registration or tickets required in advance' },
+  { key: 'reg',       means: 'you must sign up, RSVP or register in advance (classes, workshops, limited-space programs). NOT just buying a ticket to a show or concert' },
   { key: 'volunteer', means: 'a volunteering opportunity' },
-  { key: 'music',     means: 'LIVE MUSIC performance for an audience: musicians, a band, singer, DJ set, jazz/folk/rock night, concert, or open mic with music. NOT music lessons or classes, kids sing-alongs or music-and-movement sessions, lectures about music, or film screenings' },
+  { key: 'music',     means: 'LIVE MUSIC performance for an audience: musicians, a band, singer, DJ set, jazz/folk/rock night, concert, or open mic with music. NOT music lessons or classes, kids sing-alongs or music-and-movement sessions, lectures about music, film screenings, or musicals and musical theater (those are theater: arts category, no music tag)' },
 ]
 
 const CATEGORY_KEYS = new Set(CATEGORY_GUIDE.map(c => c.key))
@@ -62,7 +62,7 @@ export function cleanTags(raw: unknown): string {
 // Free, deterministic rule: events that say they are live music are live
 // music, whatever the AI answered (or if the AI call failed).
 const LIVE_MUSIC_WORDS = /\blive music\b|\bconcerts?\b|\blive band\b|\bband\b.*\b(plays?|performs?|performance|live)\b|\bopen mic\b|\bmusic performance\b/i
-const NOT_LIVE_MUSIC = /\b(lessons?|class(es)?|workshop|lecture|sing[- ]?along|storytime|music (and|&) movement)\b/i
+const NOT_LIVE_MUSIC = /\b(lessons?|class(es)?|workshop|lecture|sing[- ]?along|storytime|music (and|&) movement|musical theat(er|re)|the musical|a musical)\b/i
 
 export function looksLikeLiveMusic(text: string): boolean {
   return LIVE_MUSIC_WORDS.test(text) && !NOT_LIVE_MUSIC.test(text)
