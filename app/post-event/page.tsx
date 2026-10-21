@@ -180,17 +180,6 @@ export default function PostEvent() {
     }
     const recaptchaToken = recaptchaRef.current?.getValue()
     if (!recaptchaToken) { alert('Please complete the reCAPTCHA verification.'); return }
-    const verifyRes = await fetch('/api/verify-recaptcha', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: recaptchaToken }),
-    })
-    if (!verifyRes.ok) {
-      alert('reCAPTCHA verification failed. Please try again.')
-      recaptchaRef.current?.reset()
-      return
-    }
-
     setSubmitting(true)
 
     // Generate all dates for recurring events
@@ -205,11 +194,6 @@ export default function PostEvent() {
       form.recurrence_end,
       form.recurrence_count
     )
-
-    // Generate a shared recurrence_id UUID for all instances (only if recurring)
-    const recurrenceId = dates.length > 1
-      ? crypto.randomUUID()
-      : null
 
     const baseEvent = {
       title: form.title,
@@ -228,61 +212,25 @@ export default function PostEvent() {
       website: form.website,
       image_url: imageUrl || null,
       town: form.town,
-      status: 'pending',
       recurrence: recurrence === 'none' ? 'none' : effectiveRecurrence,
       recurrence_end: (endsOn === 'on' && form.recurrence_end) ? form.recurrence_end : null,
       recurrence_count: (endsOn === 'after' && form.recurrence_count) ? parseInt(form.recurrence_count) : null,
-      recurrence_id: recurrenceId,
     }
 
-    // Only the first date shows in the admin pending queue.
-    // The rest are stored as 'pending_series' and activated when admin approves.
-    const rows = dates.map((date, i) => ({
-      ...baseEvent,
-      date,
-      status: i === 0 ? 'pending' : 'pending_series',
-    }))
-
-    const { error } = await supabase.from('events').insert(rows)
+    // Saved server-side: reCAPTCHA is checked there, every date is stored
+    // (later dates as pending_series), and the admin + confirmation emails go out.
+    const res = await fetch('/api/events/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: baseEvent, dates, recaptchaToken }),
+    })
+    const result = await res.json().catch(() => ({ error: 'Something went wrong. Please try again.' }))
 
     setSubmitting(false)
-    if (error) {
-      alert('Something went wrong. Please try again.')
-      console.error(error)
+    if (!res.ok || result.error) {
+      alert(result.error || 'Something went wrong. Please try again.')
+      recaptchaRef.current?.reset()
     } else {
-      await fetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: 'townstir.admin@gmail.com',
-          subject: `New event submitted: ${form.title}`,
-          html: `
-            <p>A new event has been submitted for review.</p>
-            <p><strong>Title:</strong> ${form.title}</p>
-            <p><strong>Date:</strong> ${form.date}${dates.length > 1 ? ` (+ ${dates.length - 1} recurring dates)` : ''}</p>
-            <p><strong>Organization:</strong> ${form.organization}</p>
-            <p><strong>Town:</strong> ${form.town}</p>
-            <p><a href="https://www.townstir.com/admin">Review it in the admin dashboard →</a></p>
-          `,
-        }),
-      })
-      if (form.email) {
-        await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: form.email,
-            subject: `We received your event: ${form.title}`,
-            html: `
-              <p>Hi there,</p>
-              <p>Thanks for submitting <strong>${form.title}</strong> to Townstir! We'll review it within 24 hours and you'll hear from us once it's approved.</p>
-              <p><strong>First date:</strong> ${form.date}${dates.length > 1 ? `<br><strong>Recurs:</strong> ${effectiveRecurrence} (${dates.length} total dates submitted)` : ''}</p>
-              <p>Thanks for helping make Mill Valley's community calendar great!</p>
-              <p>— The Townstir Team</p>
-            `,
-          }),
-        })
-      }
       setSubmitted(true)
     }
   }

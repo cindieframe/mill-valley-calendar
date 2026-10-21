@@ -100,16 +100,3 @@ export async function getEvents(townSlug: string = 'mill-valley') {
 
   return shapeEvents(data || [])
 }
-
-export async function submitEvent(event: any) {
-  const { data, error } = await supabase
-    .from('events')
-    .insert([{ ...event, status: 'pending' }])
-
-  if (error) {
-    console.error('Error submitting event:', error)
-    return false
-  }
-
-  return true
-}

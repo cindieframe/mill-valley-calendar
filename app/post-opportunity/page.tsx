@@ -43,28 +43,24 @@ export default function PostOpportunity() {
     }
     const recaptchaToken = recaptchaRef.current?.getValue()
     if (!recaptchaToken) { alert('Please complete the reCAPTCHA verification.'); return }
-    const verifyRes = await fetch('/api/verify-recaptcha', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: recaptchaToken }),
-    })
-    if (!verifyRes.ok) {
-      alert('reCAPTCHA verification failed. Please try again.')
-      recaptchaRef.current?.reset()
-      return
-    }
     setSubmitting(true)
     const res = await fetch('/api/submit-opportunity', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...form,
+        recaptchaToken,
         posted_by_email: form.contact_email,
         is_student_opportunity: form.tags.includes('student') || form.is_student_opportunity,
       }),
     })
     setSubmitting(false)
-    if (!res.ok) { alert('Something went wrong. Please try again.'); return }
+    if (!res.ok) {
+      const result = await res.json().catch(() => ({}))
+      alert(result.error || 'Something went wrong. Please try again.')
+      recaptchaRef.current?.reset()
+      return
+    }
     setSubmitted(true)
   }
 

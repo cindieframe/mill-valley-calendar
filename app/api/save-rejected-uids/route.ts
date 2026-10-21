@@ -1,24 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '../../lib/supabaseAdmin'
+import { requireAdmin, canManageTown, forbiddenTown } from '../../lib/adminAuth'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
+// Called before an admin deletes events: remembers their iCal UIDs so the
+// sync never re-imports them.
 export async function POST(request: NextRequest) {
-  const { eventIds } = await request.json()
-  if (!eventIds?.length) return NextResponse.json({ saved: 0 })
+  const auth = await requireAdmin(request)
+  if (auth.response) return auth.response
 
-  const { data: events } = await supabase
+  const { eventIds } = await request.json()
+  if (!Array.isArray(eventIds) || !eventIds.length) return NextResponse.json({ saved: 0 })
+
+  const { data: events, error: loadError } = await supabaseAdmin
     .from('events')
-    .select('ical_uid, organization')
+    .select('ical_uid, organization, town')
     .in('id', eventIds)
     .not('ical_uid', 'is', null)
-
+  if (loadError) return NextResponse.json({ error: loadError.message }, { status: 500 })
   if (!events?.length) return NextResponse.json({ saved: 0 })
 
-  const { error } = await supabase
+  for (const town of Array.from(new Set(events.map(e => e.town)))) {
+    if (!(await canManageTown(auth.admin, town))) return forbiddenTown(town)
+  }
+
+  const { error } = await supabaseAdmin
     .from('rejected_uids')
     .upsert(
       events.map(e => ({ ical_uid: e.ical_uid, organization: e.organization })),

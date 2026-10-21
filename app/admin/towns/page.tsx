@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
+import { authFetch } from '../../lib/authFetch'
 
 const EMPTY_TOWN = {
   name: '',
@@ -107,7 +108,7 @@ export default function AdminTowns() {
     setSaving(true)
     setError('')
 
-    const res = await fetch('/api/add-town', {
+    const res = await authFetch('/api/add-town', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -131,7 +132,7 @@ export default function AdminTowns() {
   }
 
   async function toggleActive(town: any) {
-    const res = await fetch('/api/add-town', {
+    const res = await authFetch('/api/add-town', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'toggle', town: { id: town.id, active: !town.active } }),

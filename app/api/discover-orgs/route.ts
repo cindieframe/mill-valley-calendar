@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '../../supabase'
+import { supabaseAdmin as supabase } from '../../lib/supabaseAdmin'
+import { requireAdmin, canManageTown, forbiddenTown } from '../../lib/adminAuth'
 import {
   TRUSTED_TYPES,
   SKIP_ALWAYS_TYPES,
@@ -70,11 +71,15 @@ async function searchPlaces(query: string, location: string, apiKey: string) {
 }
 
 export async function POST(request: NextRequest) {
+  // Admin-only: each run spends Google Places and Claude credits.
+  const auth = await requireAdmin(request)
+  if (auth.response) return auth.response
   try {
     const { town, state } = await request.json()
     if (!town) {
       return NextResponse.json({ error: 'town is required' }, { status: 400 })
     }
+    if (!(await canManageTown(auth.admin, town))) return forbiddenTown(town)
 
     const apiKey = process.env.GOOGLE_PLACES_API_KEY
     if (!apiKey) {

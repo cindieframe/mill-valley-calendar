@@ -1,35 +1,16 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { supabaseAdmin as supabase } from '../../lib/supabaseAdmin'
+import { verifyRecaptcha } from '../../lib/recaptcha'
+import { ADMIN_INBOX, escapeHtml, isEmail, sendEmail } from '../../lib/email'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-    },
-    body: JSON.stringify({
-      from: 'Townstir <hello@send.townstir.com>',
-      to,
-      subject,
-      html,
-      reply_to: 'townstir.admin@gmail.com',
-    }),
-  })
-  if (!res.ok) {
-    const err = await res.json()
-    console.error('Resend error:', err)
-  }
-}
-
+// Public Volunteering form. reCAPTCHA is verified here, then the opportunity is
+// saved as pending and emails are sent (all user text is HTML-escaped).
 export async function POST(req: Request) {
   try {
     const body = await req.json()
+    if (!(await verifyRecaptcha(body?.recaptchaToken))) {
+      return NextResponse.json({ error: 'reCAPTCHA verification failed. Please try again.' }, { status: 400 })
+    }
     const {
       title,
       description,
@@ -75,26 +56,26 @@ export async function POST(req: Request) {
 
     // Notify admin
     await sendEmail({
-      to: 'townstir.admin@gmail.com',
+      to: ADMIN_INBOX,
       subject: `New opportunity submitted: ${title}`,
       html: `
         <p>A new Volunteering opportunity has been submitted for review.</p>
-        <p><strong>Title:</strong> ${title}</p>
-        <p><strong>Category:</strong> ${category}</p>
-        <p><strong>Organization:</strong> ${organization || 'Community member'}</p>
-        <p><strong>Contact:</strong> ${contact_name || ''} — ${contact_email || ''}</p>
+        <p><strong>Title:</strong> ${escapeHtml(title)}</p>
+        <p><strong>Category:</strong> ${escapeHtml(category)}</p>
+        <p><strong>Organization:</strong> ${escapeHtml(organization || 'Community member')}</p>
+        <p><strong>Contact:</strong> ${escapeHtml(contact_name || '')} — ${escapeHtml(contact_email || '')}</p>
         <p><a href="https://www.townstir.com/admin">Review it in the admin dashboard →</a></p>
       `,
     })
 
     // Confirm to submitter
-    if (posted_by_email) {
+    if (isEmail(posted_by_email)) {
       await sendEmail({
         to: posted_by_email,
         subject: `We received your opportunity: ${title}`,
         html: `
-          <p>Hi ${contact_name || 'there'},</p>
-          <p>Thanks for submitting <strong>${title}</strong> to the Townstir Volunteering. We'll review it within 24 hours.</p>
+          <p>Hi ${escapeHtml(contact_name || 'there')},</p>
+          <p>Thanks for submitting <strong>${escapeHtml(title)}</strong> to the Townstir Volunteering. We'll review it within 24 hours.</p>
           <p>Once approved it will appear on the Mill Valley Volunteering and will stay live for 30 days. You'll receive an email before it expires giving you the option to keep it live.</p>
           <p>— The Townstir Team</p>
         `,

@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '../../lib/supabaseAdmin'
+import { requireAdmin, canManageTown, forbiddenTown } from '../../lib/adminAuth'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
+// Discovery → "Block": hide an org from future Discovery runs for a town.
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin(request)
+  if (auth.response) return auth.response
   try {
     const { place_id, name, town, website } = await request.json()
-    const { error } = await supabase.from('blocked_orgs').upsert([{
+    if (!town) return NextResponse.json({ error: 'town required' }, { status: 400 })
+    if (!(await canManageTown(auth.admin, town))) return forbiddenTown(town)
+
+    const { error } = await supabaseAdmin.from('blocked_orgs').upsert([{
       place_id, name, town, website
     }])
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

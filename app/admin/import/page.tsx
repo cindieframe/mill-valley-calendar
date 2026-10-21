@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
 import { AdminHeader } from '../../components/Header'
+import { authFetch } from '../../lib/authFetch'
 
 export default function ImportPage() {
   const router = useRouter()
@@ -156,7 +157,7 @@ export default function ImportPage() {
     setAiError('')
     setAiResult(null)
     try {
-      const response = await fetch('/api/extract-events', {
+      const response = await authFetch('/api/extract-events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ websiteUrl, organization: aiOrg, isAggregator: aiIsAggregator, town: selectedTown }),
@@ -194,7 +195,7 @@ export default function ImportPage() {
     setReextractingId(org.id)
     setReextractResult(null)
     try {
-      const response = await fetch('/api/extract-events', {
+      const response = await authFetch('/api/extract-events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ websiteUrl: org.website_url, organization: org.name, isAggregator: org.is_aggregator, town: selectedTown }),
@@ -217,13 +218,14 @@ export default function ImportPage() {
   async function handleDeleteSource(org: any) {
     setDeletingId(org.id)
     try {
-      const response = await fetch('/api/delete-source', {
+      const response = await authFetch('/api/delete-source', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: org.id }),
       })
       const data = await response.json()
-      if (!data.error) await loadSavedSources()
+      if (data.error) alert(data.error)
+      else await loadSavedSources()
     } catch {
       console.error('Delete failed')
     }
@@ -247,7 +249,7 @@ export default function ImportPage() {
     setIcalError('')
     setIcalResult(null)
     try {
-      const response = await fetch('/api/import-ical', {
+      const response = await authFetch('/api/import-ical', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ feedUrl, organization: icalOrg, town: selectedTown }),

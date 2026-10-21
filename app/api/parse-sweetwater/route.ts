@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin as supabase } from "../../lib/supabaseAdmin";
+import { requireAdmin, canManageTown, forbiddenTown } from "../../lib/adminAuth";
 import { parseSweetwater } from "@/lib/email-parsers/sweetwater";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const SWEETWATER_TOWN = "Mill Valley";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdmin(req);
+  if (auth.response) return auth.response;
+  if (!(await canManageTown(auth.admin, SWEETWATER_TOWN))) return forbiddenTown(SWEETWATER_TOWN);
+
   const { text } = await req.json();
 
   if (!text) {
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest) {
     category: 'arts',
     status: "pending",
     source: "sweetwater-email",
-    town: "Mill Valley",
+    town: SWEETWATER_TOWN,
    cost: e.ticketStatus === "No Cover" ? "Free" : e.ticketStatus === "Sold Out" ? "Sold Out" : "",
     tags: e.ticketStatus === "No Cover" ? "free,music" : "music",
     website: "https://sweetwatermusichall.org",

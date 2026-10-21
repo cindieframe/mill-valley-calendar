@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { supabaseAdmin } from '../../lib/supabaseAdmin'
+import { requireAdmin, canManageTown, forbiddenTown } from '../../lib/adminAuth'
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin(request)
+  if (auth.response) return auth.response
   try {
     const { id } = await request.json()
-    const { error } = await supabase.from('blocked_orgs').delete().eq('id', id)
+    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+    const { data: row } = await supabaseAdmin.from('blocked_orgs').select('town').eq('id', id).maybeSingle()
+    if (!row) return NextResponse.json({ error: 'Blocked org not found' }, { status: 404 })
+    if (!(await canManageTown(auth.admin, row.town))) return forbiddenTown(row.town)
+
+    const { error } = await supabaseAdmin.from('blocked_orgs').delete().eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true })
   } catch (error) {

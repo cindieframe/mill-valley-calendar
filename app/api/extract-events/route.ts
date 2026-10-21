@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ICAL from 'ical.js'
 import Anthropic from '@anthropic-ai/sdk'
-import { supabase } from '../../supabase'
+import { supabaseAdmin as supabase } from '../../lib/supabaseAdmin'
+import { requireAdmin, canManageTown, forbiddenTown } from '../../lib/adminAuth'
 import { shouldAutoReject, AUTO_REJECT_NOTE } from '../../lib/moderation'
 import { findSquarespaceEventList } from '../../lib/squarespace'
-import { POST as importIcalPOST } from '../import-ical/route'
+import { importFeed } from '../../lib/importFeed'
 import { resolveTown } from '../../lib/towns'
 import { categorizeEvent, categoryPromptGuide, cleanCategories, cleanTags, finalize } from '../../lib/categorize'
 
@@ -85,12 +86,15 @@ async function fetchOgImage(url: string): Promise<string | null> {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin(request)
+  if (auth.response) return auth.response
   try {
     const { websiteUrl, organization, isAggregator: isAggregatorParam, town: rawTown } = await request.json()
     const town = await resolveTown(rawTown)
     if (!town) {
       return NextResponse.json({ error: rawTown ? `Unknown town "${rawTown}"` : 'town required' }, { status: 400 })
     }
+    if (!(await canManageTown(auth.admin, town))) return forbiddenTown(town)
 
     if (!websiteUrl || !organization) {
       return NextResponse.json({ error: 'websiteUrl and organization required' }, { status: 400 })
@@ -185,12 +189,7 @@ export async function POST(request: NextRequest) {
     // the page in ical_feeds, so the 6-hour sync keeps it current from now on.
     const squarespaceUrl = await findSquarespaceEventList(websiteUrl)
     if (squarespaceUrl) {
-      const importRes = await importIcalPOST(new NextRequest(new URL('/api/import-ical', request.url), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feedUrl: squarespaceUrl, organization, town }),
-      }))
-      const data = await importRes.json()
+      const { body: data } = await importFeed({ feedUrl: squarespaceUrl, organization, town })
       if (!data.error) {
         const alreadyHave = (data.skipped || 0) + (data.updated || 0)
         return NextResponse.json({

@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '../../supabase'
+import { supabaseAdmin as supabase } from '../../lib/supabaseAdmin'
+import { importFeed } from '../../lib/importFeed'
+import { isCronRequest } from '../../lib/adminAuth'
 import { todayPT } from '../../lib/dates'
 
+// Imports run in this one function; allow the full Hobby-plan limit.
+export const maxDuration = 300
+
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const querySecret = request.nextUrl.searchParams.get('secret')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}` && querySecret !== process.env.CRON_SECRET) {
+  if (!isCronRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -16,7 +19,7 @@ export async function GET(request: NextRequest) {
   // Load all active iCal feeds
   const { data: feeds, error } = await supabase
     .from('ical_feeds')
-  .select('id, organization, url, town')
+    .select('id, organization, url, town')
     .eq('active', true)
 
   if (error || !feeds) {
@@ -39,16 +42,11 @@ export async function GET(request: NextRequest) {
       )
       const orgNameToUse = matchingOrg?.name || feed.organization
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/import-ical`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({
-  feedUrl: feed.url,
-  organization: orgNameToUse,
-  town: feed.town,
-})
+      const { body: data } = await importFeed({
+        feedUrl: feed.url,
+        organization: orgNameToUse,
+        town: feed.town,
       })
-      const data = await response.json()
 
       // Update last_synced timestamp
       await supabase

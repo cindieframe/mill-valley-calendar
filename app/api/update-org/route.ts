@@ -1,28 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '../../lib/supabaseAdmin'
+import { requireAdmin, canManageTown, forbiddenTown } from '../../lib/adminAuth'
+import { escapeLike } from '../../lib/escapeLike'
 
-const adminSupabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
+// Admin → Organizations → rename. Also renames the org on its events.
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin(request)
+  if (auth.response) return auth.response
   try {
-    const { id, name, originalName } = await request.json()
-    if (!id || !name) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+    const { id, name } = await request.json()
+    if (!id || !name?.trim()) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
-    const { error } = await adminSupabase
+    // Use the stored name, not one sent by the browser, to find the events to rename.
+    const { data: org } = await supabaseAdmin
       .from('organizations')
-      .update({ name })
+      .select('id, name, town')
       .eq('id', id)
+      .maybeSingle()
+    if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    if (!(await canManageTown(auth.admin, org.town))) return forbiddenTown(org.town)
 
+    const newName = name.trim()
+    const { error } = await supabaseAdmin
+      .from('organizations')
+      .update({ name: newName })
+      .eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    if (originalName && originalName !== name) {
-      await adminSupabase
+    if (org.name && org.name !== newName) {
+      const { error: eventsError } = await supabaseAdmin
         .from('events')
-        .update({ organization: name })
-        .ilike('organization', originalName)
+        .update({ organization: newName })
+        .ilike('organization', escapeLike(org.name))
+      if (eventsError) {
+        return NextResponse.json({ error: `Renamed, but events were not updated: ${eventsError.message}` }, { status: 500 })
+      }
     }
 
     return NextResponse.json({ success: true })

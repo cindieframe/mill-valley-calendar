@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { AdminHeader } from '../../components/Header'
 import { useSearchParams } from 'next/navigation'
+import { authFetch } from '../../lib/authFetch'
 
 type OrgResult = {
   name: string
@@ -49,7 +50,7 @@ function DiscoverOrgsInner() {
     setAlreadyKnownSkipped(0)
 
     try {
-      const res = await fetch('/api/discover-orgs', {
+      const res = await authFetch('/api/discover-orgs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ town, state })
@@ -103,7 +104,7 @@ function DiscoverOrgsInner() {
 
   async function blockOrg(index: number) {
     const org = orgs[index]
-    const res = await fetch('/api/block-org', {
+    const res = await authFetch('/api/block-org', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ place_id: org.place_id, name: org.name, town, website: org.website })
@@ -114,7 +115,7 @@ function DiscoverOrgsInner() {
   }
 
   async function unblockOrg(id: string) {
-    await fetch('/api/unblock-org', {
+    await authFetch('/api/unblock-org', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
@@ -123,7 +124,7 @@ function DiscoverOrgsInner() {
   }
 
   async function loadBlockedOrgs() {
-    const res = await fetch('/api/get-blocked-orgs', {
+    const res = await authFetch('/api/get-blocked-orgs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ town })
@@ -141,7 +142,7 @@ function DiscoverOrgsInner() {
     if (!org.feed_url) return
     setOrgStatus(index, 'connecting', '')
     try {
-      const res = await fetch('/api/import-ical', {
+      const res = await authFetch('/api/import-ical', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ feedUrl: org.feed_url, organization: org.name, town })
@@ -150,7 +151,7 @@ function DiscoverOrgsInner() {
       if (data.error) {
         setOrgStatus(index, 'error', data.error)
       } else {
-        await fetch('/api/save-org', {
+        await authFetch('/api/save-org', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: org.name, website_url: org.website, place_id: org.place_id, town })
@@ -168,7 +169,7 @@ function DiscoverOrgsInner() {
     if (!urlToUse) return
     setOrgStatus(index, 'extracting', '')
     try {
-      const res = await fetch('/api/extract-events', {
+      const res = await authFetch('/api/extract-events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ websiteUrl: urlToUse, organization: org.name, town })
@@ -179,7 +180,7 @@ function DiscoverOrgsInner() {
       } else if (data.imported === 0 && data.skipped === 0) {
         setOrgStatus(index, 'error', data.message || 'No upcoming events found on that page.')
       } else {
-        await fetch('/api/save-org', {
+        await authFetch('/api/save-org', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: org.name, website_url: urlToUse, place_id: org.place_id, town })

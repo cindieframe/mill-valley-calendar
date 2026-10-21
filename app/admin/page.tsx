@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
+import { authFetch } from '../lib/authFetch'
 
 // ─── Recurrence helpers ───────────────────────────────────────────────────────
 
@@ -293,7 +294,7 @@ if (townData) {
     setOrgSaving(true)
     const originalOrg = orgs.find(o => o.id === editingOrg.id)
     try {
-      const response = await fetch('/api/update-org', {
+      const response = await authFetch('/api/update-org', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: editingOrg.id, name: editingOrg.name, originalName: originalOrg?.name }),
       })
@@ -305,7 +306,7 @@ if (townData) {
 
   async function toggleVerify(org: any) {
     const newVerified = !org.verified
-    const res = await fetch('/api/verify-org', {
+    const res = await authFetch('/api/verify-org', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: org.id, verified: newVerified, orgName: org.name })
@@ -327,16 +328,13 @@ if (townData) {
     if (!messageSubject || !messageBody) return
     setMessageSending(true)
     const recipients = messageModal.all ? orgs.filter(o => o.email) : [messageModal]
-    for (const org of recipients) {
-      await fetch('/api/send-email', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: org.email, subject: messageSubject,
-          html: `<p>Hi ${org.name},</p>${messageBody.split('\n').map((l: string) => `<p>${l}</p>`).join('')}<p>— The Townstir Team</p>`,
-          replyTo: 'townstir.admin@gmail.com',
-        }),
-      })
-    }
+    // Sent server-side to the orgs' stored addresses (towns this admin manages).
+    const res = await authFetch('/api/admin/message-orgs', {
+      method: 'POST',
+      body: JSON.stringify({ orgIds: recipients.map((o: { id: number }) => o.id), subject: messageSubject, body: messageBody }),
+    })
+    const result = await res.json().catch(() => ({ error: 'Unexpected server response' }))
+    if (!res.ok || result.error) { setMessageSending(false); alert(result.error || 'Message failed to send.'); return }
     setMessageSending(false); setMessageSent(true)
     setTimeout(() => { setMessageModal(null); setMessageSubject(''); setMessageBody(''); setMessageSent(false) }, 2000)
   }
@@ -383,28 +381,11 @@ if (townData) {
             .eq('status', 'pending_series')
         }
       }
-      const ev = events.find(e => e.id === id)
-      if (ev?.email || ev?.organization) {
-        let recipientEmail = ev.email
-        if (!recipientEmail && ev.organization) {
-          const { data: orgData } = await supabase.from('organizations').select('email').ilike('name', ev.organization).single()
-          if (orgData?.email) recipientEmail = orgData.email
-        }
-        if (recipientEmail) {
-          let subject = '', html = ''
-          if (status === 'approved') {
-            subject = `Your event is live: ${ev.title}`
-            html = `<p>Great news!</p><p>Your event <strong>${ev.title}</strong> on <strong>${ev.date}</strong> has been approved and is now live on the Townstir calendar.</p><p><a href="https://www.townstir.com/event/${ev.id}">View your event →</a></p><p>— The Townstir Team</p>`
-          } else if (status === 'rejected') {
-            subject = `Update on your event: ${ev.title}`
-            html = `<p>Hi there,</p><p>Unfortunately your event <strong>${ev.title}</strong> on <strong>${ev.date}</strong> was not approved for the Townstir calendar.</p>${note ? `<p><strong>Note from admin:</strong> ${note}</p>` : ''}<p>You're welcome to make changes and resubmit at <a href="https://www.townstir.com/post-event">townstir.com/post-event</a>.</p><p>— The Townstir Team</p>`
-          } else if (status === 'unpublished') {
-            subject = `Your event has been unpublished: ${ev.title}`
-            html = `<p>Hi there,</p><p>Your event <strong>${ev.title}</strong> on <strong>${ev.date}</strong> has been temporarily unpublished from the Townstir calendar.</p>${note ? `<p><strong>Note from admin:</strong> ${note}</p>` : ''}<p>Please log in to your dashboard to make any needed updates.</p><p>— The Townstir Team</p>`
-          }
-          if (subject) await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: recipientEmail, subject, html, replyTo: 'townstir.admin@gmail.com' }) })
-        }
-      }
+      // Email the submitter — built server-side from the saved event.
+      await authFetch('/api/admin/notify-status', {
+        method: 'POST',
+        body: JSON.stringify({ eventId: id }),
+      }).catch(() => {})
       setEvents(prev => prev.filter(ev => ev.id !== id))
       loadPendingCounts()
     }
@@ -443,7 +424,7 @@ if (townData) {
 
   // ─── Delete with series support ───────────────────────────────────────────
 async function saveRejectedUids(ids: number[]) {
-  await fetch('/api/save-rejected-uids', {
+  await authFetch('/api/save-rejected-uids', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ eventIds: ids }),

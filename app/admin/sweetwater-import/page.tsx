@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { authFetch } from "../../lib/authFetch";
 
 export default function SweetwaterImportPage() {
   const [text, setPastedText] = useState("");
@@ -9,7 +10,7 @@ export default function SweetwaterImportPage() {
   async function handleImport() {
     setLoading(true);
     setResult(null);
-    const res = await fetch("/api/parse-sweetwater", {
+    const res = await authFetch("/api/parse-sweetwater", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),

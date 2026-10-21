@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
 import { OrgHeader } from '../../components/Header'
+import { authFetch } from '../../lib/authFetch'
 
 type Event = {
   id: number
@@ -240,44 +241,16 @@ async function loadEvents(orgName: string) {
       if (error) { setEventError(error.message); setEventSaving(false); return }
       setEvents(events.map(e => e.id === editingEvent.id ? data : e))
     } else {
-  const { data, error } = await supabase
-    .from('events').insert(payload).select().single()
-  if (error) { setEventError(error.message); setEventSaving(false); return }
-  setEvents([...events, data].sort((a, b) => a.date.localeCompare(b.date)))
-  // Notify admin
-  await fetch('/api/send-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      to: 'admin@townstir.com',
-      subject: `New event submitted: ${payload.title}`,
-      html: `
-        <p>A new event has been submitted for review.</p>
-        <p><strong>Title:</strong> ${payload.title}</p>
-        <p><strong>Date:</strong> ${payload.date}</p>
-        <p><strong>Organization:</strong> ${payload.organization}</p>
-        <p><a href="https://www.townstir.com/admin">Review it in the admin dashboard →</a></p>
-      `,
-    }),
-  })
-  // Confirm to org
-  if (org.email) {
-    await fetch('/api/send-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: org.email,
-        subject: `We received your event: ${payload.title}`,
-        html: `
-          <p>Hi ${org.name},</p>
-          <p>Thanks for submitting <strong>${payload.title}</strong> to Townstir! We'll review it within 24 hours and you'll hear from us once it's approved.</p>
-          <p><strong>Date:</strong> ${payload.date}</p>
-          <p>— The Townstir Team</p>
-        `,
-      }),
-    })
-  }
-}
+      // Created server-side: the org's name, town and pending status are set there,
+      // and the admin + confirmation emails are sent from the server.
+      const res = await authFetch('/api/org/events', {
+        method: 'POST',
+        body: JSON.stringify({ event: payload }),
+      })
+      const result = await res.json().catch(() => ({ error: 'Unexpected server response' }))
+      if (!res.ok || result.error) { setEventError(result.error || 'Could not save the event'); setEventSaving(false); return }
+      setEvents([...events, result.event].sort((a, b) => a.date.localeCompare(b.date)))
+    }
 
     setEventSaving(false)
     setShowEventModal(false)
@@ -316,7 +289,7 @@ async function loadEvents(orgName: string) {
     if (error) { setError(error.message); setSaving(false); return }
     if (org.ical_feed_url) {
       try {
-        const importRes = await fetch('/api/import-ical', {
+        const importRes = await authFetch('/api/import-ical', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ feedUrl: org.ical_feed_url, organization: org.name })
@@ -369,20 +342,9 @@ async function handleBannerUpload(e: React.ChangeEvent<HTMLInputElement>) {
   async function handleContactAdmin() {
     if (!contactSubject || !contactMessage) return
     setContactSending(true)
-    await fetch('/api/send-email', {
+    await authFetch('/api/org/contact-admin', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: 'townstir.admin@gmail.com',
-        subject: `Message from ${org.name}: ${contactSubject}`,
-        html: `
-          <p><strong>From:</strong> ${org.name} (${org.email})</p>
-          <p><strong>Subject:</strong> ${contactSubject}</p>
-          <br/>
-          ${contactMessage.split('\n').map((line: string) => `<p>${line}</p>`).join('')}
-        `,
-        replyTo: org.email,
-      }),
+      body: JSON.stringify({ subject: contactSubject, message: contactMessage }),
     })
     setContactSending(false)
     setContactSent(true)
@@ -588,7 +550,7 @@ async function handleBannerUpload(e: React.ChangeEvent<HTMLInputElement>) {
         setCsvResult(null)
         const text = await file.text()
         try {
-          const res = await fetch('/api/import-csv', {
+          const res = await authFetch('/api/import-csv', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ csvText: text, organization: org.name, town: org.town })

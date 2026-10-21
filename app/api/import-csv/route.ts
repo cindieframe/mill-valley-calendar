@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '../../supabase'
+import { supabaseAdmin as supabase } from '../../lib/supabaseAdmin'
+import { requireOrgOrAdmin, canManageTown, forbiddenTown } from '../../lib/adminAuth'
 import { resolveTown } from '../../lib/towns'
 import { categorizeEvent } from '../../lib/categorize'
 import { todayPT } from '../../lib/dates'
@@ -72,18 +73,28 @@ function parseTime(raw: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const { csvText, organization, town: rawTown } = await request.json()
-    if (!csvText || !organization) {
+    const { csvText, organization: rawOrganization, town: rawTown } = await request.json()
+    if (!csvText || !rawOrganization) {
       return NextResponse.json({ error: 'csvText and organization required' }, { status: 400 })
     }
-    const town = await resolveTown(rawTown)
+
+    // An admin for the town, or the org's own account (always its own name and town).
+    const auth = await requireOrgOrAdmin(request, rawOrganization)
+    if (auth.response) return auth.response
+    const organization: string = auth.org ? auth.org.name : rawOrganization
+    const town = await resolveTown(auth.org ? auth.org.town : rawTown)
     if (!town) {
       return NextResponse.json({ error: 'This organization has no town set. Contact townstir.admin@gmail.com.' }, { status: 400 })
     }
+    if (auth.admin && !(await canManageTown(auth.admin, town))) return forbiddenTown(town)
 
     const lines = csvText.split(/\r?\n/).filter((l: string) => l.trim())
     if (lines.length < 2) {
       return NextResponse.json({ error: 'CSV must have a header row and at least one event' }, { status: 400 })
+    }
+    // Every row is categorized by AI — cap uploads so one file can't run up the bill.
+    if (lines.length > 501) {
+      return NextResponse.json({ error: 'CSV is limited to 500 events per upload' }, { status: 400 })
     }
 
     // Map headers

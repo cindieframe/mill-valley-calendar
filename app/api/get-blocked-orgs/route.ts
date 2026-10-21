@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '../../lib/supabaseAdmin'
+import { requireAdmin, canManageTown, forbiddenTown } from '../../lib/adminAuth'
 import { findTown, townFilter } from '../../lib/towns'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin(request)
+  if (auth.response) return auth.response
   try {
     const { town: rawTown } = await request.json()
     // Match the town however it was typed on Discovery ("San Anselmo, CA", "san-anselmo")
     const town = await findTown(rawTown)
-    let query = supabase.from('blocked_orgs').select('*')
+    if (!(await canManageTown(auth.admin, town?.name ?? rawTown))) return forbiddenTown(town?.name ?? rawTown)
+
+    let query = supabaseAdmin.from('blocked_orgs').select('*')
     query = town ? query.or(townFilter(town)) : query.eq('town', rawTown)
     const { data, error } = await query.order('name')
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

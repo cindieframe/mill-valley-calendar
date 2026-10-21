@@ -1,17 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '../../lib/supabaseAdmin'
+import { requireAdmin, canManageTown, forbiddenTown } from '../../lib/adminAuth'
 
-const adminSupabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
+// Admin → Import → AI tab → Saved Sources → Delete.
+// Deletes the organizations row only (its events stay). Orgs with a login are
+// refused here — use Organizations → ··· → Remove org instead.
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin(request)
+  if (auth.response) return auth.response
   try {
     const { id } = await request.json()
     if (!id) return NextResponse.json({ error: 'No id provided' }, { status: 400 })
 
-    const { error } = await adminSupabase
+    const { data: org } = await supabaseAdmin
+      .from('organizations')
+      .select('id, town, user_id')
+      .eq('id', id)
+      .maybeSingle()
+    if (!org) return NextResponse.json({ error: 'Source not found' }, { status: 404 })
+    if (!(await canManageTown(auth.admin, org.town))) return forbiddenTown(org.town)
+    if (org.user_id) {
+      return NextResponse.json({ error: 'This organization has its own login, so it can’t be deleted here.' }, { status: 409 })
+    }
+
+    const { error } = await supabaseAdmin
       .from('organizations')
       .delete()
       .eq('id', id)
