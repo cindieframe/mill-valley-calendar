@@ -1,55 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '../../supabase'
 import { resolveTown } from '../../lib/towns'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
-async function categorizeEvent(summary: string, description: string) {
-  try {
-    const prompt = `You are categorizing a community event for a local calendar in Mill Valley, CA.
-
-Event title: ${summary}
-Description: ${description || 'No description provided'}
-
-Choose from these categories (you may select more than one, comma-separated):
-- outdoors (hikes, sports, yoga, fitness, nature walks, running, martial arts, dance)
-- arts (concerts, theater, film, art, music, open studios, performances)
-- food (farmers markets, restaurants, food events, wine, mixers, potlucks)
-- community (volunteering, cleanups, neighborhood, activism, nonprofit)
-- family (kids, children, youth, storytime, school, family activities)
-- classes (workshops, lectures, lessons, classes, demos, learning)
-- gov (city council, planning, town hall, government meetings, public hearings)
-
-Also choose applicable tags (comma-separated, or leave blank):
-- free (if the event is free)
-- family (if family-friendly)
-- wellness (if health or wellness focused)
-- reg (if registration required)
-- volunteer (if it's a volunteering opportunity)
-- music (if live music)
-
-Respond in this exact format:
-CATEGORIES: category1,category2
-TAGS: tag1,tag2`
-
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 100,
-      messages: [{ role: 'user', content: prompt }]
-    })
-
-    const text = response.content[0].type === 'text' ? response.content[0].text : ''
-    const catMatch = text.match(/CATEGORIES:\s*([^\n]+)/)
-    const tagMatch = text.match(/TAGS:\s*([^\n]*)/)
-    return {
-      categories: catMatch ? catMatch[1].trim() : 'community',
-      tags: tagMatch ? tagMatch[1].trim() : ''
-    }
-  } catch {
-    return { categories: 'community', tags: '' }
-  }
-}
+import { categorizeEvent } from '../../lib/categorize'
 
 function parseCSVLine(line: string): string[] {
   const result: string[] = []
@@ -158,7 +110,13 @@ export async function POST(request: NextRequest) {
         .eq('title', title).eq('date', date).limit(1)
       if (existing && existing.length > 0) { skipped++; continue }
 
-      const { categories, tags } = await categorizeEvent(title, row.description || '')
+      const { categories, tags } = await categorizeEvent({
+        title,
+        description: row.description,
+        organization,
+        location: row.location,
+        town,
+      })
 
       const { error } = await supabase.from('events').insert([{
         title,

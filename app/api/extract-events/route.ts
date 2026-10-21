@@ -6,6 +6,7 @@ import { shouldAutoReject, AUTO_REJECT_NOTE } from '../../lib/moderation'
 import { findSquarespaceEventList } from '../../lib/squarespace'
 import { POST as importIcalPOST } from '../import-ical/route'
 import { resolveTown } from '../../lib/towns'
+import { categorizeEvent, categoryPromptGuide, cleanCategories, cleanTags, finalize } from '../../lib/categorize'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
         const jcalData = ICAL.parse(feedText)
         const comp = new ICAL.Component(jcalData)
         const vevents = comp.getAllSubcomponents('vevent')
-        const today = new Date().toISOString().split('T')[0]
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
         let imported = 0
         let skipped = 0
         const results = []
@@ -125,14 +126,23 @@ export async function POST(request: NextRequest) {
         for (const vevent of vevents) {
           const ev = new ICAL.Event(vevent)
           const start = ev.startDate?.toJSDate()
-          const dateStr = start ? new Date(start).toISOString().split('T')[0] : null
+          // Always Pacific: the server runs in UTC
+          const dateStr = start ? new Date(start).toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' }) : null
           if (!dateStr || dateStr < today) { skipped++; continue }
 
           const { data: existing } = await supabase
             .from('events').select('id').eq('title', ev.summary || '').eq('date', dateStr).single()
           if (existing) { skipped++; continue }
 
-          const timeStr = start ? new Date(start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : null
+          const timeStr = start ? new Date(start).toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit' }) : null
+
+          const { categories, tags } = await categorizeEvent({
+            title: ev.summary || '',
+            description: ev.description,
+            organization,
+            location: ev.location,
+            town,
+          })
 
           const { error } = await supabase.from('events').insert([{
             title: ev.summary || 'Untitled Event',
@@ -141,8 +151,8 @@ export async function POST(request: NextRequest) {
             location: ev.location || organization,
             address: ev.location || '',
             organization: organization,
-            category: 'community',
-            tags: '',
+            category: categories,
+            tags,
             description: ev.description || '',
             website: vevent.getFirstPropertyValue('url') || websiteUrl,
             status: 'pending',
@@ -153,7 +163,7 @@ export async function POST(request: NextRequest) {
 
           if (!error) {
             imported++
-            results.push({ title: ev.summary, date: dateStr, time: timeStr, categories: 'community', tags: '' })
+            results.push({ title: ev.summary, date: dateStr, time: timeStr, categories, tags })
           } else {
             skipped++
           }
@@ -279,7 +289,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Could not reach that URL. Make sure it is correct and publicly accessible.` }, { status: 400 })
     }
 
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
 
     const aggregatorInstructions = isAggregator ? `
 IMPORTANT: "${organization}" is an event aggregator, not an event organizer. For each event, try to identify the actual organization hosting the event (e.g. the theater, school, nonprofit, or business running it). Put the real organizer name in the "extracted_organizer" field. If you cannot determine the real organizer, leave "extracted_organizer" as null.
@@ -288,7 +298,7 @@ IMPORTANT: "${organization}" is an event aggregator, not an event organizer. For
     const aggregatorField = isAggregator ? `
       "extracted_organizer": "Name of the actual organizing org, or null if unknown",` : ''
 
-    const prompt = `You are extracting upcoming community events from a website for a local calendar in Mill Valley, CA.
+    const prompt = `You are extracting upcoming community events from a website for a local calendar in ${town}, CA.
 
 Today's date is ${today}. Extract ONLY upcoming events (today or future). Ignore past events.
 
@@ -300,21 +310,8 @@ ${pageText}${imageContext ?? ''}
 
 Extract every event you can find. For each event return a JSON object.
 
-Also assign categories (pick all that apply):
-- outdoors (hikes, sports, yoga, fitness, nature, running, dance)
-- arts (concerts, theater, film, art, music, performances)
-- food (farmers markets, food events, wine, mixers, potlucks)
-- community (volunteering, cleanups, neighborhood, nonprofit)
-- family (kids, children, youth, storytime, school)
-- classes (workshops, lectures, lessons, classes, learning)
-- gov (city council, planning, town hall, government meetings)
-
-And tags (pick all that apply):
-- free (if the event is free)
-- family (if family-friendly)
-- wellness (if health or wellness focused)
-- reg (if registration required)
-- volunteer (if it's a volunteering opportunity)
+Also assign categories and tags to each event.
+${categoryPromptGuide()}
 
 Return ONLY valid JSON, no markdown, no explanation. Use this exact shape:
 {
@@ -406,6 +403,8 @@ Rules:
         imageUrl = await fetchOgImage(ev.website)
       }
 
+      const tagged = finalize(cleanCategories(ev.category), cleanTags(ev.tags))
+
       const { error } = await supabase.from('events').insert([{
         title: ev.title,
         date: ev.date,
@@ -413,8 +412,8 @@ Rules:
         location: ev.location || organization,
         address: ev.location || '',
         organization: organization,
-        category: ev.category || 'community',
-        tags: ev.tags || '',
+        category: tagged.categories,
+        tags: tagged.tags,
         description: ev.description || '',
         website: ev.website || websiteUrl,
         image_url: imageUrl,
@@ -427,7 +426,7 @@ Rules:
 
       if (!error) {
         imported++
-        results.push({ title: ev.title, date: ev.date, time: ev.time, categories: ev.category, tags: ev.tags })
+        results.push({ title: ev.title, date: ev.date, time: ev.time, categories: tagged.categories, tags: tagged.tags })
       } else {
         skipped++
       }

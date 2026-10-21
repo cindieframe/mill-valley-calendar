@@ -33,6 +33,10 @@ export default function ImportPage() {
   const [feedsError, setFeedsError] = useState('')
   const [feedNotice, setFeedNotice] = useState('')
   const [busyFeedId, setBusyFeedId] = useState<number | null>(null)
+
+  // One-time "Re-check tags" for events already on the calendar
+  const [retagRunning, setRetagRunning] = useState(false)
+  const [retagProgress, setRetagProgress] = useState<{ checked: number; updated: number; changes: { title: string; added: string[] }[]; done: boolean; error?: string } | null>(null)
   const [reextractingId, setReextractingId] = useState<string | null>(null)
   const [reextractResult, setReextractResult] = useState<any>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -118,6 +122,26 @@ export default function ImportPage() {
       setFeedNotice(`Moved "${feed.organization}" and ${data.eventsMoved} upcoming event${data.eventsMoved === 1 ? '' : 's'} to ${newTown}.`)
     }
     setBusyFeedId(null)
+  }
+
+  async function recheckTags() {
+    if (!confirm(`Re-check tags on every upcoming event in ${selectedTown}?\n\nThis only ADDS missing tags (like Live Music). It never removes tags or categories you set. Costs well under $1 in AI usage.`)) return
+    setRetagRunning(true)
+    let after: string | null = null
+    let checked = 0, updated = 0
+    let changes: { title: string; added: string[] }[] = []
+    setRetagProgress({ checked, updated, changes, done: false })
+    while (true) {
+      const data: any = await adminPost('/api/admin/retag', { town: selectedTown, after })
+      if (data.error) { setRetagProgress({ checked, updated, changes, done: true, error: data.error }); break }
+      checked += data.checked
+      updated += data.updated
+      changes = [...changes, ...data.changes]
+      after = data.next
+      setRetagProgress({ checked, updated, changes, done: !after })
+      if (!after) break
+    }
+    setRetagRunning(false)
   }
 
   async function removeFeed(feed: any) {
@@ -570,6 +594,31 @@ export default function ImportPage() {
             </div>
           )
         })}
+
+        {/* One-time tag re-check for events imported before tagging was fixed */}
+        <hr style={{ border: 'none', borderTop: '1.5px solid #e5e7eb', margin: '32px 0 20px' }} />
+        <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', margin: '0 0 4px' }}>Re-check tags</h3>
+        <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0 0 12px' }}>
+          Adds missing tags (like Live Music) to upcoming {selectedTown} events. Never removes anything. New imports are tagged automatically — this is only for events already on the calendar.
+        </p>
+        <button onClick={recheckTags} disabled={retagRunning}
+          style={{ background: 'white', color: '#1a3d2b', border: '1.5px solid #1a3d2b', padding: '8px 18px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: retagRunning ? 'not-allowed' : 'pointer', opacity: retagRunning ? 0.6 : 1 }}>
+          {retagRunning ? 'Checking…' : `Re-check tags for ${selectedTown}`}
+        </button>
+        {retagProgress && (
+          <div style={{ marginTop: '12px', fontSize: '12px', color: retagProgress.error ? '#dc2626' : '#166534', background: retagProgress.error ? '#fee2e2' : '#f0fdf4', borderRadius: '8px', padding: '10px 14px' }}>
+            {retagProgress.error
+              ? `⚠️ ${retagProgress.error} (checked ${retagProgress.checked} so far)`
+              : `${retagProgress.done ? '✅ Done — ' : ''}checked ${retagProgress.checked} events, added tags to ${retagProgress.updated}.`}
+            {retagProgress.changes.length > 0 && (
+              <div style={{ marginTop: '8px', maxHeight: '220px', overflowY: 'auto', color: '#374151' }}>
+                {retagProgress.changes.map((c, i) => (
+                  <div key={i}>{c.title} — <strong>+{c.added.join(', +')}</strong></div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         </>)}
       </div>
     </div>

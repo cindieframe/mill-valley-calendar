@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '../../supabase'
 import { shouldAutoReject, AUTO_REJECT_NOTE } from '../../lib/moderation'
 import {
@@ -9,12 +8,9 @@ import {
   SQUARESPACE_UID_PREFIX,
 } from '../../lib/squarespace'
 import { resolveTown } from '../../lib/towns'
+import { categorizeEvent } from '../../lib/categorize'
 
 const UA = 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)'
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
 
 // Returns the UTC offset in ms for America/Los_Angeles at a given UTC date
 function getPacificOffsetMs(utcDate: Date): number {
@@ -172,56 +168,6 @@ function parseICal(text: string) {
   events.sort((a, b) => new Date(a.dateStr).getTime() - new Date(b.dateStr).getTime())
 
   return events
-}
-
-// Ask Claude to categorize an event
-async function categorizeEvent(summary: string, description: string) {
-  try {
-    const prompt = `You are categorizing a community event for a local calendar in Mill Valley, CA.
-
-Event title: ${summary}
-Description: ${description || 'No description provided'}
-
-Choose from these categories (you may select more than one, comma-separated):
-- outdoors (hikes, sports, yoga, fitness, nature walks, running, martial arts, dance)
-- arts (concerts, theater, film, art, music, open studios, performances)
-- food (farmers markets, restaurants, food events, wine, mixers, potlucks)
-- community (volunteering, cleanups, neighborhood, activism, nonprofit)
-- family (kids, children, youth, storytime, school, family activities)
-- classes (workshops, lectures, lessons, classes, demos, learning)
-- gov (city council, planning, town hall, government meetings, public hearings)
-
-Also choose applicable tags (comma-separated, or leave blank):
-- free (if the event is free)
-- family (if family-friendly)
-- senior (if good for 50+ crowd)
-- wellness (if health or wellness focused)
-- volunteer (if volunteer opportunity)
-- reg (if registration required)
-
-Respond in this exact format:
-CATEGORIES: category1,category2
-TAGS: tag1,tag2`
-
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 100,
-      messages: [{ role: 'user', content: prompt }],
-    })
-
-    const text = response.content[0].type === 'text' ? response.content[0].text : ''
-
-    const catMatch = text.match(/CATEGORIES:\s*([^\n]+)/)
-    const tagMatch = text.match(/TAGS:\s*([^\n]*)/)
-
-    const categories = catMatch ? catMatch[1].trim() : 'community'
-    const tags = tagMatch ? tagMatch[1].trim() : ''
-
-    return { categories, tags }
-  } catch (err) {
-    console.error('Categorization failed for:', summary, err)
-    return { categories: 'community', tags: '' }
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -461,7 +407,13 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        const { categories, tags } = await categorizeEvent(ev.summary, ev.description)
+        const { categories, tags } = await categorizeEvent({
+          title: ev.summary,
+          description: ev.description,
+          organization: displayName,
+          location: ev.location,
+          town,
+        })
 
         const { error } = await supabase.from('events').insert([
           {
