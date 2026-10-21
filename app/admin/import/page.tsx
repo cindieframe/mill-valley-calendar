@@ -6,7 +6,7 @@ import { AdminHeader } from '../../components/Header'
 
 export default function ImportPage() {
   const router = useRouter()
-  const [tab, setTab] = useState<'ai' | 'ical'>('ai')
+  const [tab, setTab] = useState<'ai' | 'ical' | 'feeds'>('ai')
   const [selectedTown, setSelectedTown] = useState<string>('Mill Valley')
   const [allTowns, setAllTowns] = useState<string[]>([])
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
@@ -310,6 +310,10 @@ export default function ImportPage() {
             style={{ flex: 1, padding: '12px', border: 'none', background: tab === 'ical' ? '#1a3d2b' : 'white', color: tab === 'ical' ? 'white' : '#6b7280', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}>
             📅 iCal Feed
           </button>
+          <button onClick={() => setTab('feeds')}
+            style={{ flex: 1, padding: '12px', border: 'none', borderLeft: '1.5px solid #e5e7eb', background: tab === 'feeds' ? '#1a3d2b' : 'white', color: tab === 'feeds' ? 'white' : '#6b7280', fontWeight: 700, fontSize: '14px', cursor: 'pointer' }}>
+            🔄 Connected Feeds
+          </button>
         </div>
 
         {/* AI TAB */}
@@ -493,8 +497,9 @@ export default function ImportPage() {
           </div>
         )}
 
-        {/* CONNECTED FEEDS — every synced source for this town (iCal and web pages) */}
-        <hr style={{ border: 'none', borderTop: '1.5px solid #e5e7eb', margin: '36px 0 24px' }} />
+        {/* CONNECTED FEEDS TAB — every auto-synced source for this town (iCal feeds and Squarespace pages).
+            Manual AI-extract sources are not here; they stay under Saved Sources on the AI tab. */}
+        {tab === 'feeds' && (<>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
           <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: 0 }}>Connected feeds</h2>
           <button onClick={loadFeeds} disabled={feedsLoading}
@@ -503,7 +508,7 @@ export default function ImportPage() {
           </button>
         </div>
         <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0 0 16px' }}>
-          Active feeds sync every 6 hours. Paused feeds keep their events but stop syncing.
+          Feeds sync automatically every 6 hours. Paused feeds keep their events but stop syncing. AI-extract sources are manual — find them under Saved Sources on the AI tab.
         </p>
 
         {feedNotice && (
@@ -565,6 +570,7 @@ export default function ImportPage() {
             </div>
           )
         })}
+        </>)}
       </div>
     </div>
   )
