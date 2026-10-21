@@ -79,7 +79,13 @@ export default function PostEvent() {
       autocomplete.addListener('place_changed', () => {
         const place = autocomplete.getPlace()
         if (place.name) update('location', place.name)
-        if (place.formatted_address) update('address', place.formatted_address)
+        if (place.formatted_address) {
+          update('address', place.formatted_address)
+          // Venue in one of our towns → set Town to match (visitor can still change it)
+          const match = townsRef.current.find(t =>
+            place.formatted_address.toLowerCase().includes(`, ${t.name.toLowerCase()},`))
+          if (match) update('town', match.name)
+        }
       })
       autocompleteRef.current = autocomplete
     }
@@ -87,6 +93,22 @@ export default function PostEvent() {
   }, [])
 
   const router = useRouter()
+  const [towns, setTowns] = useState<{ name: string; slug: string }[]>([])
+  const townsRef = useRef<{ name: string; slug: string }[]>([])
+
+  // Town comes from the calendar the visitor came from (?town=slug); they can change it.
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('towns').select('name, slug').eq('active', true).order('name')
+      const list = data || []
+      setTowns(list)
+      townsRef.current = list
+      const fromUrl = new URLSearchParams(window.location.search).get('town')?.toLowerCase()
+      const match = list.find(t => t.slug.toLowerCase() === fromUrl || t.name.toLowerCase() === fromUrl)
+      if (match) setForm(prev => (prev.town ? prev : { ...prev, town: match.name }))
+    })()
+  }, [])
+
   const [imageUrl, setImageUrl] = useState('')
   const [imageUploading, setImageUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -104,6 +126,7 @@ export default function PostEvent() {
     address: '',
     meeting_link: '',
     organization: '',
+    town: '',
     category: [] as string[],
     tags: [] as string[],
     cost: '',
@@ -151,7 +174,7 @@ export default function PostEvent() {
   }
 
   const handleSubmit = async () => {
-    if (!form.title || !form.date || !form.time || !form.location || !form.organization || !form.description || form.category.length === 0) {
+    if (!form.title || !form.date || !form.time || !form.town || !form.location || !form.organization || !form.description || form.category.length === 0) {
       alert('Please fill in all required fields and select at least one category.')
       return
     }
@@ -204,7 +227,7 @@ export default function PostEvent() {
       email: form.email,
       website: form.website,
       image_url: imageUrl || null,
-      town: 'Mill Valley',
+      town: form.town,
       status: 'pending',
       recurrence: recurrence === 'none' ? 'none' : effectiveRecurrence,
       recurrence_end: (endsOn === 'on' && form.recurrence_end) ? form.recurrence_end : null,
@@ -238,6 +261,7 @@ export default function PostEvent() {
             <p><strong>Title:</strong> ${form.title}</p>
             <p><strong>Date:</strong> ${form.date}${dates.length > 1 ? ` (+ ${dates.length - 1} recurring dates)` : ''}</p>
             <p><strong>Organization:</strong> ${form.organization}</p>
+            <p><strong>Town:</strong> ${form.town}</p>
             <p><a href="https://www.townstir.com/admin">Review it in the admin dashboard →</a></p>
           `,
         }),
@@ -476,6 +500,17 @@ export default function PostEvent() {
             <label style={labelStyle}>Age Requirements</label>
             <input style={inputStyle} placeholder="e.g. All ages, Adults only"
               value={form.age} onChange={e => update('age', e.target.value)} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: '16px' }}>
+          <label style={labelStyle}>Town *</label>
+          <select style={inputStyle} value={form.town} onChange={e => update('town', e.target.value)}>
+            <option value="">Select the town this event is in…</option>
+            {towns.map(t => <option key={t.slug} value={t.name}>{t.name}</option>)}
+          </select>
+          <div style={{ fontSize: '11px', color: colors.textSecondary, marginTop: '4px' }}>
+            Your event appears on this town&apos;s calendar.
           </div>
         </div>
 

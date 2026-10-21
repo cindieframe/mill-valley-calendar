@@ -534,7 +534,7 @@ async function executeDelete(scope: 'this' | 'all') {
               date,
               recurrence_id: recurrenceId,
               status: editingEvent.status,
-              town: editingEvent.town || 'Mill Valley',
+              town: editingEvent.town,
             }))
             await supabase.from('events').insert(newRows)
             await loadEvents() // reload to show all new instances
@@ -584,7 +584,7 @@ async function executeDelete(scope: 'this' | 'all') {
       email: ev.email || '',
       website: ev.website || '',
       image_url: ev.image_url || null,
-      town: ev.town || 'Mill Valley',
+      town: ev.town,
       status: 'approved',
       // Intentionally omit recurrence_id — duplicate is a standalone event
     }]).select().single()

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '../../supabase'
+import { resolveTown } from '../../lib/towns'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -118,9 +119,13 @@ function parseTime(raw: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const { csvText, organization, town } = await request.json()
+    const { csvText, organization, town: rawTown } = await request.json()
     if (!csvText || !organization) {
       return NextResponse.json({ error: 'csvText and organization required' }, { status: 400 })
+    }
+    const town = await resolveTown(rawTown)
+    if (!town) {
+      return NextResponse.json({ error: 'This organization has no town set. Contact townstir.admin@gmail.com.' }, { status: 400 })
     }
 
     const lines = csvText.split(/\r?\n/).filter((l: string) => l.trim())
@@ -170,7 +175,7 @@ export async function POST(request: NextRequest) {
         age: row.age || '',
         website: row.website || '',
         status: 'pending',
-        town: town || 'Mill Valley',
+        town,
       }])
 
       if (!error) imported++

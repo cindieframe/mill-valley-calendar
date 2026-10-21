@@ -5,6 +5,7 @@ import { supabase } from '../../supabase'
 import { shouldAutoReject, AUTO_REJECT_NOTE } from '../../lib/moderation'
 import { findSquarespaceEventList } from '../../lib/squarespace'
 import { POST as importIcalPOST } from '../import-ical/route'
+import { resolveTown } from '../../lib/towns'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -84,7 +85,11 @@ async function fetchOgImage(url: string): Promise<string | null> {
 
 export async function POST(request: NextRequest) {
   try {
-    const { websiteUrl, organization, isAggregator: isAggregatorParam, town } = await request.json()
+    const { websiteUrl, organization, isAggregator: isAggregatorParam, town: rawTown } = await request.json()
+    const town = await resolveTown(rawTown)
+    if (!town) {
+      return NextResponse.json({ error: rawTown ? `Unknown town "${rawTown}"` : 'town required' }, { status: 400 })
+    }
 
     if (!websiteUrl || !organization) {
       return NextResponse.json({ error: 'websiteUrl and organization required' }, { status: 400 })
@@ -143,7 +148,7 @@ export async function POST(request: NextRequest) {
             status: 'pending',
             is_aggregator: isAggregator,
             extracted_organizer: null,
-            town: town || 'Mill Valley',
+            town,
           }])
 
           if (!error) {
@@ -173,7 +178,7 @@ export async function POST(request: NextRequest) {
       const importRes = await importIcalPOST(new NextRequest(new URL('/api/import-ical', request.url), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feedUrl: squarespaceUrl, organization, town: town || 'Mill Valley' }),
+        body: JSON.stringify({ feedUrl: squarespaceUrl, organization, town }),
       }))
       const data = await importRes.json()
       if (!data.error) {
@@ -386,7 +391,7 @@ Rules:
           website: ev.website || websiteUrl,
           status: 'rejected',
           rejected_note: AUTO_REJECT_NOTE,
-          town: town || 'Mill Valley',
+          town,
         }])
         skipped++
         continue
@@ -417,7 +422,7 @@ Rules:
         status: 'pending',
         is_aggregator: isAggregator,
         extracted_organizer: isAggregator ? (ev.extracted_organizer || null) : null,
-        town: town || 'Mill Valley',
+        town,
       }])
 
       if (!error) {

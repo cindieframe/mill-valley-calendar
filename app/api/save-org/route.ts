@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { resolveTown } from '../../lib/towns'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,8 +9,10 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    const { name, website_url, place_id, town } = await request.json()
+    const { name, website_url, place_id, town: rawTown } = await request.json()
     if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 })
+    const town = await resolveTown(rawTown)
+    if (!town) return NextResponse.json({ error: `Unknown town "${rawTown}"` }, { status: 400 })
 
     const { data: existing } = await supabase
       .from('organizations')
@@ -30,7 +33,7 @@ export async function POST(request: NextRequest) {
         name,
         website_url: website_url || null,
         place_id: place_id || null,
-        town: town || 'Mill Valley',
+        town,
         verified: false,
         is_aggregator: false,
       }])

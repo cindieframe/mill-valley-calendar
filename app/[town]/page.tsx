@@ -360,7 +360,7 @@ function HomeInner() {
             <a href={`/org/login?town=${encodeURIComponent(townName)}`} style={{ color: 'rgba(255,255,255,0.65)', fontSize: '13px', textDecoration: 'none' }}>
               Org Login
             </a>
-            <button onClick={() => router.push('/post-event')}
+            <button onClick={() => router.push(`/post-event?town=${encodeURIComponent(townSlug)}`)}
               style={{ background: '#C9952A', color: '#fff', border: 'none', borderRadius: '8px', padding: '7px 16px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
               + Post Event
             </button>

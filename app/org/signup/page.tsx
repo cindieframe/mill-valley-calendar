@@ -145,6 +145,7 @@ function OrgSignupInner() {
           org_phone: form.phone,
           org_instagram: form.instagram,
           org_facebook: form.facebook,
+          org_town: selectedTown,
         }
       }
     })

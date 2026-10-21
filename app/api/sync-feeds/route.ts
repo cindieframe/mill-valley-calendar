@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
        body: JSON.stringify({
   feedUrl: feed.url,
   organization: orgNameToUse,
-  town: feed.town || 'Mill Valley',
+  town: feed.town,
 })
       })
       const data = await response.json()

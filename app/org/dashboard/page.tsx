@@ -134,6 +134,7 @@ const [uploadingBanner, setUploadingBanner] = useState(false)
     instagram: user.user_metadata.org_instagram || '',
     facebook: user.user_metadata.org_facebook || '',
     canonical_name: user.user_metadata.org_canonical_name || '',
+    town: user.user_metadata.org_town || null,
   }])
         .select().single()
       if (insertError || !newOrg) { router.push('/org/login'); return }
@@ -590,7 +591,7 @@ async function handleBannerUpload(e: React.ChangeEvent<HTMLInputElement>) {
           const res = await fetch('/api/import-csv', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ csvText: text, organization: org.name, town: 'mill-valley' })
+            body: JSON.stringify({ csvText: text, organization: org.name, town: org.town })
           })
           const data = await res.json()
           setCsvResult(data)
