@@ -36,6 +36,9 @@ function DiscoverOrgsInner() {
   const [blockedSkipped, setBlockedSkipped] = useState(0)
   const [alreadyKnownSkipped, setAlreadyKnownSkipped] = useState(0)
   const [error, setError] = useState('')
+  // Set after a search finishes, so an empty result says so instead of showing nothing.
+  const [searchDone, setSearchDone] = useState(false)
+  const [searchWarning, setSearchWarning] = useState('')
   const [blockedOrgs, setBlockedOrgs] = useState<any[]>([])
   const [showBlocked, setShowBlocked] = useState(false)
 
@@ -44,6 +47,8 @@ function DiscoverOrgsInner() {
 
     setLoading(true)
     setError('')
+    setSearchDone(false)
+    setSearchWarning('')
     setOrgs([])
     setTotalFound(0)
     setBlockedSkipped(0)
@@ -55,13 +60,23 @@ function DiscoverOrgsInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ town, state })
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({
+        // Non-JSON reply, e.g. the server timed out
+        error: res.status === 504
+          ? 'Discovery took too long and the server stopped it. Try again.'
+          : `Discovery failed (server error ${res.status}).`,
+      }))
 
       if (data.error) {
         setError(data.error)
         setLoading(false)
         return
       }
+
+      if (data.searches_failed > 0) {
+        setSearchWarning(`${data.searches_failed} of ${data.searches_total} Google searches failed (${data.search_failure}). Results may be incomplete.`)
+      }
+      setSearchDone(true)
 
       setTotalFound(data.total_found || 0)
       setBlockedSkipped(data.blocked_skipped || 0)
@@ -408,6 +423,23 @@ function DiscoverOrgsInner() {
         {error && (
           <div style={{ background: '#fee2e2', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: '#dc2626' }}>
             ⚠ {error}
+          </div>
+        )}
+
+        {searchWarning && (
+          <div style={{ background: '#fef3c7', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: '#92400e' }}>
+            ⚠ {searchWarning}
+          </div>
+        )}
+
+        {searchDone && !loading && orgs.length === 0 && (
+          <div style={{ background: 'white', borderRadius: '12px', padding: '24px', textAlign: 'center', border: '1.5px solid #e5e7eb', marginBottom: '16px', fontSize: '14px', color: '#6b7280' }}>
+            No new organizations found in {town}.
+            <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
+              {totalFound} places searched
+              {blockedSkipped > 0 && ` · ${blockedSkipped} blocked`}
+              {totalFound === 0 && ' — check the town name and state spelling.'}
+            </div>
           </div>
         )}
 

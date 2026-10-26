@@ -63,11 +63,23 @@ async function mapWithConcurrency<T, R>(
   return results
 }
 
-async function searchPlaces(query: string, location: string, apiKey: string) {
+type PlacesSearch = { results: any[]; failure: string | null }
+
+// Google answers HTTP 200 even when it refuses a request (billing off, key not
+// allowed, quota) — the reason is in data.status. Report it instead of treating
+// a refusal as "no results".
+async function searchPlaces(query: string, location: string, apiKey: string): Promise<PlacesSearch> {
   const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query + ' ' + location)}&key=${apiKey}`
-  const res = await fetch(url)
-  const data = await res.json()
-  return data.results || []
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) })
+    const data = await res.json()
+    if (data.status === 'OK' || data.status === 'ZERO_RESULTS') {
+      return { results: data.results || [], failure: null }
+    }
+    return { results: [], failure: `${data.status || `HTTP ${res.status}`}${data.error_message ? ` — ${data.error_message}` : ''}` }
+  } catch (err) {
+    return { results: [], failure: `Request failed — ${err instanceof Error ? err.message : String(err)}` }
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -150,9 +162,20 @@ export async function POST(request: NextRequest) {
       searchPlaces(query, location, apiKey)
     )
 
+    const failures = searchResults.map(r => r.failure).filter((f): f is string => f !== null)
+    if (failures.length === searchResults.length) {
+      console.error('[discover-orgs] Every Google Places search failed:', failures[0])
+      return NextResponse.json({
+        error: `Google Places refused every search: ${failures[0]}`,
+      }, { status: 502 })
+    }
+    if (failures.length > 0) {
+      console.warn(`[discover-orgs] ${failures.length} of ${searchResults.length} Places searches failed:`, failures[0])
+    }
+
     const allPlaces: any[] = []
     const seenIds = new Set<string>()
-    for (const results of searchResults) {
+    for (const { results } of searchResults) {
       for (const place of results.slice(0, 3)) {
         if (!seenIds.has(place.place_id)) {
           const address = place.formatted_address || ''
@@ -279,6 +302,9 @@ export async function POST(request: NextRequest) {
       blocked_skipped: blockedSkipped,
       already_known_skipped: alreadyKnownSkipped,
       timed_out: timedOut,
+      searches_failed: failures.length,
+      searches_total: searchResults.length,
+      search_failure: failures[0] || null,
       orgs,
     })
 
