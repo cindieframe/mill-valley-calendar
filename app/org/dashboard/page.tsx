@@ -88,7 +88,13 @@ const [uploadingBanner, setUploadingBanner] = useState(false)
       if (autocompleteRef.current) return
       const autocomplete = new (window as any).google.maps.places.Autocomplete(
         locationInputRef.current,
-        { types: ['establishment', 'geocode'], componentRestrictions: { country: 'us' } }
+        {
+          types: ['establishment', 'geocode'],
+          componentRestrictions: { country: 'us' },
+          // Only what we use. Without this Google returns (and bills) every
+          // field, at its most expensive Place Details tier.
+          fields: ['name', 'formatted_address'],
+        }
       )
       autocomplete.addListener('place_changed', () => {
         const place = autocomplete.getPlace()
