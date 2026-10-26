@@ -292,14 +292,15 @@ function DiscoverOrgsInner() {
 
             {org.confirmingDismiss && (
               <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '11px', color: '#6b7280' }}>Remove this org?</span>
+                <span style={{ fontSize: '11px', color: '#6b7280' }}>Not for Townstir?</span>
+                <button onClick={() => blockOrg(index)}
+                  style={{ ...btn, background: '#dc2626', color: 'white', padding: '4px 10px' }}
+                  title="Never show this org in Discovery for this town again (undo under 'Show blocked orgs')">
+                  Block permanently
+                </button>
                 <button onClick={() => dismissOrg(index)}
                   style={{ ...btn, background: '#f3f4f6', color: '#374151', padding: '4px 10px' }}>
-                  Just this session
-                </button>
-                <button onClick={() => blockOrg(index)}
-                  style={{ ...btn, background: '#dc2626', color: 'white', padding: '4px 10px' }}>
-                  Block permanently
+                  Hide for now
                 </button>
                 <button onClick={() => cancelDismiss(index)}
                   style={{ ...btn, background: 'transparent', color: '#9ca3af', padding: '4px 6px' }}>
@@ -345,11 +346,11 @@ function DiscoverOrgsInner() {
               )
             )}
 
-            {!org.confirmingDismiss && (
+            {!org.confirmingDismiss && !isWorking && (
               <button onClick={() => startDismiss(index)}
-                style={{ ...btn, background: 'transparent', color: '#9ca3af', border: 'none', padding: '2px 4px', fontSize: '13px' }}
-                title="Remove from list">
-                ✕
+                style={{ ...btn, background: 'white', color: '#dc2626', border: '1.5px solid #fca5a5' }}
+                title="Hide this org, or block it so Discovery never shows it again">
+                Hide / Block
               </button>
             )}
           </div>
