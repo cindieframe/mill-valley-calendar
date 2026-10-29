@@ -21,7 +21,14 @@ export async function POST(request: NextRequest) {
   if (!ev) return NextResponse.json({ error: 'Event not found' }, { status: 404 })
   if (!(await canManageTown(auth.admin, ev.town))) return forbiddenTown(ev.town)
 
-  let to: string | null = ev.email || null
+  // Submitter emails live in the private event_contacts table (events.email
+  // is blanked on save). Before that table exists, fall back to the row.
+  const { data: contact } = await supabaseAdmin
+    .from('event_contacts')
+    .select('email')
+    .eq('event_id', ev.id)
+    .maybeSingle()
+  let to: string | null = contact?.email || ev.email || null
   if (!to && ev.organization) {
     const { data: org } = await supabaseAdmin
       .from('organizations')

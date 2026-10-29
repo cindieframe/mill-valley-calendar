@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../supabase'
 import { authFetch } from '../lib/authFetch'
+import { withContactEmails } from '../lib/eventContacts'
 
 // ─── Recurrence helpers ───────────────────────────────────────────────────────
 
@@ -223,7 +224,7 @@ if (townData) {
     const { data, error } = await applyTownFilter(
       filtered.order('date', { ascending: true }).order('time', { ascending: true })
     )
-    if (!error) setEvents(data || [])
+    if (!error) setEvents(await withContactEmails(data || []))
     const { data: approved } = await applyTownFilter(
       supabase.from('events').select('id, title, date, time, organization, website').eq('status', 'approved')
     )
@@ -606,8 +607,10 @@ async function executeDelete(scope: 'this' | 'all') {
       // Intentionally omit recurrence_id — duplicate is a standalone event
     }]).select().single()
     if (!error && data) {
-      setEvents(prev => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)))
-      openEditEvent(data)
+      // The saved row's email is stored privately; keep the copied one on screen.
+      const copy = { ...data, email: ev.email || '' }
+      setEvents(prev => [...prev, copy].sort((a, b) => a.date.localeCompare(b.date)))
+      openEditEvent(copy)
     } else {
       console.error('Duplicate failed:', error)
     }

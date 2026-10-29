@@ -46,5 +46,6 @@ export async function POST(request: NextRequest) {
   await sendEmail(eventSubmittedAdminEmail(ev, 0))
   if (org.email) await sendEmail(eventSubmittedConfirmation(org.email, ev, { greetingName: org.name }))
 
-  return NextResponse.json({ event: ev })
+  // events.email is moved to the private event_contacts table on save; return the entered one.
+  return NextResponse.json({ event: { ...ev, email: row.email ?? '' } })
 }

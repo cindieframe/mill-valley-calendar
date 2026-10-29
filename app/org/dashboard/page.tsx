@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '../../supabase'
 import { OrgHeader } from '../../components/Header'
 import { authFetch } from '../../lib/authFetch'
+import { withContactEmails } from '../../lib/eventContacts'
 
 type Event = {
   id: number
@@ -158,7 +159,7 @@ async function loadEvents(orgName: string) {
   const { data, error } = await supabase
     .from('events').select('*').ilike('organization', orgName)
     .order('date', { ascending: true })
-  if (!error && data) setEvents(data)
+  if (!error && data) setEvents(await withContactEmails(data))
   setEventsLoading(false)
 }
 
@@ -245,7 +246,8 @@ async function loadEvents(orgName: string) {
       const { data, error } = await supabase
         .from('events').update(payload).eq('id', editingEvent.id).select().single()
       if (error) { setEventError(error.message); setEventSaving(false); return }
-      setEvents(events.map(e => e.id === editingEvent.id ? data : e))
+      // The saved row's email is stored privately; keep the one just entered on screen.
+      setEvents(events.map(e => e.id === editingEvent.id ? { ...data, email: payload.email } : e))
     } else {
       // Created server-side: the org's name, town and pending status are set there,
       // and the admin + confirmation emails are sent from the server.
