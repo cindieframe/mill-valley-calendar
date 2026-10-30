@@ -1,0 +1,430 @@
+import ICAL from 'ical.js'
+import Anthropic from '@anthropic-ai/sdk'
+import { supabaseAdmin as supabase } from './supabaseAdmin'
+import { shouldAutoReject, AUTO_REJECT_NOTE } from './moderation'
+import { findSquarespaceEventList } from './squarespace'
+import { importFeed } from './importFeed'
+import { categorizeEvent, categoryPromptGuide, cleanCategories, cleanTags, finalize } from './categorize'
+
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+})
+
+async function detectIcalFeed(url: string): Promise<string | null> {
+  const base = new URL(url)
+  const origin = base.origin
+  const pathname = base.pathname.replace(/\/$/, '')
+
+  const candidates = [
+    `${origin}/events/?ical=1`,
+    `${origin}${pathname}/?ical=1`,
+    `${origin}/events/feed/ical`,
+    `${origin}/calendar.ics`,
+    `${origin}/events.ics`,
+    `${origin}/feed.ics`,
+    `${origin}${pathname}.ics`,
+  ]
+
+  for (const candidate of candidates) {
+    try {
+      const res = await fetch(candidate, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!res.ok) continue
+      const text = await res.text()
+      if (text.includes('BEGIN:VCALENDAR') && text.includes('BEGIN:VEVENT')) {
+        return candidate
+      }
+    } catch {
+      continue
+    }
+  }
+
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (res.ok) {
+      const html = await res.text()
+      const icsMatch = html.match(/["'](https?:\/\/[^"']+\.ics[^"']*?)["']/i)
+      const webcalMatch = html.match(/["'](webcal:\/\/[^"']+?)["']/i)
+      const feedUrl = icsMatch?.[1] || webcalMatch?.[1]?.replace('webcal://', 'https://')
+      if (feedUrl) {
+        const check = await fetch(feedUrl, { signal: AbortSignal.timeout(5000) })
+        const text = await check.text()
+        if (text.includes('BEGIN:VCALENDAR')) return feedUrl
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null
+}
+
+// Fetch og:image from an event's own page — works for SimpleTix, Eventbrite, and most ticketing platforms
+async function fetchOgImage(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const html = await res.text()
+    const match =
+      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
+    return match?.[1] || null
+  } catch {
+    return null
+  }
+}
+
+
+export type PageResult = { status: number; body: any }
+
+function respond(body: any, init?: { status?: number }): PageResult {
+  return { status: init?.status ?? 200, body }
+}
+
+// Reads ONE web page for events: an iCal feed linked from it, a Squarespace
+// events list (connected for auto-sync), or AI extraction of the page text.
+// No auth here — api/extract-events checks the caller first.
+export async function extractFromPage(params: {
+  websiteUrl: string
+  organization: string
+  isAggregator: boolean
+  town: string
+}): Promise<PageResult> {
+  const { websiteUrl, organization, isAggregator, town } = params
+  try {
+    // Step 1 — try to find an iCal feed first
+    const detectedFeed = await detectIcalFeed(websiteUrl)
+    if (detectedFeed) {
+      try {
+        const feedRes = await fetch(detectedFeed, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
+          signal: AbortSignal.timeout(10000),
+        })
+        const feedText = await feedRes.text()
+        const jcalData = ICAL.parse(feedText)
+        const comp = new ICAL.Component(jcalData)
+        const vevents = comp.getAllSubcomponents('vevent')
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
+        let imported = 0
+        let skipped = 0
+        const results = []
+
+        for (const vevent of vevents) {
+          const ev = new ICAL.Event(vevent)
+          const start = ev.startDate?.toJSDate()
+          // Always Pacific: the server runs in UTC
+          const dateStr = start ? new Date(start).toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' }) : null
+          if (!dateStr || dateStr < today) { skipped++; continue }
+
+          const { data: existing } = await supabase
+            .from('events').select('id').eq('title', ev.summary || '').eq('date', dateStr).single()
+          if (existing) { skipped++; continue }
+
+          const timeStr = start ? new Date(start).toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit' }) : null
+
+          const { categories, tags } = await categorizeEvent({
+            title: ev.summary || '',
+            description: ev.description,
+            organization,
+            location: ev.location,
+            town,
+          })
+
+          const { error } = await supabase.from('events').insert([{
+            title: ev.summary || 'Untitled Event',
+            date: dateStr,
+            time: timeStr,
+            location: ev.location || organization,
+            address: ev.location || '',
+            organization: organization,
+            category: categories,
+            tags,
+            description: ev.description || '',
+            website: vevent.getFirstPropertyValue('url') || websiteUrl,
+            status: 'pending',
+            is_aggregator: isAggregator,
+            extracted_organizer: null,
+            town,
+          }])
+
+          if (!error) {
+            imported++
+            results.push({ title: ev.summary, date: dateStr, time: timeStr, categories, tags })
+          } else {
+            skipped++
+          }
+        }
+
+        return respond({
+          success: true, imported, skipped,
+          total: imported + skipped, results, errors: [],
+          feedDetected: detectedFeed,
+          message: `✅ Found iCal feed automatically! Used ${detectedFeed} instead of scraping.`
+        })
+      } catch {
+        // iCal parse failed — fall through
+      }
+    }
+
+    // Step 1.5 — Squarespace events page: connect it as an auto-synced source.
+    // The iCal import route reads Squarespace event pages directly and registers
+    // the page in ical_feeds, so the 6-hour sync keeps it current from now on.
+    const squarespaceUrl = await findSquarespaceEventList(websiteUrl)
+    if (squarespaceUrl) {
+      const { body: data } = await importFeed({ feedUrl: squarespaceUrl, organization, town })
+      if (!data.error) {
+        const alreadyHave = (data.skipped || 0) + (data.updated || 0)
+        return respond({
+          success: true,
+          imported: data.imported,
+          skipped: alreadyHave,
+          total: data.total,
+          results: data.results || [],
+          errors: [],
+          feedDetected: squarespaceUrl,
+          message: `✅ Squarespace events page found — connected for automatic sync. Imported ${data.imported} new events (${alreadyHave} already on Townstir).`,
+        })
+      }
+      // If the import failed, fall through to AI extraction
+    }
+
+    // Step 2 — no feed found, fall back to Claude extraction
+    let pageText = ''
+    let imageContext = ''
+    try {
+      let html = ''
+
+      const normalRes = await fetch(websiteUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+
+      if (normalRes.ok) {
+        html = await normalRes.text()
+      }
+
+      const strippedPreview = html
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+
+      const looksEmpty = strippedPreview.length < 200
+
+      if (looksEmpty && process.env.BROWSERLESS_API_KEY) {
+        console.log('Normal fetch returned little content — trying Browserless for:', websiteUrl)
+        try {
+          const contentRes = await fetch(
+            `https://production-sfo.browserless.io/content?token=${process.env.BROWSERLESS_API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                url: websiteUrl,
+                waitForTimeout: 6000,
+              }),
+              signal: AbortSignal.timeout(60000),
+            }
+          )
+          if (contentRes.ok) {
+            html = await contentRes.text()
+            console.log('Browserless /content succeeded, html length:', html.length)
+          }
+        } catch (bErr) {
+          console.error('Browserless fallback failed:', bErr)
+        }
+      }
+
+      if (!html || html.length < 100) {
+        return respond({ error: `Could not fetch that URL. Make sure it is correct and publicly accessible.` }, { status: 400 })
+      }
+
+      const imgMatches = [
+        ...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi),
+        ...html.matchAll(/<img[^>]+data-src=["']([^"']+)["']/gi),
+        ...html.matchAll(/<img[^>]+srcset=["']([^"'\s,]+)/gi),
+        ...html.matchAll(/background-image:\s*url\(["']?(https?:[^"')]+)["']?\)/gi),
+        ...html.matchAll(/data-image=["']([^"']+)["']/gi),
+        ...html.matchAll(/data-bg=["']([^"']+)["']/gi),
+      ]
+
+      const imageUrls = imgMatches
+        .map(m => m[1])
+        .filter(src => src.startsWith('http') && !src.includes('logo') && !src.includes('icon') && !src.includes('avatar') && !src.includes('favicon'))
+        .slice(0, 20)
+
+      imageContext = imageUrls.length ? `\nAVAILABLE IMAGE URLS:\n${imageUrls.join('\n')}` : ''
+      pageText = html
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<svg[\s\S]*?<\/svg>/gi, '')
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 60000)
+    } catch (err) {
+      return respond({ error: `Could not reach that URL. Make sure it is correct and publicly accessible.` }, { status: 400 })
+    }
+
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
+
+    const aggregatorInstructions = isAggregator ? `
+IMPORTANT: "${organization}" is an event aggregator, not an event organizer. For each event, try to identify the actual organization hosting the event (e.g. the theater, school, nonprofit, or business running it). Put the real organizer name in the "extracted_organizer" field. If you cannot determine the real organizer, leave "extracted_organizer" as null.
+` : ''
+
+    const aggregatorField = isAggregator ? `
+      "extracted_organizer": "Name of the actual organizing org, or null if unknown",` : ''
+
+    const prompt = `You are extracting upcoming community events from a website for a local calendar in ${town}, CA.
+
+Today's date is ${today}. Extract ONLY upcoming events (today or future). Ignore past events.
+
+WEBSITE URL: ${websiteUrl}
+ORGANIZATION: ${organization}
+${aggregatorInstructions}
+PAGE TEXT:
+${pageText}${imageContext ?? ''}
+
+Extract every event you can find. For each event return a JSON object.
+
+Also assign categories and tags to each event.
+${categoryPromptGuide()}
+
+Return ONLY valid JSON, no markdown, no explanation. Use this exact shape:
+{
+  "events": [
+    {
+      "title": "Event name",
+      "date": "YYYY-MM-DD",
+      "time": "7:00 PM",
+      "location": "Venue name or address, or null",
+      "description": "1-2 sentence description, or null",
+      "website": "Direct URL to the individual event or ticket page (e.g. SimpleTix, Eventbrite, etc) — NOT the main calendar page. Look for buy ticket links or event detail links. null if not found.",
+      "category": "outdoors,arts",
+      "tags": "free,family",
+      "image_url": "https://... or null",
+      "cost": "e.g. $30 ADV / $35 DOS, or Free, or null if unknown",${aggregatorField}
+    }
+  ],
+  "errors": ["reason if any events were skipped or uncertain"]
+}
+
+Rules:
+- date must be YYYY-MM-DD format
+- time should be human-readable like "7:00 PM" or "All day" or null if unknown
+- If a date is ambiguous or you cannot determine the year, skip that event and note it in errors
+- If you find no upcoming events, return an empty events array
+- For image_url: match the event poster or image to the correct event using the AVAILABLE IMAGE URLS list. Prefer images that contain the artist/event name in the URL. Do not reuse the same image for multiple events.
+- For cost: extract the ticket price or admission cost exactly as shown on the page (e.g. "$30 ADV / $35 DOS"). If free, use "Free". If unknown, use null.`
+
+    const aiResponse = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: prompt }],
+    })
+
+    const rawText = aiResponse.content[0].type === 'text' ? aiResponse.content[0].text : ''
+    const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+
+    let parsed: { events: any[]; errors: string[] }
+    try {
+      parsed = JSON.parse(cleaned)
+    } catch {
+      return respond({
+        error: 'Claude could not parse the page into events. Try a more specific events page URL (e.g. /events or /calendar).',
+      }, { status: 422 })
+    }
+
+    if (!parsed.events || parsed.events.length === 0) {
+      return respond({
+        imported: 0, skipped: 0, total: 0, results: [],
+        errors: parsed.errors || [],
+        message: 'No upcoming events found on that page. Try linking directly to the events or calendar page.',
+      })
+    }
+
+    let imported = 0
+    let skipped = 0
+    const results = []
+
+    for (const ev of parsed.events) {
+      if (!ev.date || !/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) { skipped++; continue }
+      if (ev.date < today) { skipped++; continue }
+
+      if (shouldAutoReject(ev.title)) {
+        await supabase.from('events').insert([{
+          title: ev.title,
+          date: ev.date,
+          time: ev.time || null,
+          location: ev.location || organization,
+          address: ev.location || '',
+          organization: organization,
+          category: 'gov',
+          tags: '',
+          description: ev.description || '',
+          website: ev.website || websiteUrl,
+          status: 'rejected',
+          rejected_note: AUTO_REJECT_NOTE,
+          town,
+        }])
+        skipped++
+        continue
+      }
+
+      const { data: existing } = await supabase
+        .from('events').select('id').eq('title', ev.title).eq('date', ev.date).single()
+      if (existing) { skipped++; continue }
+
+      let imageUrl = ev.image_url || null
+      if (!imageUrl && ev.website && ev.website.startsWith('http')) {
+        imageUrl = await fetchOgImage(ev.website)
+      }
+
+      const tagged = finalize(cleanCategories(ev.category), cleanTags(ev.tags), `${ev.title} ${ev.description || ''}`)
+
+      const { error } = await supabase.from('events').insert([{
+        title: ev.title,
+        date: ev.date,
+        time: ev.time || null,
+        location: ev.location || organization,
+        address: ev.location || '',
+        organization: organization,
+        category: tagged.categories,
+        tags: tagged.tags,
+        description: ev.description || '',
+        website: ev.website || websiteUrl,
+        image_url: imageUrl,
+        cost: ev.cost || null,
+        status: 'pending',
+        is_aggregator: isAggregator,
+        extracted_organizer: isAggregator ? (ev.extracted_organizer || null) : null,
+        town,
+      }])
+
+      if (!error) {
+        imported++
+        results.push({ title: ev.title, date: ev.date, time: ev.time, categories: tagged.categories, tags: tagged.tags })
+      } else {
+        skipped++
+      }
+    }
+
+    return respond({ success: true, imported, skipped, total: parsed.events.length, results, errors: parsed.errors || [] })
+
+  } catch (error) {
+    console.error('Extract page error:', websiteUrl, error)
+    return respond({ error: 'Something went wrong reading this page.' }, { status: 500 })
+  }
+}

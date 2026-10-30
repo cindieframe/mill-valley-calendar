@@ -1,440 +1,197 @@
 import { NextRequest, NextResponse } from 'next/server'
-import ICAL from 'ical.js'
-import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin as supabase } from '../../lib/supabaseAdmin'
 import { requireAdmin, canManageTown, forbiddenTown } from '../../lib/adminAuth'
-import { shouldAutoReject, AUTO_REJECT_NOTE } from '../../lib/moderation'
-import { findSquarespaceEventList } from '../../lib/squarespace'
-import { importFeed } from '../../lib/importFeed'
 import { resolveTown } from '../../lib/towns'
-import { categorizeEvent, categoryPromptGuide, cleanCategories, cleanTags, finalize } from '../../lib/categorize'
+import { escapeLike } from '../../lib/escapeLike'
+import { extractFromPage } from '../../lib/extractPage'
+import { cleanUrls, MAX_SOURCE_PAGES } from '../../lib/sourcePages'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+// Each page can take a while (fetch + AI); allow the full Hobby-plan limit.
+export const maxDuration = 300
 
-async function detectIcalFeed(url: string): Promise<string | null> {
-  const base = new URL(url)
-  const origin = base.origin
-  const pathname = base.pathname.replace(/\/$/, '')
+const MAX_PAGES = MAX_SOURCE_PAGES
+const PAGE_CONCURRENCY = 3
 
-  const candidates = [
-    `${origin}/events/?ical=1`,
-    `${origin}${pathname}/?ical=1`,
-    `${origin}/events/feed/ical`,
-    `${origin}/calendar.ics`,
-    `${origin}/events.ics`,
-    `${origin}/feed.ics`,
-    `${origin}${pathname}.ics`,
-  ]
-
-  for (const candidate of candidates) {
-    try {
-      const res = await fetch(candidate, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
-        signal: AbortSignal.timeout(5000),
-      })
-      if (!res.ok) continue
-      const text = await res.text()
-      if (text.includes('BEGIN:VCALENDAR') && text.includes('BEGIN:VEVENT')) {
-        return candidate
-      }
-    } catch {
-      continue
-    }
-  }
-
-  try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
-      signal: AbortSignal.timeout(10000),
-    })
-    if (res.ok) {
-      const html = await res.text()
-      const icsMatch = html.match(/["'](https?:\/\/[^"']+\.ics[^"']*?)["']/i)
-      const webcalMatch = html.match(/["'](webcal:\/\/[^"']+?)["']/i)
-      const feedUrl = icsMatch?.[1] || webcalMatch?.[1]?.replace('webcal://', 'https://')
-      if (feedUrl) {
-        const check = await fetch(feedUrl, { signal: AbortSignal.timeout(5000) })
-        const text = await check.text()
-        if (text.includes('BEGIN:VCALENDAR')) return feedUrl
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  return null
-}
-
-// Fetch og:image from an event's own page — works for SimpleTix, Eventbrite, and most ticketing platforms
-async function fetchOgImage(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
-      signal: AbortSignal.timeout(8000),
-    })
-    if (!res.ok) return null
-    const html = await res.text()
-    const match =
-      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
-      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
-    return match?.[1] || null
-  } catch {
-    return null
-  }
-}
-
+// AI / feed extraction for an organization's web pages.
+//
+// Body, one of:
+//   { sourceId }                         Re-extract a Saved Source: reads its saved
+//                                        pages, name, town and aggregator flag.
+//   { urls | websiteUrl, organization, town, isAggregator?, saveSource? }
+//                                        Extract the given page(s). With saveSource,
+//                                        the org is saved/updated as a Saved Source
+//                                        and the pages are ADDED to its page list.
+//
+// A source can have several pages (sites like marinwood.org put each event on
+// its own page). Every page goes through the same steps: iCal feed → Squarespace
+// list → AI extraction. Results are added up; per-page results are in `pages`.
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request)
   if (auth.response) return auth.response
+
   try {
-    const { websiteUrl, organization, isAggregator: isAggregatorParam, town: rawTown } = await request.json()
-    const town = await resolveTown(rawTown)
-    if (!town) {
-      return NextResponse.json({ error: rawTown ? `Unknown town "${rawTown}"` : 'town required' }, { status: 400 })
-    }
-    if (!(await canManageTown(auth.admin, town))) return forbiddenTown(town)
+    const body = await request.json().catch(() => ({}))
 
-    if (!websiteUrl || !organization) {
-      return NextResponse.json({ error: 'websiteUrl and organization required' }, { status: 400 })
-    }
+    let organization: string
+    let town: string | null
+    let isAggregator: boolean
+    let pages: string[]
+    let sourceId: number | null = null
 
-    let isAggregator = isAggregatorParam === true
-    if (!isAggregator) {
-      const { data: orgData } = await supabase
+    if (body.sourceId) {
+      const { data: org } = await supabase
         .from('organizations')
-        .select('is_aggregator')
-        .ilike('name', organization)
-        .single()
-      if (orgData?.is_aggregator) isAggregator = true
+        .select('id, name, town, website_url, extra_urls, is_aggregator')
+        .eq('id', body.sourceId)
+        .maybeSingle()
+      if (!org) return NextResponse.json({ error: 'Saved source not found' }, { status: 404 })
+      sourceId = org.id
+      organization = org.name
+      town = await resolveTown(org.town)
+      isAggregator = org.is_aggregator === true
+      pages = cleanUrls([org.website_url, ...(org.extra_urls || [])])
+    } else {
+      organization = String(body.organization || '').trim()
+      town = await resolveTown(body.town)
+      if (!town) {
+        return NextResponse.json({ error: body.town ? `Unknown town "${body.town}"` : 'town required' }, { status: 400 })
+      }
+      pages = cleanUrls(Array.isArray(body.urls) ? body.urls : [body.websiteUrl])
+      isAggregator = body.isAggregator === true
+      if (!isAggregator && organization) {
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('is_aggregator')
+          .ilike('name', escapeLike(organization))
+          .limit(1)
+          .maybeSingle()
+        if (orgData?.is_aggregator) isAggregator = true
+      }
     }
 
-    // Step 1 — try to find an iCal feed first
-    const detectedFeed = await detectIcalFeed(websiteUrl)
-    if (detectedFeed) {
-      try {
-        const feedRes = await fetch(detectedFeed, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)' },
-          signal: AbortSignal.timeout(10000),
-        })
-        const feedText = await feedRes.text()
-        const jcalData = ICAL.parse(feedText)
-        const comp = new ICAL.Component(jcalData)
-        const vevents = comp.getAllSubcomponents('vevent')
-        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
-        let imported = 0
-        let skipped = 0
-        const results = []
+    if (!town) return NextResponse.json({ error: 'This source has no town set.' }, { status: 400 })
+    if (!(await canManageTown(auth.admin, town))) return forbiddenTown(town)
+    if (!organization) return NextResponse.json({ error: 'organization required' }, { status: 400 })
+    if (!pages.length) {
+      return NextResponse.json({ error: 'Add at least one page address starting with http:// or https://' }, { status: 400 })
+    }
+    if (pages.length > MAX_PAGES) {
+      return NextResponse.json({ error: `A source can have at most ${MAX_PAGES} pages.` }, { status: 400 })
+    }
 
-        for (const vevent of vevents) {
-          const ev = new ICAL.Event(vevent)
-          const start = ev.startDate?.toJSDate()
-          // Always Pacific: the server runs in UTC
-          const dateStr = start ? new Date(start).toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' }) : null
-          if (!dateStr || dateStr < today) { skipped++; continue }
+    const pageResults = await mapWithConcurrency(pages, PAGE_CONCURRENCY, websiteUrl =>
+      extractFromPage({ websiteUrl, organization, isAggregator, town: town! })
+    )
 
-          const { data: existing } = await supabase
-            .from('events').select('id').eq('title', ev.summary || '').eq('date', dateStr).single()
-          if (existing) { skipped++; continue }
+    const anySucceeded = pageResults.some(r => !r.body?.error)
 
-          const timeStr = start ? new Date(start).toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit' }) : null
+    // Remember the source (new extraction) / when it was last read (re-extract).
+    if (anySucceeded) {
+      const now = new Date().toISOString()
+      if (sourceId) {
+        await supabase.from('organizations').update({ last_extracted_at: now }).eq('id', sourceId)
+      } else if (body.saveSource) {
+        sourceId = await saveSource({ organization, town, pages, now })
+      }
+    }
 
-          const { categories, tags } = await categorizeEvent({
-            title: ev.summary || '',
-            description: ev.description,
-            organization,
-            location: ev.location,
-            town,
-          })
+    // One page: same response as before, so existing callers (Discovery) are unchanged.
+    if (pages.length === 1) {
+      const only = pageResults[0]
+      return NextResponse.json({ ...only.body, sourceId }, { status: only.status })
+    }
 
-          const { error } = await supabase.from('events').insert([{
-            title: ev.summary || 'Untitled Event',
-            date: dateStr,
-            time: timeStr,
-            location: ev.location || organization,
-            address: ev.location || '',
-            organization: organization,
-            category: categories,
-            tags,
-            description: ev.description || '',
-            website: vevent.getFirstPropertyValue('url') || websiteUrl,
-            status: 'pending',
-            is_aggregator: isAggregator,
-            extracted_organizer: null,
-            town,
-          }])
-
-          if (!error) {
-            imported++
-            results.push({ title: ev.summary, date: dateStr, time: timeStr, categories, tags })
-          } else {
-            skipped++
-          }
+    const summary = {
+      success: anySucceeded,
+      sourceId,
+      imported: 0,
+      skipped: 0,
+      total: 0,
+      results: [] as any[],
+      errors: [] as string[],
+      pages: pages.map((url, i) => {
+        const b = pageResults[i].body || {}
+        return {
+          url,
+          imported: b.imported || 0,
+          skipped: b.skipped || 0,
+          error: b.error || null,
+          message: b.message || null,
+          feedDetected: b.feedDetected || null,
         }
-
-        return NextResponse.json({
-          success: true, imported, skipped,
-          total: imported + skipped, results, errors: [],
-          feedDetected: detectedFeed,
-          message: `✅ Found iCal feed automatically! Used ${detectedFeed} instead of scraping.`
-        })
-      } catch {
-        // iCal parse failed — fall through
-      }
+      }),
     }
-
-    // Step 1.5 — Squarespace events page: connect it as an auto-synced source.
-    // The iCal import route reads Squarespace event pages directly and registers
-    // the page in ical_feeds, so the 6-hour sync keeps it current from now on.
-    const squarespaceUrl = await findSquarespaceEventList(websiteUrl)
-    if (squarespaceUrl) {
-      const { body: data } = await importFeed({ feedUrl: squarespaceUrl, organization, town })
-      if (!data.error) {
-        const alreadyHave = (data.skipped || 0) + (data.updated || 0)
-        return NextResponse.json({
-          success: true,
-          imported: data.imported,
-          skipped: alreadyHave,
-          total: data.total,
-          results: data.results || [],
-          errors: [],
-          feedDetected: squarespaceUrl,
-          message: `✅ Squarespace events page found — connected for automatic sync. Imported ${data.imported} new events (${alreadyHave} already on Townstir).`,
-        })
-      }
-      // If the import failed, fall through to AI extraction
-    }
-
-    // Step 2 — no feed found, fall back to Claude extraction
-    let pageText = ''
-    let imageContext = ''
-    try {
-      let html = ''
-
-      const normalRes = await fetch(websiteUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)',
-        },
-        signal: AbortSignal.timeout(15000),
-      })
-
-      if (normalRes.ok) {
-        html = await normalRes.text()
-      }
-
-      const strippedPreview = html
-        .replace(/<script[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[\s\S]*?<\/style>/gi, '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-
-      const looksEmpty = strippedPreview.length < 200
-
-      if (looksEmpty && process.env.BROWSERLESS_API_KEY) {
-        console.log('Normal fetch returned little content — trying Browserless for:', websiteUrl)
-        try {
-          const contentRes = await fetch(
-            `https://production-sfo.browserless.io/content?token=${process.env.BROWSERLESS_API_KEY}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                url: websiteUrl,
-                waitForTimeout: 6000,
-              }),
-              signal: AbortSignal.timeout(60000),
-            }
-          )
-          if (contentRes.ok) {
-            html = await contentRes.text()
-            console.log('Browserless /content succeeded, html length:', html.length)
-          }
-        } catch (bErr) {
-          console.error('Browserless fallback failed:', bErr)
-        }
-      }
-
-      if (!html || html.length < 100) {
-        return NextResponse.json({ error: `Could not fetch that URL. Make sure it is correct and publicly accessible.` }, { status: 400 })
-      }
-
-      const imgMatches = [
-        ...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi),
-        ...html.matchAll(/<img[^>]+data-src=["']([^"']+)["']/gi),
-        ...html.matchAll(/<img[^>]+srcset=["']([^"'\s,]+)/gi),
-        ...html.matchAll(/background-image:\s*url\(["']?(https?:[^"')]+)["']?\)/gi),
-        ...html.matchAll(/data-image=["']([^"']+)["']/gi),
-        ...html.matchAll(/data-bg=["']([^"']+)["']/gi),
-      ]
-
-      const imageUrls = imgMatches
-        .map(m => m[1])
-        .filter(src => src.startsWith('http') && !src.includes('logo') && !src.includes('icon') && !src.includes('avatar') && !src.includes('favicon'))
-        .slice(0, 20)
-
-      imageContext = imageUrls.length ? `\nAVAILABLE IMAGE URLS:\n${imageUrls.join('\n')}` : ''
-      pageText = html
-        .replace(/<script[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[\s\S]*?<\/style>/gi, '')
-        .replace(/<svg[\s\S]*?<\/svg>/gi, '')
-        .replace(/<!--[\s\S]*?-->/g, '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 60000)
-    } catch (err) {
-      return NextResponse.json({ error: `Could not reach that URL. Make sure it is correct and publicly accessible.` }, { status: 400 })
-    }
-
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
-
-    const aggregatorInstructions = isAggregator ? `
-IMPORTANT: "${organization}" is an event aggregator, not an event organizer. For each event, try to identify the actual organization hosting the event (e.g. the theater, school, nonprofit, or business running it). Put the real organizer name in the "extracted_organizer" field. If you cannot determine the real organizer, leave "extracted_organizer" as null.
-` : ''
-
-    const aggregatorField = isAggregator ? `
-      "extracted_organizer": "Name of the actual organizing org, or null if unknown",` : ''
-
-    const prompt = `You are extracting upcoming community events from a website for a local calendar in ${town}, CA.
-
-Today's date is ${today}. Extract ONLY upcoming events (today or future). Ignore past events.
-
-WEBSITE URL: ${websiteUrl}
-ORGANIZATION: ${organization}
-${aggregatorInstructions}
-PAGE TEXT:
-${pageText}${imageContext ?? ''}
-
-Extract every event you can find. For each event return a JSON object.
-
-Also assign categories and tags to each event.
-${categoryPromptGuide()}
-
-Return ONLY valid JSON, no markdown, no explanation. Use this exact shape:
-{
-  "events": [
-    {
-      "title": "Event name",
-      "date": "YYYY-MM-DD",
-      "time": "7:00 PM",
-      "location": "Venue name or address, or null",
-      "description": "1-2 sentence description, or null",
-      "website": "Direct URL to the individual event or ticket page (e.g. SimpleTix, Eventbrite, etc) — NOT the main calendar page. Look for buy ticket links or event detail links. null if not found.",
-      "category": "outdoors,arts",
-      "tags": "free,family",
-      "image_url": "https://... or null",
-      "cost": "e.g. $30 ADV / $35 DOS, or Free, or null if unknown",${aggregatorField}
-    }
-  ],
-  "errors": ["reason if any events were skipped or uncertain"]
-}
-
-Rules:
-- date must be YYYY-MM-DD format
-- time should be human-readable like "7:00 PM" or "All day" or null if unknown
-- If a date is ambiguous or you cannot determine the year, skip that event and note it in errors
-- If you find no upcoming events, return an empty events array
-- For image_url: match the event poster or image to the correct event using the AVAILABLE IMAGE URLS list. Prefer images that contain the artist/event name in the URL. Do not reuse the same image for multiple events.
-- For cost: extract the ticket price or admission cost exactly as shown on the page (e.g. "$30 ADV / $35 DOS"). If free, use "Free". If unknown, use null.`
-
-    const aiResponse = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
-      messages: [{ role: 'user', content: prompt }],
+    pageResults.forEach(({ body: b }, i) => {
+      if (!b) return
+      summary.imported += b.imported || 0
+      summary.skipped += b.skipped || 0
+      summary.total += b.total || 0
+      summary.results.push(...(b.results || []))
+      for (const e of b.errors || []) summary.errors.push(`${shortUrl(pages[i])}: ${e}`)
+      if (b.error) summary.errors.push(`${shortUrl(pages[i])}: ${b.error}`)
     })
-
-    const rawText = aiResponse.content[0].type === 'text' ? aiResponse.content[0].text : ''
-    const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
-
-    let parsed: { events: any[]; errors: string[] }
-    try {
-      parsed = JSON.parse(cleaned)
-    } catch {
-      return NextResponse.json({
-        error: 'Claude could not parse the page into events. Try a more specific events page URL (e.g. /events or /calendar).',
-      }, { status: 422 })
+    if (!anySucceeded) {
+      return NextResponse.json({ ...summary, error: 'None of the pages could be read.' }, { status: 502 })
     }
-
-    if (!parsed.events || parsed.events.length === 0) {
-      return NextResponse.json({
-        imported: 0, skipped: 0, total: 0, results: [],
-        errors: parsed.errors || [],
-        message: 'No upcoming events found on that page. Try linking directly to the events or calendar page.',
-      })
-    }
-
-    let imported = 0
-    let skipped = 0
-    const results = []
-
-    for (const ev of parsed.events) {
-      if (!ev.date || !/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) { skipped++; continue }
-      if (ev.date < today) { skipped++; continue }
-
-      if (shouldAutoReject(ev.title)) {
-        await supabase.from('events').insert([{
-          title: ev.title,
-          date: ev.date,
-          time: ev.time || null,
-          location: ev.location || organization,
-          address: ev.location || '',
-          organization: organization,
-          category: 'gov',
-          tags: '',
-          description: ev.description || '',
-          website: ev.website || websiteUrl,
-          status: 'rejected',
-          rejected_note: AUTO_REJECT_NOTE,
-          town,
-        }])
-        skipped++
-        continue
-      }
-
-      const { data: existing } = await supabase
-        .from('events').select('id').eq('title', ev.title).eq('date', ev.date).single()
-      if (existing) { skipped++; continue }
-
-      let imageUrl = ev.image_url || null
-      if (!imageUrl && ev.website && ev.website.startsWith('http')) {
-        imageUrl = await fetchOgImage(ev.website)
-      }
-
-      const tagged = finalize(cleanCategories(ev.category), cleanTags(ev.tags), `${ev.title} ${ev.description || ''}`)
-
-      const { error } = await supabase.from('events').insert([{
-        title: ev.title,
-        date: ev.date,
-        time: ev.time || null,
-        location: ev.location || organization,
-        address: ev.location || '',
-        organization: organization,
-        category: tagged.categories,
-        tags: tagged.tags,
-        description: ev.description || '',
-        website: ev.website || websiteUrl,
-        image_url: imageUrl,
-        cost: ev.cost || null,
-        status: 'pending',
-        is_aggregator: isAggregator,
-        extracted_organizer: isAggregator ? (ev.extracted_organizer || null) : null,
-        town,
-      }])
-
-      if (!error) {
-        imported++
-        results.push({ title: ev.title, date: ev.date, time: ev.time, categories: tagged.categories, tags: tagged.tags })
-      } else {
-        skipped++
-      }
-    }
-
-    return NextResponse.json({ success: true, imported, skipped, total: parsed.events.length, results, errors: parsed.errors || [] })
-
+    return NextResponse.json(summary)
   } catch (error) {
     console.error('Extract events error:', error)
     return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
   }
+}
+
+// Creates the Saved Source, or adds these pages to an existing one with the same name.
+async function saveSource({ organization, town, pages, now }: {
+  organization: string; town: string; pages: string[]; now: string
+}): Promise<number | null> {
+  const { data: existing } = await supabase
+    .from('organizations')
+    .select('id, website_url, extra_urls')
+    .ilike('name', escapeLike(organization))
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) {
+    const all = cleanUrls([existing.website_url, ...(existing.extra_urls || []), ...pages])
+    const { error } = await supabase.from('organizations').update({
+      website_url: all[0],
+      extra_urls: all.slice(1, MAX_PAGES),
+      last_extracted_at: now,
+      town,
+    }).eq('id', existing.id)
+    if (error) console.error('Save source failed:', error)
+    return existing.id
+  }
+
+  const { data: created, error } = await supabase.from('organizations').insert([{
+    name: organization,
+    website_url: pages[0],
+    extra_urls: pages.slice(1),
+    last_extracted_at: now,
+    town,
+  }]).select('id').single()
+  if (error) console.error('Save source failed:', error)
+  return created?.id ?? null
+}
+
+function shortUrl(url: string): string {
+  try {
+    const u = new URL(url)
+    return u.pathname === '/' ? u.host : u.pathname.replace(/\/+$/, '')
+  } catch {
+    return url
+  }
+}
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  async function worker() {
+    while (next < items.length) {
+      const i = next++
+      results[i] = await fn(items[i])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
 }

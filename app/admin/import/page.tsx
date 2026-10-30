@@ -12,7 +12,8 @@ export default function ImportPage() {
   const [allTowns, setAllTowns] = useState<string[]>([])
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
 
-  const [websiteUrl, setWebsiteUrl] = useState('')
+  // A source can have several pages (some sites put each event on its own page).
+  const [pageUrls, setPageUrls] = useState<string[]>([''])
   const [aiOrg, setAiOrg] = useState('')
   const [aiIsAggregator, setAiIsAggregator] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
@@ -37,6 +38,10 @@ export default function ImportPage() {
   const [reextractingId, setReextractingId] = useState<string | null>(null)
   const [reextractResult, setReextractResult] = useState<any>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  // Saved Sources → Pages editor
+  const [editingPagesId, setEditingPagesId] = useState<string | null>(null)
+  const [pagesDraft, setPagesDraft] = useState('')
+  const [savingPages, setSavingPages] = useState(false)
 
   useEffect(() => { checkSession() }, [])
   useEffect(() => { loadSavedSources(); loadFeeds() }, [selectedTown])
@@ -80,7 +85,7 @@ export default function ImportPage() {
   async function loadSavedSources() {
     const { data } = await supabase
       .from('organizations')
-      .select('id, name, website_url, last_extracted_at, is_aggregator, town')
+      .select('id, name, website_url, extra_urls, last_extracted_at, is_aggregator, town')
       .not('website_url', 'is', null)
       .eq('town', selectedTown)
       .order('name')
@@ -149,39 +154,26 @@ export default function ImportPage() {
   }
 
   async function handleAiExtract() {
-    if (!websiteUrl || !aiOrg) {
-      setAiError('Please enter both a website URL and organization name.')
+    const urls = pageUrls.map(u => u.trim()).filter(Boolean)
+    if (!urls.length || !aiOrg) {
+      setAiError('Please enter the organization name and at least one page URL.')
       return
     }
     setAiLoading(true)
     setAiError('')
     setAiResult(null)
     try {
+      // The server reads every page and saves the org as a Saved Source
+      // (new pages are added to an existing source with the same name).
       const response = await authFetch('/api/extract-events', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ websiteUrl, organization: aiOrg, isAggregator: aiIsAggregator, town: selectedTown }),
+        body: JSON.stringify({ urls, organization: aiOrg, isAggregator: aiIsAggregator, town: selectedTown, saveSource: true }),
       })
-      const data = await response.json()
-      if (data.error) {
+      const data = await response.json().catch(() => ({ error: `Request failed (${response.status})` }))
+      if (data.error && !data.pages) {
         setAiError(data.error)
       } else {
         setAiResult(data)
-        const { data: orgMatch } = await supabase
-          .from('organizations')
-          .select('id')
-          .ilike('name', aiOrg)
-          .single()
-        if (orgMatch) {
-          await supabase
-            .from('organizations')
-            .update({ website_url: websiteUrl, last_extracted_at: new Date().toISOString(), town: selectedTown })
-            .eq('id', orgMatch.id)
-        } else {
-          await supabase
-            .from('organizations')
-            .insert([{ name: aiOrg, website_url: websiteUrl, last_extracted_at: new Date().toISOString(), town: selectedTown }])
-        }
         loadSavedSources()
         loadFeeds()
       }
@@ -195,24 +187,41 @@ export default function ImportPage() {
     setReextractingId(org.id)
     setReextractResult(null)
     try {
+      // The server reads the source's saved pages, name, town and aggregator flag.
       const response = await authFetch('/api/extract-events', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ websiteUrl: org.website_url, organization: org.name, isAggregator: org.is_aggregator, town: selectedTown }),
+        body: JSON.stringify({ sourceId: org.id }),
       })
-      const data = await response.json()
+      const data = await response.json().catch(() => ({ error: `Request failed (${response.status})` }))
       setReextractResult({ orgId: org.id, ...data })
-      await supabase
-        .from('organizations')
-        .update({ last_extracted_at: new Date().toISOString() })
-        .eq('id', org.id)
-      setSavedSources(prev => prev.map(s =>
-        s.id === org.id ? { ...s, last_extracted_at: new Date().toISOString() } : s
-      ))
+      if (!data.error) {
+        setSavedSources(prev => prev.map(s =>
+          s.id === org.id ? { ...s, last_extracted_at: new Date().toISOString() } : s
+        ))
+      }
     } catch {
       setReextractResult({ orgId: org.id, error: 'Something went wrong.' })
     }
     setReextractingId(null)
+  }
+
+  function sourcePages(org: any): string[] {
+    return [org.website_url, ...(org.extra_urls || [])].filter(Boolean)
+  }
+
+  function openPagesEditor(org: any) {
+    setEditingPagesId(org.id)
+    setPagesDraft(sourcePages(org).join('\n'))
+  }
+
+  async function savePages(org: any) {
+    setSavingPages(true)
+    const urls = pagesDraft.split('\n').map(u => u.trim()).filter(Boolean)
+    const data = await adminPost('/api/admin/sources/update', { id: org.id, urls })
+    setSavingPages(false)
+    if (data.error) { alert(data.error); return }
+    setSavedSources(prev => prev.map(s => s.id === org.id ? { ...s, ...data.source } : s))
+    setEditingPagesId(null)
   }
 
   async function handleDeleteSource(org: any) {
@@ -332,11 +341,28 @@ export default function ImportPage() {
             </div>
 
             <div style={{ marginBottom: '20px' }}>
-              <label style={labelStyle}>Events Page URL</label>
-              <input style={inputStyle} placeholder="e.g. https://depotbookstore.com/events"
-                value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} />
+              <label style={labelStyle}>Events Page URL{pageUrls.length > 1 ? 's' : ''}</label>
+              {pageUrls.map((url, i) => (
+                <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                  <input style={inputStyle} placeholder={i === 0 ? 'e.g. https://depotbookstore.com/events' : 'Another page with events'}
+                    value={url} onChange={e => setPageUrls(prev => prev.map((u, j) => j === i ? e.target.value : u))} />
+                  {pageUrls.length > 1 && (
+                    <button type="button" title="Remove this page"
+                      onClick={() => setPageUrls(prev => prev.filter((_, j) => j !== i))}
+                      style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '8px', color: '#9ca3af', cursor: 'pointer', padding: '0 12px', fontSize: '14px' }}>
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              {pageUrls.length < 10 && (
+                <button type="button" onClick={() => setPageUrls(prev => [...prev, ''])}
+                  style={{ background: 'none', border: 'none', color: '#1a3d2b', fontSize: '13px', fontWeight: 600, cursor: 'pointer', padding: '4px 0' }}>
+                  + Add another page
+                </button>
+              )}
               <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '5px' }}>
-                Tip: link directly to their /events or /calendar page for best results
+                Tip: link directly to their /events or /calendar page. If each event has its own page (no single events list), add each page — they're saved together and re-extracted together.
               </div>
             </div>
 
@@ -357,7 +383,9 @@ export default function ImportPage() {
 
             <button onClick={handleAiExtract} disabled={aiLoading}
               style={{ width: '100%', background: '#1a3d2b', color: 'white', border: 'none', padding: '14px', borderRadius: '999px', fontSize: '15px', fontWeight: 700, cursor: aiLoading ? 'not-allowed' : 'pointer', opacity: aiLoading ? 0.7 : 1, marginBottom: '28px' }}>
-              {aiLoading ? 'Reading page…' : 'Extract Events with AI'}
+              {aiLoading
+                ? (pageUrls.filter(u => u.trim()).length > 1 ? `Reading ${pageUrls.filter(u => u.trim()).length} pages…` : 'Reading page…')
+                : 'Extract Events with AI'}
             </button>
 
             {aiResult && (
@@ -394,6 +422,20 @@ export default function ImportPage() {
                     </p>
                   </div>
                 )}
+
+                {aiResult.pages && (
+                  <div style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '12px 16px', marginBottom: '24px', fontSize: '12px' }}>
+                    <div style={{ fontWeight: 700, color: '#374151', marginBottom: '6px' }}>Pages read</div>
+                    {aiResult.pages.map((p: any) => (
+                      <div key={p.url} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '3px 0', color: p.error ? '#dc2626' : '#374151' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.url}</span>
+                        <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+                          {p.error ? `⚠️ ${p.error}` : `${p.imported} new · ${p.skipped} skipped`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -409,6 +451,10 @@ export default function ImportPage() {
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '14px', color: '#1f2937' }}>{org.name}</div>
                         <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>{org.website_url}</div>
+                        <button onClick={() => editingPagesId === org.id ? setEditingPagesId(null) : openPagesEditor(org)}
+                          style={{ background: 'none', border: 'none', padding: 0, marginTop: '2px', fontSize: '11px', color: '#1a3d2b', fontWeight: 600, cursor: 'pointer' }}>
+                          {sourcePages(org).length > 1 ? `${sourcePages(org).length} pages` : '1 page'} · {editingPagesId === org.id ? 'close' : 'edit pages'}
+                        </button>
                         {org.last_extracted_at && (
                           <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
                             Last extracted: {new Date(org.last_extracted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -430,9 +476,31 @@ export default function ImportPage() {
                         </button>
                       </div>
                     </div>
+                    {editingPagesId === org.id && (
+                      <div style={{ marginTop: '10px' }}>
+                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>One page address per line. Re-extract reads all of them.</div>
+                        <textarea value={pagesDraft} onChange={e => setPagesDraft(e.target.value)} rows={Math.min(10, Math.max(3, pagesDraft.split('\n').length + 1))}
+                          style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', resize: 'vertical' as const }} />
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                          <button onClick={() => savePages(org)} disabled={savingPages}
+                            style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '7px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, cursor: savingPages ? 'not-allowed' : 'pointer', opacity: savingPages ? 0.7 : 1 }}>
+                            {savingPages ? 'Saving…' : 'Save pages'}
+                          </button>
+                          <button onClick={() => setEditingPagesId(null)}
+                            style={{ background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', padding: '7px 16px', borderRadius: '999px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     {reextractResult?.orgId === org.id && (
                       <div style={{ marginTop: '10px', fontSize: '12px', color: reextractResult.error ? '#dc2626' : '#16803c', background: reextractResult.error ? '#fee2e2' : '#f0fdf4', borderRadius: '6px', padding: '8px 12px' }}>
                         {reextractResult.error ? `⚠️ ${reextractResult.error}` : reextractResult.imported > 0 ? `✅ Imported ${reextractResult.imported} new events!` : 'No new events found — all up to date!'}
+                        {reextractResult.pages?.some((p: any) => p.error) && (
+                          <div style={{ marginTop: '4px', color: '#dc2626' }}>
+                            {reextractResult.pages.filter((p: any) => p.error).map((p: any) => `⚠️ ${p.url}: ${p.error}`).join(' · ')}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
