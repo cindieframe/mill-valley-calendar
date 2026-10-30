@@ -22,6 +22,7 @@ type Event = {
   age: string
   description: string
   email: string
+  contact_email?: string | null
   website: string
   meeting_link: string
   status: string
@@ -235,6 +236,7 @@ async function loadEvents(orgName: string) {
       age: eventForm.age || '',
       description: eventForm.description || '',
       email: eventForm.email || '',
+      contact_email: eventForm.contact_email || null,
       website: eventForm.website || '',
       meeting_link: eventForm.meeting_link || '',
       image_url: eventImageUrl || null,
@@ -807,6 +809,18 @@ async function handleBannerUpload(e: React.ChangeEvent<HTMLInputElement>) {
 
             <label style={labelStyle}>Website</label>
             <input style={inputStyle} placeholder="https://..." value={eventForm.website || ''} onChange={e => setEventForm({ ...eventForm, website: e.target.value })} />
+
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', margin: '-4px 0 16px', fontSize: '13px', color: org?.email ? '#374151' : '#9ca3af', cursor: org?.email ? 'pointer' : 'not-allowed' }}>
+              <input type="checkbox" disabled={!org?.email}
+                checked={!!eventForm.contact_email}
+                onChange={e => setEventForm({ ...eventForm, contact_email: e.target.checked ? org.email : null })}
+                style={{ marginTop: '2px', flexShrink: 0 }} />
+              <span>
+                {org?.email
+                  ? <>Show {org.email} on the event page so people can contact you with questions</>
+                  : <>Add an email to your profile to show it on the event page</>}
+              </span>
+            </label>
 
             <label style={labelStyle}>Online Meeting Link (optional)</label>
             <input style={inputStyle} placeholder="https://zoom.us/..." value={eventForm.meeting_link || ''} onChange={e => setEventForm({ ...eventForm, meeting_link: e.target.value })} />

@@ -3,9 +3,12 @@ import { useEffect, useRef, useState } from 'react'
 
 // Calendar links are built on the server (app/lib/calendar.ts) so times are
 // always correct Pacific time, regardless of the visitor's browser or timezone.
-export default function ShareButtons({ eventId, title, date, time, location, address, website, meetingLink, googleCalendarUrl, icsUrl }: {
+export default function ShareButtons({ eventId, title, date, time, location, address, website, meetingLink, contactCode, googleCalendarUrl, icsUrl }: {
   eventId: string, title: string, date: string, time: string, location: string,
   address?: string, website?: string, meetingLink?: string,
+  // Organizer's public contact email, base64-encoded so it isn't sitting in the
+  // page as plain text for spam bots. Decoded only when the button is clicked.
+  contactCode?: string,
   googleCalendarUrl: string, icsUrl: string
 }) {
   const [copied, setCopied] = useState(false)
@@ -128,6 +131,17 @@ export default function ShareButtons({ eventId, title, date, time, location, add
             <a href={meetingLink} target="_blank" rel="noopener noreferrer" style={secondaryBtn}>
               Join Online
             </a>
+          )}
+          {contactCode && (
+            <button
+              onClick={() => {
+                const email = atob(contactCode)
+                window.location.href = `mailto:${email}?subject=${encodeURIComponent(`Question about ${title}`)}`
+              }}
+              style={secondaryBtn}
+            >
+              Contact Organizer
+            </button>
           )}
         </div>
       </div>

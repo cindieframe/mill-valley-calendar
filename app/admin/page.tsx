@@ -482,6 +482,7 @@ async function executeDelete(scope: 'this' | 'all') {
       age: editingEvent.age,
       description: editingEvent.description,
       email: editingEvent.email,
+      contact_email: editingEvent.contact_email || null,
       website: editingEvent.website,
       image_url: editImageUrl || null,
       recurrence: effectiveRecurrence,
@@ -507,14 +508,14 @@ async function executeDelete(scope: 'this' | 'all') {
 
     if (scope === 'all' && editingEvent.recurrence_id) {
       // Update all events in this series (non-date fields only — each keeps its own date)
-      const { title, time, end_time, location, address, organization, category, tags, cost, age, description, email, website, image_url, recurrence, recurrence_end, recurrence_count } = payload
+      const { title, time, end_time, location, address, organization, category, tags, cost, age, description, email, contact_email, website, image_url, recurrence, recurrence_end, recurrence_count } = payload
       const { error } = await supabase.from('events').update({
-        title, time, end_time, location, address, organization, category, tags, cost, age, description, email, website, image_url, recurrence, recurrence_end, recurrence_count
+        title, time, end_time, location, address, organization, category, tags, cost, age, description, email, contact_email, website, image_url, recurrence, recurrence_end, recurrence_count
       }).eq('recurrence_id', editingEvent.recurrence_id)
       if (!error) {
         setEvents(prev => prev.map(ev =>
           ev.recurrence_id === editingEvent.recurrence_id
-            ? { ...ev, title, time, end_time, location, address, organization, category, tags, cost, age, description, email, website, image_url, recurrence, recurrence_end, recurrence_count }
+            ? { ...ev, title, time, end_time, location, address, organization, category, tags, cost, age, description, email, contact_email, website, image_url, recurrence, recurrence_end, recurrence_count }
             : ev
         ))
       }
@@ -600,6 +601,7 @@ async function executeDelete(scope: 'this' | 'all') {
       age: ev.age || '',
       description: ev.description || '',
       email: ev.email || '',
+      contact_email: ev.contact_email || null,
       website: ev.website || '',
       image_url: ev.image_url || null,
       town: ev.town,
@@ -817,10 +819,23 @@ async function executeDelete(scope: 'this' | 'all') {
           {[{ label: 'Cost', key: 'cost', type: 'text' }, { label: 'Age', key: 'age', type: 'text' }, { label: 'Email', key: 'email', type: 'text' }, { label: 'Website', key: 'website', type: 'text' }].map(({ label, key, type }) => (
             <div key={key}>
               <label style={labelStyle}>{label}</label>
-              <input style={inputStyle} type={type} value={editingEvent[key] || ''} onChange={e => setEditingEvent({ ...editingEvent, [key]: e.target.value })} />
+              <input style={inputStyle} type={type} value={editingEvent[key] || ''} onChange={e => setEditingEvent({
+                ...editingEvent,
+                [key]: e.target.value,
+                // Keep the public contact in step with the email while it's shown.
+                ...(key === 'email' && editingEvent.contact_email ? { contact_email: e.target.value || null } : {}),
+              })} />
             </div>
           ))}
         </div>
+
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', margin: '-4px 0 16px', fontSize: '13px', color: editingEvent.email ? '#374151' : '#9ca3af', cursor: editingEvent.email ? 'pointer' : 'not-allowed' }}>
+          <input type="checkbox" disabled={!editingEvent.email && !editingEvent.contact_email}
+            checked={!!editingEvent.contact_email}
+            onChange={e => setEditingEvent({ ...editingEvent, contact_email: e.target.checked ? editingEvent.email : null })}
+            style={{ marginTop: '2px', flexShrink: 0 }} />
+          <span>Show {editingEvent.contact_email || editingEvent.email || 'the email'} on the event page so people can contact the organizer with questions</span>
+        </label>
 
         <label style={labelStyle}>Category</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>

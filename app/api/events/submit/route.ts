@@ -12,7 +12,7 @@ import { eventSubmittedAdminEmail, eventSubmittedConfirmation, isEmail, sendEmai
 const FIELDS = [
   'title', 'time', 'end_time', 'location', 'address', 'meeting_link', 'organization',
   'category', 'tags', 'cost', 'age', 'description', 'email', 'website', 'image_url',
-  'recurrence', 'recurrence_end', 'recurrence_count',
+  'recurrence', 'recurrence_end', 'recurrence_count', 'contact_email',
 ] as const
 const MAX_DATES = 120
 
@@ -46,6 +46,8 @@ export async function POST(request: NextRequest) {
     if (value !== undefined) base[key] = typeof value === 'string' ? value.slice(0, 10000) : value
   }
   base.title = String(event.title).trim()
+  // Public contact email (shown on the event page) — only a valid address, and only if the submitter opted in.
+  base.contact_email = isEmail(base.contact_email) ? base.contact_email.trim() : null
   base.town = town
   base.recurrence_id = cleanDates.length > 1 ? randomUUID() : null
 

@@ -279,6 +279,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
           address={ev.address || ''}
           website={ev.website || ''}
           meetingLink={ev.meeting_link || ''}
+          contactCode={ev.contact_email ? Buffer.from(ev.contact_email).toString('base64') : undefined}
           googleCalendarUrl={googleCalendarUrl(ev)}
           icsUrl={eventIcsUrl(ev.id)}
         />

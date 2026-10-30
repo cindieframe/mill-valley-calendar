@@ -119,6 +119,8 @@ export default function PostEvent() {
   const [imageUploading, setImageUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  // Off by default: the email is private unless the submitter chooses to show it.
+  const [showEmailPublicly, setShowEmailPublicly] = useState(false)
   const [recurrence, setRecurrence] = useState('none')
   const [endsOn, setEndsOn] = useState('never')
   const [customInterval, setCustomInterval] = useState(1)
@@ -215,6 +217,7 @@ export default function PostEvent() {
       age: form.age,
       description: form.description,
       email: form.email,
+      contact_email: showEmailPublicly && form.email ? form.email : null,
       website: form.website,
       image_url: imageUrl || null,
       town: form.town,
@@ -571,6 +574,11 @@ export default function PostEvent() {
             <label style={labelStyle}>Contact Email</label>
             <input style={inputStyle} type="email" placeholder="you@example.com"
               value={form.email} onChange={e => update('email', e.target.value)} />
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '8px', fontSize: '13px', color: colors.textSecondary, cursor: 'pointer' }}>
+              <input type="checkbox" checked={showEmailPublicly} onChange={e => setShowEmailPublicly(e.target.checked)}
+                style={{ marginTop: '2px', flexShrink: 0 }} />
+              <span>Show this email on the event page so people can contact you with questions</span>
+            </label>
           </div>
           <div>
             <label style={labelStyle}>Website / RSVP Link</label>

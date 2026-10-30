@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '../../../lib/supabaseAdmin'
 import { requireOrgAccount } from '../../../lib/adminAuth'
-import { eventSubmittedAdminEmail, eventSubmittedConfirmation, sendEmail } from '../../../lib/email'
+import { eventSubmittedAdminEmail, eventSubmittedConfirmation, isEmail, sendEmail } from '../../../lib/email'
 
 // Org dashboard → Add event. The org's name, town and verified flag come from
 // its own organizations row; new events always start as pending.
 const EDITABLE = [
   'title', 'date', 'time', 'end_time', 'location', 'address', 'category', 'tags',
   'cost', 'age', 'description', 'email', 'website', 'meeting_link', 'image_url',
+  'contact_email',
 ] as const
 
 export async function POST(request: NextRequest) {
@@ -35,6 +36,7 @@ export async function POST(request: NextRequest) {
     if (value !== undefined) row[key] = typeof value === 'string' ? value.slice(0, 10000) : value
   }
   row.title = String(input.title).trim()
+  row.contact_email = isEmail(row.contact_email) ? String(row.contact_email).trim() : null
   row.organization = org.name
   row.town = org.town
   row.status = 'pending'
