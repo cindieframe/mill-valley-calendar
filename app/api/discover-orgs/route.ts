@@ -10,7 +10,7 @@ import {
   detectIcalFeed,
   assessOrg,
 } from './helpers'
-import { loadTowns, matchTown } from '../../lib/towns'
+import { loadTowns, matchTown, resolveTown } from '../../lib/towns'
 import { toDomain } from '../../lib/domains'
 
 // Vercel Hobby plan's function duration ceiling — matches what we hit
@@ -87,9 +87,19 @@ export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request)
   if (auth.response) return auth.response
   try {
-    const { town, state } = await request.json()
-    if (!town) {
+    const { town: rawTown, state } = await request.json()
+    if (!rawTown) {
       return NextResponse.json({ error: 'town is required' }, { status: 400 })
+    }
+    // Check the town is set up BEFORE searching: results can only be saved to
+    // towns in the towns table, and each run costs Google searches.
+    const town = await resolveTown(rawTown)
+    if (!town) {
+      return NextResponse.json({
+        error: `${rawTown} isn't set up as a town yet.`,
+        code: 'unknown_town',
+        town: String(rawTown).trim().replace(/,\s*[A-Za-z]{2}$/, ''),
+      }, { status: 400 })
     }
     if (!(await canManageTown(auth.admin, town))) return forbiddenTown(town)
 

@@ -10,6 +10,7 @@ export default function ImportPage() {
   const [tab, setTab] = useState<'ai' | 'ical' | 'feeds'>('ai')
   const [selectedTown, setSelectedTown] = useState<string>('Mill Valley')
   const [allTowns, setAllTowns] = useState<string[]>([])
+  const [hiddenTowns, setHiddenTowns] = useState<string[]>([])
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
 
   // A source can have several pages (some sites put each event on its own page).
@@ -54,11 +55,13 @@ export default function ImportPage() {
     if (!adminData) { router.push('/admin'); return }
     if (adminData.role === 'super_admin') {
       setIsSuperAdmin(true)
+      // Hidden (inactive) towns are listed too, so a town can be set up before launch.
       const { data: townData } = await supabase
-        .from('towns').select('name').eq('active', true).order('name')
+        .from('towns').select('name, active').order('name')
       if (townData) {
         setAllTowns(townData.map((t: any) => t.name))
         setMyTowns(townData.map((t: any) => t.name))
+        setHiddenTowns(townData.filter((t: any) => !t.active).map((t: any) => t.name))
       }
     } else {
       if (adminData.towns?.length) setSelectedTown(adminData.towns[0])
@@ -288,7 +291,7 @@ export default function ImportPage() {
                 value={selectedTown}
                 onChange={e => setSelectedTown(e.target.value)}
                 style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: 'rgba(255,255,255,0.9)', borderRadius: '6px', padding: '5px 10px', fontSize: '13px', fontFamily: 'sans-serif', cursor: 'pointer', outline: 'none' }}>
-                {allTowns.map(t => <option key={t} value={t}>{t}</option>)}
+                {allTowns.map(t => <option key={t} value={t}>{t}{hiddenTowns.includes(t) ? ' (hidden)' : ''}</option>)}
               </select>
             )}
             <button onClick={() => router.push('/admin')}

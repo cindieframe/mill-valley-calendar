@@ -36,17 +36,41 @@ function DiscoverOrgsInner() {
   const [blockedSkipped, setBlockedSkipped] = useState(0)
   const [alreadyKnownSkipped, setAlreadyKnownSkipped] = useState(0)
   const [error, setError] = useState('')
+  // Set when Discovery is refused because the town isn't in the towns table yet.
+  const [missingTown, setMissingTown] = useState<string | null>(null)
+  const [addingTown, setAddingTown] = useState(false)
   // Set after a search finishes, so an empty result says so instead of showing nothing.
   const [searchDone, setSearchDone] = useState(false)
   const [searchWarning, setSearchWarning] = useState('')
   const [blockedOrgs, setBlockedOrgs] = useState<any[]>([])
   const [showBlocked, setShowBlocked] = useState(false)
 
+  // Adds the town as HIDDEN (not on the public site or in public dropdowns) so
+  // its orgs and events can be set up before launch. Super admin only.
+  async function addHiddenTown() {
+    if (!missingTown) return
+    setAddingTown(true)
+    const name = missingTown.trim().replace(/\b\w/g, c => c.toUpperCase())
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    const res = await authFetch('/api/add-town', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'add', town: { name, slug, state: state || 'CA', county: 'Marin', active: false } }),
+    })
+    const data = await res.json().catch(() => ({ error: `Request failed (${res.status})` }))
+    setAddingTown(false)
+    if (data.error) { setError(data.error); return }
+    setMissingTown(null)
+    setTown(name)
+    // The town now exists — run the search that was refused.
+    await handleDiscover()
+  }
+
   async function handleDiscover() {
     if (loading) return
 
     setLoading(true)
     setError('')
+    setMissingTown(null)
     setSearchDone(false)
     setSearchWarning('')
     setOrgs([])
@@ -67,6 +91,11 @@ function DiscoverOrgsInner() {
           : `Discovery failed (server error ${res.status}).`,
       }))
 
+      if (data.code === 'unknown_town') {
+        setMissingTown(data.town || town)
+        setLoading(false)
+        return
+      }
       if (data.error) {
         setError(data.error)
         setLoading(false)
@@ -418,6 +447,25 @@ function DiscoverOrgsInner() {
             <p style={{ fontSize: '12px', color: '#9ca3af' }}>
               This can take up to a couple of minutes for towns with many candidates.
             </p>
+          </div>
+        )}
+
+        {missingTown && (
+          <div style={{ background: '#fffbeb', border: '1.5px solid #fcd34d', borderRadius: '10px', padding: '16px 18px', marginBottom: '16px', fontSize: '13px', color: '#92400e', lineHeight: 1.5 }}>
+            <strong>{missingTown} isn't set up as a town yet.</strong> Orgs and events can only be saved to a town in Admin → Towns.
+            <div style={{ marginTop: '6px' }}>
+              Add it as a <strong>hidden</strong> town to start collecting orgs and events — it won't appear on the public site until you activate it in Admin → Towns.
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+              <button onClick={addHiddenTown} disabled={addingTown}
+                style={{ background: '#1a3d2b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '999px', fontSize: '13px', fontWeight: 700, cursor: addingTown ? 'not-allowed' : 'pointer', opacity: addingTown ? 0.7 : 1 }}>
+                {addingTown ? 'Adding…' : `Add ${missingTown} as a hidden town`}
+              </button>
+              <button onClick={() => setMissingTown(null)}
+                style={{ background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', padding: '8px 16px', borderRadius: '999px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
