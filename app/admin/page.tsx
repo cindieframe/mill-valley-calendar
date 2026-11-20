@@ -88,6 +88,7 @@ export default function Admin() {
   const isSuperAdmin = adminRole === 'super_admin'
   const [selectedTown, setSelectedTown] = useState<string | null>(null)
   const [allTowns, setAllTowns] = useState<string[]>([])
+  const [hiddenTowns, setHiddenTowns] = useState<string[]>([])
   const [unverifiedOrgs, setUnverifiedOrgs] = useState<any[]>([])
   // Every Marin town on file (active or not) — used for the per-event town
   // reassignment dropdown, since an admin may want to move an event to a
@@ -138,10 +139,12 @@ export default function Admin() {
         if (adminData.towns?.length === 1) setSelectedTown(adminData.towns[0])
         setAuthed(true)
         if (adminData.role === 'super_admin') {
-         const { data: townData } = await supabase.from('towns').select('name').eq('active', true).order('name')
-if (townData) {
-  setAllTowns(townData.map((t: any) => t.name))
-}
+          // Hidden (inactive) towns are listed too, so a town can be set up before launch.
+          const { data: townData } = await supabase.from('towns').select('name, active').order('name')
+          if (townData) {
+            setAllTowns(townData.map((t: any) => t.name))
+            setHiddenTowns(townData.filter((t: any) => !t.active).map((t: any) => t.name))
+          }
         }
         loadMarinTowns()
       }
@@ -986,7 +989,7 @@ async function executeDelete(scope: 'this' | 'all') {
             <select value={selectedTown || ''} onChange={e => setSelectedTown(e.target.value || null)}
               style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: 'rgba(255,255,255,0.9)', borderRadius: '6px', padding: '5px 10px', fontSize: '13px', fontFamily: 'sans-serif', cursor: 'pointer', outline: 'none' }}>
               <option value=''>All Towns</option>
-              {allTowns.map(t => <option key={t} value={t}>{t}</option>)}
+              {allTowns.map(t => <option key={t} value={t}>{t}{hiddenTowns.includes(t) ? ' (hidden)' : ''}</option>)}
             </select>
           ) : (
             <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>{selectedTown || adminTowns?.join(', ')}</span>
