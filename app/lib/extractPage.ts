@@ -201,16 +201,31 @@ export async function extractFromPage(params: {
     let imageContext = ''
     try {
       let html = ''
+      // Why the direct fetch failed, for the error message if every method fails.
+      let fetchProblem = ''
 
-      const normalRes = await fetch(websiteUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)',
-        },
-        signal: AbortSignal.timeout(15000),
-      })
-
-      if (normalRes.ok) {
-        html = await normalRes.text()
+      // 1. Direct fetch. Some sites (WordPress security plugins, Cloudflare)
+      //    refuse bot user agents, so retry once as a regular browser.
+      for (const userAgent of [
+        'Mozilla/5.0 (compatible; Townstir/1.0; +https://www.townstir.com)',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+      ]) {
+        try {
+          const res = await fetch(websiteUrl, {
+            headers: { 'User-Agent': userAgent, Accept: 'text/html,application/xhtml+xml' },
+            signal: AbortSignal.timeout(20000),
+          })
+          if (res.ok) {
+            html = await res.text()
+            break
+          }
+          fetchProblem = `the site answered ${res.status}`
+        } catch (err) {
+          const name = err instanceof Error ? err.name : ''
+          fetchProblem = name === 'TimeoutError' || name === 'AbortError'
+            ? 'the site took too long to respond'
+            : 'the site refused the connection'
+        }
       }
 
       const strippedPreview = html
@@ -220,10 +235,13 @@ export async function extractFromPage(params: {
         .replace(/\s+/g, ' ')
         .trim()
 
+      // 2. Real browser (Browserless) when the direct fetch failed OR returned a
+      //    near-empty page (events loaded by JavaScript). Before, a failed direct
+      //    fetch gave up without trying the browser.
       const looksEmpty = strippedPreview.length < 200
 
       if (looksEmpty && process.env.BROWSERLESS_API_KEY) {
-        console.log('Normal fetch returned little content — trying Browserless for:', websiteUrl)
+        console.log(`Direct fetch ${fetchProblem || 'returned little content'} — trying Browserless for:`, websiteUrl)
         try {
           const contentRes = await fetch(
             `https://production-sfo.browserless.io/content?token=${process.env.BROWSERLESS_API_KEY}`,
@@ -247,7 +265,9 @@ export async function extractFromPage(params: {
       }
 
       if (!html || html.length < 100) {
-        return respond({ error: `Could not fetch that URL. Make sure it is correct and publicly accessible.` }, { status: 400 })
+        return respond({
+          error: `Could not read that page${fetchProblem ? ` (${fetchProblem})` : ''}. Check the address opens in your browser; if it does, the site may be blocking automated readers.`,
+        }, { status: 400 })
       }
 
       const imgMatches = [
@@ -275,7 +295,8 @@ export async function extractFromPage(params: {
         .trim()
         .slice(0, 60000)
     } catch (err) {
-      return respond({ error: `Could not reach that URL. Make sure it is correct and publicly accessible.` }, { status: 400 })
+      console.error('Read page failed:', websiteUrl, err)
+      return respond({ error: `Could not read that page. Check the address opens in your browser.` }, { status: 400 })
     }
 
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
