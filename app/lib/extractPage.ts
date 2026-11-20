@@ -331,7 +331,7 @@ Return ONLY valid JSON, no markdown, no explanation. Use this exact shape:
       "date": "YYYY-MM-DD",
       "time": "7:00 PM",
       "location": "Venue name or address, or null",
-      "description": "1-2 sentence description, or null",
+      "description": "1 short sentence, or null",
       "website": "Direct URL to the individual event or ticket page (e.g. SimpleTix, Eventbrite, etc) — NOT the main calendar page. Look for buy ticket links or event detail links. null if not found.",
       "category": "outdoors,arts",
       "tags": "free,family",
@@ -350,22 +350,26 @@ Rules:
 - For image_url: match the event poster or image to the correct event using the AVAILABLE IMAGE URLS list. Prefer images that contain the artist/event name in the URL. Do not reuse the same image for multiple events.
 - For cost: extract the ticket price or admission cost exactly as shown on the page (e.g. "$30 ADV / $35 DOS"). If free, use "Free". If unknown, use null.`
 
+    // Busy pages (theaters, venues) can list 50+ events; at the old 4,000-token
+    // cap the JSON was cut off mid-list and the whole result was thrown away.
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
+      max_tokens: 12000,
       messages: [{ role: 'user', content: prompt }],
     })
 
     const rawText = aiResponse.content[0].type === 'text' ? aiResponse.content[0].text : ''
-    const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+    const cutOff = aiResponse.stop_reason === 'max_tokens'
 
-    let parsed: { events: any[]; errors: string[] }
-    try {
-      parsed = JSON.parse(cleaned)
-    } catch {
+    const parsed = parseEventsJson(rawText)
+    if (!parsed) {
+      console.error('Extract: unparseable AI output', websiteUrl, cutOff ? '(cut off)' : '', rawText.slice(0, 500))
       return respond({
         error: 'Claude could not parse the page into events. Try a more specific events page URL (e.g. /events or /calendar).',
       }, { status: 422 })
+    }
+    if (cutOff || parsed.truncated) {
+      parsed.errors.push(`This page lists more events than could be read in one pass — imported the first ${parsed.events.length}. Use a more specific page (e.g. a specials or month view) to get the rest.`)
     }
 
     if (!parsed.events || parsed.events.length === 0) {
@@ -448,4 +452,47 @@ Rules:
     console.error('Extract page error:', websiteUrl, error)
     return respond({ error: 'Something went wrong reading this page.' }, { status: 500 })
   }
+}
+
+// Parses the AI's {"events": [...], "errors": [...]} reply. If the reply was
+// cut off part-way through the list, keeps every event object that finished.
+function parseEventsJson(raw: string): { events: any[]; errors: string[]; truncated: boolean } | null {
+  const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+  const start = text.indexOf('{')
+  if (start === -1) return null
+  const body = text.slice(start)
+
+  try {
+    const full = JSON.parse(body.slice(0, body.lastIndexOf('}') + 1))
+    return { events: Array.isArray(full.events) ? full.events : [], errors: Array.isArray(full.errors) ? full.errors : [], truncated: false }
+  } catch {
+    // fall through to salvage
+  }
+
+  // Salvage: walk the events array and keep each complete {...} object.
+  const arrayStart = body.search(/"events"\s*:\s*\[/)
+  if (arrayStart === -1) return null
+  const events: any[] = []
+  let i = body.indexOf('[', arrayStart) + 1
+  let depth = 0, objStart = -1, inString = false, escaped = false
+  for (; i < body.length; i++) {
+    const c = body[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (c === '\\') escaped = true
+      else if (c === '"') inString = false
+      continue
+    }
+    if (c === '"') inString = true
+    else if (c === '{') { if (depth === 0) objStart = i; depth++ }
+    else if (c === '}') {
+      depth--
+      if (depth === 0 && objStart !== -1) {
+        try { events.push(JSON.parse(body.slice(objStart, i + 1))) } catch { /* skip a malformed one */ }
+        objStart = -1
+      }
+    } else if (c === ']' && depth === 0) break
+  }
+  if (!events.length) return null
+  return { events, errors: [], truncated: true }
 }
